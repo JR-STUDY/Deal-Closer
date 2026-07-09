@@ -7,9 +7,25 @@ import { GeneratorForm } from "./_components/generator-form";
 
 export default async function GeneratorPage() {
   const org = await getCurrentOrg();
-  const wallet = await prisma.creditWallet.findUnique({
-    where: { orgId: org.id },
-  });
+
+  // 독립 조회는 병렬화 (REACT_BEST_PRACTICES ①)
+  const [wallet, documents] = await Promise.all([
+    prisma.creditWallet.findUnique({ where: { orgId: org.id } }),
+    prisma.document.findMany({
+      where: { orgId: org.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        status: true,
+        clientName: true,
+        amount: true,
+        createdAt: true,
+      },
+      take: 100,
+    }),
+  ]);
 
   return (
     <>
@@ -25,7 +41,7 @@ export default async function GeneratorPage() {
       />
 
       <div className="flex-1 overflow-auto p-8">
-        <GeneratorForm />
+        <GeneratorForm libraryDocuments={documents} />
       </div>
     </>
   );
