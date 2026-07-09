@@ -74,13 +74,11 @@ export function FolderTree({
     return map;
   }, [folders]);
 
-  const currentStatus = searchParams.get("status");
-
-  /** 현재 상태 필터를 유지한 채 폴더로 이동하는 링크 */
+  /** 다른 필터(상태·종류·검색)는 유지한 채 폴더만 바꿔 이동하는 링크 */
   function hrefFor(folder: string | null): string {
-    const sp = new URLSearchParams();
+    const sp = new URLSearchParams(searchParams.toString());
     if (folder) sp.set("folder", folder);
-    if (currentStatus) sp.set("status", currentStatus);
+    else sp.delete("folder");
     const qs = sp.toString();
     return qs ? `/library?${qs}` : "/library";
   }

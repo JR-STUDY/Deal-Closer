@@ -3,12 +3,17 @@ import Link from "next/link";
 import { Sparkles, FolderOpen } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
-import { DOCUMENT_STATUSES, DOCUMENT_STATUS_LABELS } from "@/lib/constants";
+import {
+  DOCUMENT_STATUSES,
+  DOCUMENT_STATUS_LABELS,
+  DOCUMENT_TYPES,
+} from "@/lib/constants";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { FolderTree } from "./_components/folder-tree";
 import { LibraryBrowser } from "./_components/library-browser";
+import { LibraryToolbar } from "./_components/library-toolbar";
 import { DocumentList } from "./_components/document-list";
 
 const STATUS_TABS = [
@@ -19,16 +24,25 @@ const STATUS_TABS = [
 export default async function LibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; folder?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    folder?: string;
+    type?: string;
+    q?: string;
+  }>;
 }) {
   // searchParams 와 org 조회는 서로 독립 → 병렬 처리
-  const [{ status, folder }, org] = await Promise.all([
+  const [{ status, folder, type, q }, org] = await Promise.all([
     searchParams,
     getCurrentOrg(),
   ]);
 
   const activeStatus = STATUS_TABS.some((t) => t.key === status) ? status! : "ALL";
   const activeFolder = folder === "none" ? "none" : folder ? folder : null;
+  const activeType = (DOCUMENT_TYPES as readonly string[]).includes(type ?? "")
+    ? type!
+    : null;
+  const query = q?.trim() ?? "";
 
   const statusWhere =
     activeStatus === "ALL" ? { status: { not: "VOID" } } : { status: activeStatus };
@@ -38,6 +52,15 @@ export default async function LibraryPage({
       : activeFolder
         ? { folderId: activeFolder }
         : {};
+  const typeWhere = activeType ? { type: activeType } : {};
+  const queryWhere = query
+    ? {
+        OR: [
+          { title: { contains: query } },
+          { clientName: { contains: query } },
+        ],
+      }
+    : {};
 
   // 이 화면은 "일반 문서"(공통 아님)만 다룬다. 공통 문서는 /library/common 에서 관리.
   const baseWhere = { orgId: org.id, isCommon: false };
@@ -48,7 +71,13 @@ export default async function LibraryPage({
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
     prisma.document.findMany({
-      where: { ...baseWhere, ...statusWhere, ...folderWhere },
+      where: {
+        ...baseWhere,
+        ...statusWhere,
+        ...folderWhere,
+        ...typeWhere,
+        ...queryWhere,
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.document.count({ where: { ...baseWhere, status: { not: "VOID" } } }),
@@ -76,11 +105,13 @@ export default async function LibraryPage({
     parentId: f.parentId,
   }));
 
-  /** 상태 탭 링크 — 현재 폴더 선택을 유지한다 */
+  /** 상태 탭 링크 — 폴더·종류·검색 필터를 유지한다 */
   function statusHref(key: string): string {
     const sp = new URLSearchParams();
     if (key !== "ALL") sp.set("status", key);
     if (activeFolder) sp.set("folder", activeFolder);
+    if (activeType) sp.set("type", activeType);
+    if (query) sp.set("q", query);
     const qs = sp.toString();
     return qs ? `/library?${qs}` : "/library";
   }
@@ -112,6 +143,11 @@ export default async function LibraryPage({
             </Suspense>
           }
         >
+          {/* 검색 · 종류 필터 */}
+          <Suspense fallback={<div className="h-9" />}>
+            <LibraryToolbar />
+          </Suspense>
+
           {/* 상태 필터 */}
           <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
               {STATUS_TABS.map((tab) => (
