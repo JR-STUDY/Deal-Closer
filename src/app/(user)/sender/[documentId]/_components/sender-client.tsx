@@ -3,13 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import {
-  Send,
-  FileText,
-  CheckCircle2,
-  AlertTriangle,
-  PenLine,
-} from "lucide-react";
+import { Send, FileText, PenLine } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,9 +28,21 @@ import { DocTypeBadge } from "@/components/status-badge";
 import { SignaturePreview } from "@/components/signature-preview";
 import { EmailTemplateToolbar } from "./email-template-toolbar";
 import { SendPreview } from "./send-preview";
+import { SenderAccountBanner } from "./sender-account-banner";
 
 const DEFAULT_BODY =
   "안녕하세요, SpecFlow AI를 통해 생성된 문서를 전달드립니다. 첨부된 문서를 확인해주시기 바랍니다. 감사합니다.";
+
+/** 발송 화면에서 고를 수 있는 발신 계정(개인 연동 계정 / 인증 팀 도메인) */
+export type SenderOption = {
+  /** 개인 계정은 "personal", 팀 도메인은 도메인 id (mail-preference 저장 키) */
+  value: string;
+  kind: "team" | "personal";
+  email: string;
+  label: string;
+  /** 팀 도메인 발송 시 관리자가 지정한 기본 참조(CC) (개인 계정이면 "") */
+  defaultCc: string;
+};
 
 type SenderClientProps = {
   document: {
@@ -46,33 +52,79 @@ type SenderClientProps = {
     clientName: string | null;
     amount: number;
   };
-  /** 발신 신원 — 팀 도메인 선택 시 팀 주소, 아니면 개인 연동 계정 (없으면 null) */
-  sender: { email: string; kind: "team" | "personal" } | null;
+  /** 발신 계정 선택지 (개인 계정 + 인증 팀 도메인). 비어 있으면 연동 필요 */
+  senderOptions: SenderOption[];
+  /** 초기 선택값 (SenderOption.value) — 없으면 null */
+  initialSelectedValue: string | null;
   /** 발신자(현재 사용자) 이름 — 미리보기 보낸사람 표시용 */
   senderName: string;
   templates: EmailTemplateDTO[];
   /** 현재 사용자의 저장된 메일 서명 (없으면 빈 문자열) */
   signature: string;
-  /** 팀 도메인 발송 시 관리자가 지정한 기본 참조(CC) (개인 계정이면 "") */
-  defaultCc: string;
 };
 
 /** 이메일 발송 폼 — 헤더의 발송하기 버튼과 본문 입력값 상태를 함께 관리한다 (데모: 실제 발송 없음) */
 export function SenderClient({
   document,
-  sender,
+  senderOptions,
+  initialSelectedValue,
   senderName,
   templates,
   signature,
-  defaultCc,
 }: SenderClientProps) {
   const typeLabel =
     DOCUMENT_TYPE_LABELS[document.type as DocumentType] ?? document.type;
   const attachmentName = `[${typeLabel}] ${document.title}.pdf`;
 
+  // 선택된 발신 계정 — 셀렉트로 바로 전환하고 선택은 즉시 저장(PATCH /api/mail-preference)한다
+  const [selectedValue, setSelectedValue] = useState<string | null>(
+    initialSelectedValue,
+  );
+  const [savingSender, setSavingSender] = useState(false);
+  const currentOption =
+    senderOptions.find((o) => o.value === selectedValue) ?? null;
+  const sender = currentOption
+    ? { email: currentOption.email, kind: currentOption.kind }
+    : null;
+
+  const initialDefaultCc =
+    senderOptions.find((o) => o.value === initialSelectedValue)?.defaultCc ?? "";
+
   const [recipients, setRecipients] = useState("");
   const [recipientName, setRecipientName] = useState("");
-  const [cc, setCc] = useState(() => defaultCc);
+  const [cc, setCc] = useState(() => initialDefaultCc);
+
+  const changeSender = async (value: string) => {
+    if (value === selectedValue || savingSender) return;
+    const prev = selectedValue;
+    const nextOption = senderOptions.find((o) => o.value === value) ?? null;
+    setSelectedValue(value); // 낙관적 업데이트
+    setSavingSender(true);
+    // 팀 도메인으로 바꿀 때 CC 가 비어 있으면 기본 참조를 채워 준다 (입력값은 보존)
+    if (nextOption?.kind === "team" && nextOption.defaultCc && !cc.trim()) {
+      setCc(nextOption.defaultCc);
+    }
+    try {
+      const res = await fetch("/api/mail-preference", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        // 개인 계정 → mailDomainId null, 팀 도메인 → 도메인 id
+        body: JSON.stringify({
+          mailDomainId: value === "personal" ? null : value,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json) {
+        throw new Error(json?.error ?? "저장에 실패했습니다.");
+      }
+      toast.success("발신 계정을 변경했습니다.");
+    } catch (err) {
+      setSelectedValue(prev); // 실패 시 원복
+      toast.error(err instanceof Error ? err.message : "저장에 실패했습니다.");
+    } finally {
+      setSavingSender(false);
+    }
+  };
   const [subject, setSubject] = useState(`[${typeLabel}] ${document.title}`);
   const [body, setBody] = useState(DEFAULT_BODY);
   const [recipientError, setRecipientError] = useState<string | null>(null);
@@ -140,34 +192,13 @@ export function SenderClient({
 
       <div className="flex-1 overflow-auto p-8">
         <div className="mx-auto flex max-w-2xl flex-col gap-6">
-          {sender ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
-              <span className="flex items-center gap-2">
-                <CheckCircle2 className="size-4 text-emerald-600" />
-                {sender.kind === "team" ? "팀 도메인" : "연동됨"} · 발신 계정:{" "}
-                <span className="font-medium">{sender.email}</span>
-              </span>
-              <Link
-                href="/settings/email"
-                className="text-sm font-medium text-primary hover:underline"
-              >
-                계정 변경
-              </Link>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-              <span className="flex items-center gap-2">
-                <AlertTriangle className="size-4" />
-                연동된 발신 계정이 없습니다. 이메일 계정을 먼저 연동해주세요.
-              </span>
-              <Link
-                href="/settings/email"
-                className="text-sm font-medium underline"
-              >
-                계정 연동하기
-              </Link>
-            </div>
-          )}
+          <SenderAccountBanner
+            options={senderOptions}
+            selectedValue={selectedValue}
+            saving={savingSender}
+            kind={sender?.kind ?? null}
+            onChange={changeSender}
+          />
 
           <EmailTemplateToolbar
             initialTemplates={templates}
@@ -259,7 +290,7 @@ export function SenderClient({
                   placeholder="참조할 이메일 (세미콜론으로 다중 입력 가능)"
                   className="min-h-16"
                 />
-                {sender?.kind === "team" && defaultCc.trim() ? (
+                {sender?.kind === "team" && currentOption?.defaultCc.trim() ? (
                   <p className="text-xs text-muted-foreground">
                     팀 도메인 발송이라 관리자가 지정한 기본 참조가 채워졌습니다.
                     필요하면 수정할 수 있습니다.
