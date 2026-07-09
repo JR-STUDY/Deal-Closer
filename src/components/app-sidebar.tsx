@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
 import { userNav, adminNav } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -20,7 +20,11 @@ export function AppSidebar({ variant, user }: AppSidebarProps) {
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
-      <div className="flex h-16 items-center gap-2.5 border-b px-6">
+      <Link
+        href="/"
+        aria-label="SpecFlow AI 메인 페이지로 이동"
+        className="flex h-16 items-center gap-2.5 border-b px-6 transition-colors hover:bg-sidebar-accent/60"
+      >
         <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <Sparkles className="size-4.5" />
         </div>
@@ -28,6 +32,16 @@ export function AppSidebar({ variant, user }: AppSidebarProps) {
           <div className="text-sm font-semibold">SpecFlow AI</div>
           <div className="text-[11px] text-muted-foreground">{kicker}</div>
         </div>
+      </Link>
+
+      <div className="border-b p-3">
+        <Link
+          href="/"
+          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          메인으로
+        </Link>
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
