@@ -2,10 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import {
   ChevronRight,
-  FileText,
   Folder as FolderIcon,
   FolderPlus,
   Inbox,
@@ -13,8 +11,6 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
-  Users,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -43,15 +39,11 @@ export type FolderNode = {
   docCount: number;
 };
 
-export type CommonDoc = { id: string; title: string; type: string };
-
 type Props = {
   folders: FolderNode[];
-  /** 현재 선택: 폴더 id | "common"(공통) | "none"(미분류) | null(전체) */
+  /** 현재 선택: 폴더 id | "none"(미분류) | null(전체) */
   selected: string | null;
   totalCount: number;
-  commonCount: number;
-  commonDocs: CommonDoc[];
   unfiledCount: number;
 };
 
@@ -65,8 +57,6 @@ export function FolderTree({
   folders,
   selected,
   totalCount,
-  commonCount,
-  commonDocs,
   unfiledCount,
 }: Props) {
   const router = useRouter();
@@ -122,12 +112,6 @@ export function FolderTree({
         count={totalCount}
         active={selected === null}
         onClick={() => go(null)}
-      />
-      <CommonRow
-        count={commonCount}
-        docs={commonDocs}
-        active={selected === "common"}
-        onSelect={() => go("common")}
       />
       <FixedRow
         icon={<Inbox className="size-4" />}
@@ -199,110 +183,6 @@ function FixedRow({
       <span className="flex-1 truncate text-left">{label}</span>
       <span className="text-xs tabular-nums">{count}</span>
     </button>
-  );
-}
-
-/** "공통 문서" 항목 — 펼치면 공통 문서들이 하위 항목으로 나열되고, 클릭 시 편집으로 이동 */
-function CommonRow({
-  count,
-  docs,
-  active,
-  onSelect,
-}: {
-  count: number;
-  docs: CommonDoc[];
-  active: boolean;
-  onSelect: () => void;
-}) {
-  const router = useRouter();
-  const [expanded, setExpanded] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const hasDocs = docs.length > 0;
-
-  async function unmark(doc: CommonDoc) {
-    setBusyId(doc.id);
-    try {
-      const res = await fetch(`/api/documents/${doc.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isCommon: false }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "요청에 실패했습니다.");
-      toast.success("공통 문서에서 제외했습니다.");
-      router.refresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "요청에 실패했습니다.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  return (
-    <div>
-      <div
-        className={cn(
-          "group flex items-center gap-1 rounded-md pr-1 transition-colors",
-          active ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
-        )}
-      >
-        <button
-          type="button"
-          aria-label={hasDocs ? (expanded ? "접기" : "펼치기") : undefined}
-          onClick={() => hasDocs && setExpanded((v) => !v)}
-          className={cn(
-            "flex size-5 shrink-0 items-center justify-center text-muted-foreground",
-            !hasDocs && "invisible",
-          )}
-        >
-          <ChevronRight
-            className={cn("size-3.5 transition-transform", expanded && "rotate-90")}
-          />
-        </button>
-        <button
-          type="button"
-          onClick={onSelect}
-          className={cn(
-            "flex min-w-0 flex-1 items-center gap-2 py-1.5 text-sm",
-            active
-              ? "font-medium"
-              : "text-muted-foreground group-hover:text-foreground",
-          )}
-        >
-          <Users className="size-4 shrink-0" />
-          <span className="flex-1 truncate text-left">공통 문서</span>
-          <span className="text-xs tabular-nums">{count}</span>
-        </button>
-      </div>
-
-      {hasDocs && expanded ? (
-        <div>
-          {docs.map((doc) => (
-            <div
-              key={doc.id}
-              className="group/doc flex items-center gap-1 rounded-md pr-1 pl-3.5 hover:bg-accent/60"
-            >
-              <Link
-                href={`/editor/${doc.id}`}
-                className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-5 text-sm text-muted-foreground hover:text-foreground"
-              >
-                <FileText className="size-3.5 shrink-0" />
-                <span className="truncate">{doc.title}</span>
-              </Link>
-              <button
-                type="button"
-                aria-label={`${doc.title} 공통 해제`}
-                disabled={busyId === doc.id}
-                onClick={() => unmark(doc)}
-                className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover/doc:opacity-100 disabled:opacity-50"
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
   );
 }
 

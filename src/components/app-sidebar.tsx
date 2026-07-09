@@ -46,23 +46,54 @@ export function AppSidebar({ variant, user }: AppSidebarProps) {
 
       <nav className="flex-1 space-y-1 p-3">
         {nav.map((item) => {
-          const active =
-            pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
+          const hasChildren = !!item.children?.length;
+          // 하위 항목이 있으면 부모는 강조 배경 대신 그룹 라벨로만 쓴다(중복 강조 방지).
+          const active =
+            !hasChildren &&
+            (pathname === item.href || pathname.startsWith(item.href + "/"));
+          const groupActive =
+            hasChildren &&
+            (pathname === item.href || pathname.startsWith(item.href + "/"));
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                active
-                  ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                  : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-              )}
-            >
-              <Icon className="size-4" />
-              {item.label}
-            </Link>
+            <div key={item.href}>
+              <Link
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                  active
+                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                    : groupActive
+                      ? "font-medium text-sidebar-accent-foreground"
+                      : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                )}
+              >
+                <Icon className="size-4" />
+                {item.label}
+              </Link>
+
+              {hasChildren ? (
+                <div className="mt-1 ml-4 space-y-1 border-l pl-3">
+                  {item.children!.map((child) => {
+                    const childActive = pathname === child.href;
+                    return (
+                      <Link
+                        key={child.label}
+                        href={child.href}
+                        className={cn(
+                          "flex items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors",
+                          childActive
+                            ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                            : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                        )}
+                      >
+                        {child.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           );
         })}
       </nav>

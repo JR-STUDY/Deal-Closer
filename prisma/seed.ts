@@ -310,7 +310,6 @@ async function main() {
       status: "DRAFT",
       clientName: "(주)에이비씨 테크놀로지",
       amount: 24_500_000,
-      isCommon: true, // 팀 공통 베이스 견적서 예시
       createdAt: new Date("2026-07-06T14:30:00+09:00"),
       items: {
         create: [
@@ -477,9 +476,19 @@ async function main() {
     data: { folderId: folderNda.id },
   });
 
-  // 팀 공통(공유) 베이스 문서 지정 — "표준"이 들어간 문서를 공통으로 표시
+  // 팀 공통(공유) 베이스 문서 지정 — 표준 양식·공용 기준 문서 몇 건
+  // (문서는 공통/일반 중 하나에만 속한다 → 공통 지정 문서는 일반 문서 목록에서 제외됨)
   await prisma.document.updateMany({
-    where: { orgId: org.id, title: { contains: "표준" } },
+    where: {
+      orgId: org.id,
+      title: {
+        in: [
+          "누리테크 표준 비밀유지계약서(NDA)",
+          "블루오션 표준 비밀유지계약서(NDA)",
+          "성진산업 유지보수 변경합의서",
+        ],
+      },
+    },
     data: { isCommon: true },
   });
 
