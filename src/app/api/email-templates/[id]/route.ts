@@ -59,6 +59,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       name: parsed.name,
       subject: parsed.subject,
       body: parsed.body,
+      recipientName: parsed.recipientName,
       ownerId: nextOwnerId,
     },
   });

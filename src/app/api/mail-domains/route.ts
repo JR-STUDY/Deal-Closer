@@ -59,8 +59,23 @@ export async function POST(req: NextRequest) {
     return fail("이미 등록된 도메인입니다.", 409);
   }
 
+  // 기본 참조(CC)는 조직 영업팀(담당자·리더) 전원 이메일로 채운다 (관리자가 이후 편집).
+  const salesTeam = await prisma.user.findMany({
+    where: { orgId: org.id, role: { in: ["SALES_REP", "LEADER"] } },
+    select: { email: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const defaultCc = salesTeam.map((u) => u.email).join("; ") || null;
+
   const created = await prisma.teamMailDomain.create({
-    data: { orgId: org.id, domain, label, status: "PENDING", isDefault: false },
+    data: {
+      orgId: org.id,
+      domain,
+      label,
+      status: "PENDING",
+      isDefault: false,
+      defaultCc,
+    },
   });
   return ok(toMailDomainDTO(created), { status: 201 });
 }

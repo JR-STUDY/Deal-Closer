@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -28,7 +29,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { MAIL_DOMAIN_STATUS_LABELS } from "@/lib/constants";
-import type { TeamMailDomainDTO } from "@/lib/mail-domain";
+import { MAIL_CC_MAX_LENGTH, type TeamMailDomainDTO } from "@/lib/mail-domain";
 
 /** 서버 응답에서 { data } 를 꺼낸다 (실패 시 error 던짐). */
 async function callApi<T>(
@@ -201,7 +202,8 @@ export function MailDomainManager({
               const verified = domain.status === "VERIFIED";
               return (
                 <Card key={domain.id}>
-                  <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate font-medium">
@@ -299,6 +301,18 @@ export function MailDomainManager({
                         </AlertDialogContent>
                       </AlertDialog>
                     </div>
+                    </div>
+
+                    <div className="border-t pt-4">
+                      <DomainCcEditor
+                        domain={domain}
+                        onSaved={(updated) =>
+                          setDomains((prev) =>
+                            prev.map((d) => (d.id === updated.id ? updated : d)),
+                          )
+                        }
+                      />
+                    </div>
                   </CardContent>
                 </Card>
               );
@@ -306,6 +320,68 @@ export function MailDomainManager({
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+/** 도메인 카드 하단의 기본 참조(CC) 편집기 — 저장 시 PATCH defaultCc */
+function DomainCcEditor({
+  domain,
+  onSaved,
+}: {
+  domain: TeamMailDomainDTO;
+  onSaved: (updated: TeamMailDomainDTO) => void;
+}) {
+  const [cc, setCc] = useState(domain.defaultCc);
+  const [saving, setSaving] = useState(false);
+  const dirty = cc !== domain.defaultCc;
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const updated = await callApi<TeamMailDomainDTO>(
+        `/api/mail-domains/${domain.id}`,
+        "PATCH",
+        { defaultCc: cc },
+      );
+      onSaved(updated);
+      setCc(updated.defaultCc); // 정규화된 값으로 반영
+      toast.success("기본 참조(CC)를 저장했습니다.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label htmlFor={`cc-${domain.id}`} className="text-xs font-medium">
+          기본 참조(CC)
+        </Label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!dirty || saving}
+          onClick={save}
+        >
+          {saving ? "저장 중…" : "참조 저장"}
+        </Button>
+      </div>
+      <Textarea
+        id={`cc-${domain.id}`}
+        value={cc}
+        maxLength={MAIL_CC_MAX_LENGTH}
+        onChange={(e) => setCc(e.target.value)}
+        placeholder="team@company.com; sales@company.com"
+        className="min-h-16 font-mono text-xs"
+      />
+      <p className="text-xs text-muted-foreground">
+        이 도메인으로 발송할 때 참조(CC)에 자동으로 채워집니다. 세미콜론(;)으로
+        여러 명을 구분하세요. 기본값은 영업팀 전원입니다.
+      </p>
     </div>
   );
 }

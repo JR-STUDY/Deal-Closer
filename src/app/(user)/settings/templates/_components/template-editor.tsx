@@ -33,11 +33,18 @@ export function TemplateEditor({
   const [subject, setSubject] = useState(() => initial.subject);
   const [body, setBody] = useState(() => initial.body);
   const [shared, setShared] = useState(() => initial.shared);
+  const [recipientName, setRecipientName] = useState(() => initial.recipientName);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
     setIsSaving(true);
-    const result = await submitTemplate(templateId, { name, subject, body, shared });
+    const result = await submitTemplate(templateId, {
+      name,
+      subject,
+      body,
+      shared,
+      recipientName,
+    });
     setIsSaving(false);
     if ("error" in result) {
       toast.error(result.error);
@@ -55,10 +62,12 @@ export function TemplateEditor({
           subject={subject}
           body={body}
           shared={shared}
+          recipientName={recipientName}
           onNameChange={setName}
           onSubjectChange={setSubject}
           onBodyChange={setBody}
           onSharedChange={setShared}
+          onRecipientNameChange={setRecipientName}
           lockShared={lockShared}
           bodyClassName="min-h-64"
         />

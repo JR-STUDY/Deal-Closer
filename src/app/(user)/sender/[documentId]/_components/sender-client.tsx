@@ -24,10 +24,15 @@ import {
 } from "@/components/ui/card";
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants";
 import { formatKRW } from "@/lib/format";
-import type { EmailTemplateDTO, TemplateContext } from "@/lib/email-template";
+import {
+  applyTemplateVariables,
+  type EmailTemplateDTO,
+  type TemplateContext,
+} from "@/lib/email-template";
 import { DocTypeBadge } from "@/components/status-badge";
 import { SignaturePreview } from "@/components/signature-preview";
 import { EmailTemplateToolbar } from "./email-template-toolbar";
+import { SendPreview } from "./send-preview";
 
 const DEFAULT_BODY =
   "안녕하세요, SpecFlow AI를 통해 생성된 문서를 전달드립니다. 첨부된 문서를 확인해주시기 바랍니다. 감사합니다.";
@@ -42,23 +47,31 @@ type SenderClientProps = {
   };
   /** 발신 신원 — 팀 도메인 선택 시 팀 주소, 아니면 개인 연동 계정 (없으면 null) */
   sender: { email: string; kind: "team" | "personal" } | null;
+  /** 발신자(현재 사용자) 이름 — 미리보기 보낸사람 표시용 */
+  senderName: string;
   templates: EmailTemplateDTO[];
   /** 현재 사용자의 저장된 메일 서명 (없으면 빈 문자열) */
   signature: string;
+  /** 팀 도메인 발송 시 관리자가 지정한 기본 참조(CC) (개인 계정이면 "") */
+  defaultCc: string;
 };
 
 /** 이메일 발송 폼 — 헤더의 발송하기 버튼과 본문 입력값 상태를 함께 관리한다 (데모: 실제 발송 없음) */
 export function SenderClient({
   document,
   sender,
+  senderName,
   templates,
   signature,
+  defaultCc,
 }: SenderClientProps) {
   const typeLabel =
     DOCUMENT_TYPE_LABELS[document.type as DocumentType] ?? document.type;
   const attachmentName = `[${typeLabel}] ${document.title}.pdf`;
 
   const [recipients, setRecipients] = useState("");
+  const [recipientName, setRecipientName] = useState("");
+  const [cc, setCc] = useState(() => defaultCc);
   const [subject, setSubject] = useState(`[${typeLabel}] ${document.title}`);
   const [body, setBody] = useState(DEFAULT_BODY);
   // 서명은 본문과 분리해 발송 시 하단에 붙인다 (템플릿에 서명이 섞이지 않도록)
@@ -66,20 +79,28 @@ export function SenderClient({
     () => signature.length > 0,
   );
 
-  // 템플릿 {{변수}} 치환에 쓸 현재 문서 값
+  // 템플릿 {{변수}} 치환에 쓸 현재 문서·담당자 값
   const templateContext = useMemo<TemplateContext>(
     () => ({
       거래처: document.clientName ?? "",
+      담당자: recipientName,
       문서제목: document.title,
       문서종류: typeLabel,
       총액: formatKRW(document.amount),
     }),
-    [document.clientName, document.title, document.amount, typeLabel],
+    [document.clientName, document.title, document.amount, typeLabel, recipientName],
   );
+
+  // 미리보기·발송에 쓸 최종 제목·본문.
+  // 문서 값은 템플릿 로드 시 이미 치환됐고, {{담당자}} 만 담당자명 입력값으로 지연 치환한다
+  // (담당자명을 수정하면 미리보기·본문에 실시간 반영된다).
+  const nameContext = { 담당자: recipientName };
+  const composedSubject = applyTemplateVariables(subject, nameContext);
+  const composedBody = applyTemplateVariables(body, nameContext);
 
   const handleSend = () => {
     if (!recipients.trim()) {
-      toast.error("수신자를 입력해주세요.");
+      toast.error("받는 사람을 입력해주세요.");
       return;
     }
     toast.success("이메일이 발송되었습니다 (데모)");
@@ -134,9 +155,11 @@ export function SenderClient({
             context={templateContext}
             currentSubject={subject}
             currentBody={body}
-            onApply={(nextSubject, nextBody) => {
+            onApply={(nextSubject, nextBody, nextRecipientName) => {
               setSubject(nextSubject);
               setBody(nextBody);
+              // 템플릿에 기본 담당자명이 있으면 폼 담당자명도 채운다
+              if (nextRecipientName) setRecipientName(nextRecipientName);
             }}
           />
 
@@ -168,19 +191,46 @@ export function SenderClient({
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">수신자</CardTitle>
+              <CardTitle className="text-base">받는 사람</CardTitle>
             </CardHeader>
-            <CardContent>
-              <Label htmlFor="recipients" className="sr-only">
-                수신자
-              </Label>
-              <Textarea
-                id="recipients"
-                value={recipients}
-                onChange={(e) => setRecipients(e.target.value)}
-                placeholder="example@company.com; (세미콜론으로 다중 입력 가능)"
-                className="min-h-20"
-              />
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="recipient-name">담당자명</Label>
+                <Input
+                  id="recipient-name"
+                  value={recipientName}
+                  onChange={(e) => setRecipientName(e.target.value)}
+                  placeholder="예: 김구매 (본문의 {{담당자}}에 반영됩니다)"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="recipients">수신자</Label>
+                <Textarea
+                  id="recipients"
+                  value={recipients}
+                  onChange={(e) => setRecipients(e.target.value)}
+                  placeholder="example@company.com; (세미콜론으로 다중 입력 가능)"
+                  className="min-h-16"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="cc">참조 (CC)</Label>
+                <Textarea
+                  id="cc"
+                  value={cc}
+                  onChange={(e) => setCc(e.target.value)}
+                  placeholder="참조할 이메일 (세미콜론으로 다중 입력 가능)"
+                  className="min-h-16"
+                />
+                {sender?.kind === "team" && defaultCc.trim() ? (
+                  <p className="text-xs text-muted-foreground">
+                    팀 도메인 발송이라 관리자가 지정한 기본 참조가 채워졌습니다.
+                    필요하면 수정할 수 있습니다.
+                  </p>
+                ) : null}
+              </div>
             </CardContent>
           </Card>
 
@@ -260,6 +310,19 @@ export function SenderClient({
               )}
             </CardContent>
           </Card>
+
+          {/* 실제 발송 미리보기 — 헤더 + 본문 + 서명 */}
+          <SendPreview
+            senderEmail={sender?.email ?? null}
+            senderName={senderName}
+            recipients={recipients}
+            recipientName={recipientName}
+            cc={cc}
+            subject={composedSubject}
+            body={composedBody}
+            includeSignature={includeSignature}
+            signature={signature}
+          />
 
           <Card>
             <CardHeader>

@@ -304,6 +304,7 @@ async function main() {
   //  · specflow.ai 를 인증·기본 도메인으로 등록 → 담당자가 발신 주소로 선택 가능
   //  · rep 은 기본적으로 개인 계정(sales-pro@gmail.com) 발신 상태로 두어
   //    "팀 도메인 선택" 흐름을 데모에서 직접 확인할 수 있게 한다
+  //  · defaultCc: 팀 도메인 발송 시 기본 참조(CC) — 영업팀(리더·담당자) 전원
   await prisma.teamMailDomain.create({
     data: {
       orgId: org.id,
@@ -311,6 +312,7 @@ async function main() {
       label: "회사 공식 도메인",
       status: "VERIFIED",
       isDefault: true,
+      defaultCc: `${leader.email}; ${rep.email}`,
     },
   });
 
@@ -362,7 +364,9 @@ async function main() {
         ownerId: rep.id,
         name: "미팅 후 감사",
         subject: "{{거래처}}님, 오늘 미팅 감사했습니다",
-        body: "안녕하세요, {{거래처}} 담당자님.\n\n오늘 귀한 시간 내어 미팅에 참여해 주셔서 감사합니다. 논의된 {{문서제목}} 관련 내용은 정리하여 별도로 전달드리겠습니다.\n\n추가 문의사항이 있으시면 언제든 연락 주세요. 감사합니다.",
+        // 기본 담당자명({{담당자}}) 데모 — 불러오면 발송 폼 담당자명이 자동으로 채워진다
+        recipientName: "이서준",
+        body: "안녕하세요, {{담당자}}님.\n\n오늘 귀한 시간 내어 미팅에 참여해 주셔서 감사합니다. 논의된 {{문서제목}} 관련 내용은 정리하여 별도로 전달드리겠습니다.\n\n추가 문의사항이 있으시면 언제든 연락 주세요. 감사합니다.",
       },
       {
         orgId: org.id,

@@ -2,7 +2,12 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
-import { MAIL_DOMAIN_LABEL_MAX, toMailDomainDTO } from "@/lib/mail-domain";
+import {
+  MAIL_CC_MAX_LENGTH,
+  MAIL_DOMAIN_LABEL_MAX,
+  normalizeCcList,
+  toMailDomainDTO,
+} from "@/lib/mail-domain";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -36,16 +41,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (typeof body !== "object" || body === null) {
     return fail("잘못된 요청 본문입니다.");
   }
-  const { verify, isDefault, label } = body as {
+  const { verify, isDefault, label, defaultCc } = body as {
     verify?: unknown;
     isDefault?: unknown;
     label?: unknown;
+    defaultCc?: unknown;
   };
 
   const data: {
     status?: string;
     isDefault?: boolean;
     label?: string | null;
+    defaultCc?: string | null;
   } = {};
 
   // 인증 상태를 미리 계산 (기본 지정 가능 여부 판단에 사용)
@@ -57,6 +64,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       typeof label === "string" && label.trim()
         ? label.trim().slice(0, MAIL_DOMAIN_LABEL_MAX)
         : null;
+  }
+
+  if (defaultCc !== undefined) {
+    if (typeof defaultCc !== "string") {
+      return fail("잘못된 참조 목록입니다.");
+    }
+    if (defaultCc.length > MAIL_CC_MAX_LENGTH) {
+      return fail(`참조 목록이 너무 깁니다. (${MAIL_CC_MAX_LENGTH}자 이내)`);
+    }
+    const normalized = normalizeCcList(defaultCc);
+    data.defaultCc = normalized || null;
   }
 
   if (isDefault === true) {

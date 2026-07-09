@@ -18,6 +18,7 @@ export const TEMPLATE_SCOPE_LABELS: Record<TemplateScope, string> = {
  */
 export const TEMPLATE_VARIABLES = [
   { token: "거래처", description: "문서의 거래처명" },
+  { token: "담당자", description: "받는 사람(거래처) 담당자명" },
   { token: "문서제목", description: "문서 제목" },
   { token: "문서종류", description: "견적서·계약서 등 종류" },
   { token: "총액", description: "문서 총액(예: ₩1,200,000)" },
@@ -27,17 +28,19 @@ export type TemplateVariableToken = (typeof TEMPLATE_VARIABLES)[number]["token"]
 export type TemplateContext = Record<TemplateVariableToken, string>;
 
 /**
- * 텍스트의 `{{변수}}` 를 현재 문서 값으로 치환한다.
+ * 텍스트의 `{{변수}}` 를 주어진 값으로 치환한다.
  * - 앞뒤 공백 허용: `{{ 거래처 }}` 도 인식한다.
- * - 알 수 없는 변수는 원문(`{{...}}`)을 그대로 남긴다.
+ * - context 에 없는 변수는 원문(`{{...}}`)을 그대로 남긴다.
+ *   → 일부 변수만 지금 치환하고 나머지 토큰은 뒤로 미룰 수 있다
+ *     (예: 발송 화면에서 문서 값은 불러올 때 치환하고, 담당자명은 발송 폼에서 지연 치환).
  */
 export function applyTemplateVariables(
   text: string,
-  context: TemplateContext,
+  context: Partial<TemplateContext>,
 ): string {
   return text.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (whole, rawName: string) => {
-    const key = rawName.trim();
-    return key in context ? context[key as TemplateVariableToken] : whole;
+    const key = rawName.trim() as TemplateVariableToken;
+    return key in context ? (context[key] as string) : whole;
   });
 }
 
@@ -45,6 +48,7 @@ export function applyTemplateVariables(
 export const TEMPLATE_NAME_MAX = 60;
 export const TEMPLATE_SUBJECT_MAX = 200;
 export const TEMPLATE_BODY_MAX = 4000;
+export const TEMPLATE_RECIPIENT_NAME_MAX = 60;
 
 /** 클라이언트·서버 공용 메일 템플릿 표현 (Prisma 레코드에서 민감 필드 제외) */
 export type EmailTemplateDTO = {
@@ -53,6 +57,8 @@ export type EmailTemplateDTO = {
   subject: string;
   body: string;
   scope: TemplateScope;
+  /** 기본 담당자명 (없으면 null) — 불러올 때 발송 폼 담당자명에 자동 입력 */
+  recipientName: string | null;
 };
 
 /** 생성·수정 폼의 편집 값 (shared=true 면 팀 공용) */
@@ -61,6 +67,7 @@ export type TemplateFormValues = {
   subject: string;
   body: string;
   shared: boolean;
+  recipientName: string;
 };
 
 /**
@@ -81,6 +88,7 @@ export function toTemplateDTO(record: {
   subject: string;
   body: string;
   ownerId: string | null;
+  recipientName: string | null;
 }): EmailTemplateDTO {
   return {
     id: record.id,
@@ -88,6 +96,7 @@ export function toTemplateDTO(record: {
     subject: record.subject,
     body: record.body,
     scope: record.ownerId === null ? "team" : "personal",
+    recipientName: record.recipientName,
   };
 }
 
@@ -97,6 +106,7 @@ export type TemplateInput = {
   subject: string;
   body: string;
   shared: boolean;
+  recipientName: string | null;
 };
 
 /**
@@ -110,6 +120,8 @@ export function parseTemplateInput(
   const subject = typeof body.subject === "string" ? body.subject.trim() : "";
   const templateBody = typeof body.body === "string" ? body.body : "";
   const shared = body.shared === true;
+  const recipientNameRaw =
+    typeof body.recipientName === "string" ? body.recipientName.trim() : "";
 
   if (!name) return { error: "템플릿 이름을 입력해주세요." };
   if (name.length > TEMPLATE_NAME_MAX) {
@@ -123,6 +135,17 @@ export function parseTemplateInput(
   if (templateBody.length > TEMPLATE_BODY_MAX) {
     return { error: `메일 본문은 ${TEMPLATE_BODY_MAX}자 이내여야 합니다.` };
   }
+  if (recipientNameRaw.length > TEMPLATE_RECIPIENT_NAME_MAX) {
+    return {
+      error: `담당자명은 ${TEMPLATE_RECIPIENT_NAME_MAX}자 이내여야 합니다.`,
+    };
+  }
 
-  return { name, subject, body: templateBody, shared };
+  return {
+    name,
+    subject,
+    body: templateBody,
+    shared,
+    recipientName: recipientNameRaw || null,
+  };
 }

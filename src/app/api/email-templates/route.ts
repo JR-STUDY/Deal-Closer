@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
       name: parsed.name,
       subject: parsed.subject,
       body: parsed.body,
+      recipientName: parsed.recipientName,
     },
   });
 

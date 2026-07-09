@@ -11,6 +11,26 @@ import type { MailDomainStatus } from "./constants";
 export const DOMAIN_MAX_LENGTH = 253;
 /** 별칭(label) 최대 길이 */
 export const MAIL_DOMAIN_LABEL_MAX = 60;
+/** 기본 참조(CC) 목록 문자열 최대 길이 */
+export const MAIL_CC_MAX_LENGTH = 2000;
+
+/**
+ * 참조(CC) 목록 문자열을 정규화한다.
+ * 세미콜론/쉼표/줄바꿈 구분을 모두 받아 공백 제거·중복 제거 후 "a; b; c" 로 합친다.
+ */
+export function normalizeCcList(raw: string): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(/[;,\n]/)) {
+    const email = part.trim();
+    if (!email) continue;
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(email);
+  }
+  return out.join("; ");
+}
 
 /** 유효한 도메인 호스트명 형식 (레이블 1~63자, TLD 2자 이상) */
 const DOMAIN_PATTERN =
@@ -52,6 +72,8 @@ export type TeamMailDomainDTO = {
   label: string | null;
   status: MailDomainStatus;
   isDefault: boolean;
+  /** 팀 발송 시 기본 참조(CC) 목록 (세미콜론 구분, 없으면 "") */
+  defaultCc: string;
 };
 
 export function toMailDomainDTO(row: {
@@ -60,6 +82,7 @@ export function toMailDomainDTO(row: {
   label: string | null;
   status: string;
   isDefault: boolean;
+  defaultCc: string | null;
 }): TeamMailDomainDTO {
   return {
     id: row.id,
@@ -67,6 +90,7 @@ export function toMailDomainDTO(row: {
     label: row.label,
     status: row.status as MailDomainStatus,
     isDefault: row.isDefault,
+    defaultCc: row.defaultCc ?? "",
   };
 }
 

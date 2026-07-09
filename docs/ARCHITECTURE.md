@@ -68,8 +68,8 @@ erDiagram
 | `CatalogItem` | 마스터 데이터(상품/서비스 카탈로그) |
 | `EmailAccount` | Gmail/Outlook 연동 계정 |
 | `EmailLog` | 이메일 발송 이력 |
-| `EmailTemplate` | 메일 발송 템플릿(제목·본문). `ownerId=null`=팀 공용, 값 있으면 개인 |
-| `TeamMailDomain` | 팀(조직) 발신 메일 도메인. 관리자가 등록·인증(`status`), 담당자가 발신 주소로 선택 |
+| `EmailTemplate` | 메일 발송 템플릿(제목·본문·`recipientName` 기본 담당자명). `ownerId=null`=팀 공용, 값 있으면 개인 |
+| `TeamMailDomain` | 팀(조직) 발신 메일 도메인. 관리자가 등록·인증(`status`)·기본 참조(`defaultCc`) 지정, 담당자가 발신 주소로 선택 |
 | `CreditWallet` / `CreditTransaction` | 조직 크레딧 잔액 / 충전·사용 내역 |
 | `GenerationRequest` | AI 문서 생성 요청 이력 |
 | `Branding` | 조직 브랜딩(회사명·로고·색상) |

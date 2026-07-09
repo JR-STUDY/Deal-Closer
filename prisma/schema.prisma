@@ -176,6 +176,8 @@ model TeamMailDomain {
   label     String?  // 표시용 별칭 (예: "회사 공식 도메인")
   status    String   @default("PENDING") // PENDING | VERIFIED
   isDefault Boolean  @default(false)
+  // 팀 도메인 발송 시 참조(CC) 기본 목록 (세미콜론 구분). 등록 시 영업팀 전원으로 자동 채움, 관리자 편집.
+  defaultCc String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -206,7 +208,7 @@ model EmailLog {
 
 /// 메일 발송 템플릿 (제목·본문 저장 → 발송 화면·관리 페이지에서 불러오기)
 /// - ownerId 가 null 이면 팀 공용(조직 전체 공유), 값이 있으면 개인 전용이다.
-/// - subject·body 의 {{거래처}}·{{문서제목}}·{{문서종류}}·{{총액}} 은 발송 시 현재 문서 값으로 치환한다.
+/// - subject·body 의 {{거래처}}·{{담당자}}·{{문서제목}}·{{문서종류}}·{{총액}} 은 발송 시 현재 문서·담당자 값으로 치환한다.
 model EmailTemplate {
   id        String       @id @default(cuid())
   orgId     String
@@ -216,6 +218,7 @@ model EmailTemplate {
   name      String
   subject   String
   body      String
+  recipientName String? // 기본 담당자명 — 불러오면 발송 폼 담당자명에 자동 입력 + {{담당자}} 치환
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 

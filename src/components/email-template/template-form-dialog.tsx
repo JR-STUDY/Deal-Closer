@@ -45,11 +45,20 @@ export function TemplateFormDialog({
   const [subject, setSubject] = useState(() => initial.subject);
   const [body, setBody] = useState(() => initial.body);
   const [shared, setShared] = useState(() => initial.shared);
+  const [recipientName, setRecipientName] = useState(
+    () => initial.recipientName,
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSubmit = async () => {
     setIsSaving(true);
-    const result = await submitTemplate(undefined, { name, subject, body, shared });
+    const result = await submitTemplate(undefined, {
+      name,
+      subject,
+      body,
+      shared,
+      recipientName,
+    });
     setIsSaving(false);
     if ("error" in result) {
       toast.error(result.error);
@@ -80,10 +89,12 @@ export function TemplateFormDialog({
           subject={subject}
           body={body}
           shared={shared}
+          recipientName={recipientName}
           onNameChange={setName}
           onSubjectChange={setSubject}
           onBodyChange={setBody}
           onSharedChange={setShared}
+          onRecipientNameChange={setRecipientName}
         />
 
         <DialogFooter>

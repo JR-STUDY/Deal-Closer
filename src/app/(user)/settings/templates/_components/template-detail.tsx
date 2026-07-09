@@ -71,6 +71,7 @@ export function TemplateDetail({ template: initial }: { template: EmailTemplateD
                 subject: template.subject,
                 body: template.body,
                 shared: isTeam,
+                recipientName: template.recipientName ?? "",
               }}
               lockShared={isTeam}
               onSaved={(saved) => {
@@ -138,10 +139,17 @@ export function TemplateDetail({ template: initial }: { template: EmailTemplateD
             </CardContent>
           </Card>
 
+          {template.recipientName ? (
+            <p className="text-sm">
+              <span className="text-muted-foreground">기본 담당자명: </span>
+              <span className="font-medium">{template.recipientName}</span>
+            </p>
+          ) : null}
+
           <p className="text-xs text-muted-foreground">
             제목·본문의{" "}
             <code className="rounded bg-muted px-1 py-0.5">{`{{변수}}`}</code>{" "}
-            는 발송 화면에서 이 템플릿을 불러올 때 현재 문서 값(거래처·문서제목·문서종류·총액)으로
+            는 발송 화면에서 이 템플릿을 불러올 때 현재 문서 값(거래처·담당자·문서제목·문서종류·총액)으로
             자동 치환됩니다.
           </p>
         </div>

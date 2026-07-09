@@ -45,6 +45,10 @@ export default async function SenderPage({
     personalEmail: personalAccount?.email ?? null,
   });
 
+  // 팀 도메인 발송이면 관리자가 지정한 기본 참조(CC)를 초기값으로 채운다
+  const defaultCc =
+    identity.kind === "team" ? (selectedDomain?.defaultCc ?? "") : "";
+
   return (
     <SenderClient
       document={{
@@ -59,8 +63,10 @@ export default async function SenderPage({
           ? { email: identity.email, kind: identity.kind }
           : null
       }
+      senderName={user.name}
       templates={templates.map(toTemplateDTO)}
       signature={user.signature ?? ""}
+      defaultCc={defaultCc}
     />
   );
 }

@@ -8,7 +8,13 @@ export function TemplateNew() {
   const router = useRouter();
   return (
     <TemplateEditor
-      initial={{ name: "", subject: "", body: "", shared: false }}
+      initial={{
+        name: "",
+        subject: "",
+        body: "",
+        shared: false,
+        recipientName: "",
+      }}
       onSaved={(saved) => {
         router.push(`/settings/templates/${saved.id}`);
         router.refresh();
