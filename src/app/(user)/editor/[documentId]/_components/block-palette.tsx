@@ -3,11 +3,12 @@
 import type { DragEvent } from "react";
 import { BLOCK_TYPES, BLOCK_LABELS, type BlockType } from "@/lib/editor-schema";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { X, Pencil } from "lucide-react";
 import type { CustomBlock, DocTemplate } from "./template-store";
 
 type Props = {
   onAdd: (type: BlockType) => void;
+  onEditBase: (type: BlockType) => void;
   customBlocks: CustomBlock[];
   onAddCustom: (cb: CustomBlock) => void;
   onDeleteCustom: (id: string) => void;
@@ -19,6 +20,7 @@ type Props = {
 
 export function BlockPalette({
   onAdd,
+  onEditBase,
   customBlocks,
   onAddCustom,
   onDeleteCustom,
@@ -38,17 +40,27 @@ export function BlockPalette({
         <p className="px-1 text-xs font-medium text-muted-foreground">기본 블록</p>
         <div className="flex flex-col gap-1.5">
           {BLOCK_TYPES.map((type) => (
-            <Button
-              key={type}
-              variant="outline"
-              size="sm"
-              draggable
-              onDragStart={(e) => handleDragStart(e, type)}
-              onClick={() => onAdd(type)}
-              className="justify-start"
-            >
-              {BLOCK_LABELS[type]}
-            </Button>
+            <div key={type} className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                draggable
+                onDragStart={(e) => handleDragStart(e, type)}
+                onClick={() => onAdd(type)}
+                className="flex-1 justify-start"
+              >
+                {BLOCK_LABELS[type]}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`${BLOCK_LABELS[type]} 기본값 수정`}
+                title="기본값 수정"
+                onClick={() => onEditBase(type)}
+              >
+                <Pencil className="size-4" />
+              </Button>
+            </div>
           ))}
         </div>
         <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">

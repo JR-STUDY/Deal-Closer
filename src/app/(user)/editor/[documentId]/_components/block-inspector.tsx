@@ -337,7 +337,7 @@ function LabeledFieldsForm({
   );
 }
 
-function ContentForm({
+export function ContentForm({
   block,
   catalog,
   onChangeProps,

@@ -9,8 +9,14 @@ import type {
   EditorDoc,
   ZOrderAction,
   CatalogOption,
+  AnyBlockProps,
 } from "@/lib/editor-schema";
-import { createBlock, uid } from "@/lib/editor-schema";
+import {
+  createBlock,
+  uid,
+  defaultProps,
+  BLOCK_LABELS,
+} from "@/lib/editor-schema";
 import {
   getCustomBlocks,
   saveCustomBlock,
@@ -18,8 +24,11 @@ import {
   getTemplates,
   saveTemplate,
   deleteTemplate,
+  getBaseDefaults,
+  saveBaseDefault,
   type CustomBlock,
   type DocTemplate,
+  type BaseDefaults,
 } from "./template-store";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -36,7 +45,7 @@ import type { Geometry } from "./canvas-block";
 import { EditorSidebar } from "./editor-sidebar";
 import { EditorToolbar } from "./editor-toolbar";
 import { EditorPreview } from "./editor-preview";
-import { BlockInspector } from "./block-inspector";
+import { BlockInspector, ContentForm } from "./block-inspector";
 import { DocumentStatusControl } from "./document-status-control";
 
 type Props = {
@@ -78,6 +87,14 @@ export function DocumentEditor({
   const [templates, setTemplates] = useState<DocTemplate[]>(() =>
     getTemplates(),
   );
+  // 기본 블록 사용자 지정 기본 속성 (블록 추가 탭에서 수정)
+  const [baseDefaults, setBaseDefaults] = useState<BaseDefaults>(() =>
+    getBaseDefaults(),
+  );
+  const [editBase, setEditBase] = useState<{
+    type: BlockType;
+    props: AnyBlockProps;
+  } | null>(null);
   const router = useRouter();
 
   // 카탈로그(마스터 데이터) 로드 — 품목표 드롭다운용 (#6)
@@ -109,13 +126,36 @@ export function DocumentEditor({
     (type: BlockType, pos?: { x: number; y: number }) => {
       // 팔레트 클릭 추가는 현재 보이는 화면 기준 위치에 놓는다
       const block = createBlock(type, pos ?? { x: 40, y: addYRef.current });
+      // 사용자가 '블록 추가' 탭에서 수정한 기본 속성이 있으면 그걸로 시작
+      const override = baseDefaults[type];
+      if (override) block.props = JSON.parse(JSON.stringify(override));
       setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
       setSelectedId(block.id);
       setSidebarTab("inspector");
       setDirty(true);
     },
-    [],
+    [baseDefaults],
   );
+
+  // '블록 추가' 탭의 기본 블록 수정 (#3) — 타입별 기본 속성 편집
+  const handleEditBase = useCallback(
+    (type: BlockType) => {
+      setEditBase({
+        type,
+        props: JSON.parse(
+          JSON.stringify(baseDefaults[type] ?? defaultProps(type)),
+        ),
+      });
+    },
+    [baseDefaults],
+  );
+
+  function saveEditBase() {
+    if (!editBase) return;
+    setBaseDefaults(saveBaseDefault(editBase.type, editBase.props));
+    setEditBase(null);
+    toast.success("기본 블록을 수정했습니다.");
+  }
 
   const handleGeometry = useCallback((id: string, geo: Geometry) => {
     setDoc((d) => ({
@@ -472,6 +512,7 @@ export function DocumentEditor({
         tab={sidebarTab}
         onTabChange={(v) => setSidebarTab(v as "palette" | "inspector")}
         onAdd={handleAdd}
+        onEditBase={handleEditBase}
         catalog={catalog}
         block={selectedBlock}
         onChange={handleChangeBlock}
@@ -571,6 +612,56 @@ export function DocumentEditor({
               onSaveAsCustom={handleSaveAsCustom}
             />
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 기본 블록 수정 모달 (#3) — 블록 추가 탭에서 진입, 타입별 속성 편집 */}
+      <Dialog
+        open={editBase !== null}
+        onOpenChange={(o) => {
+          if (!o) setEditBase(null);
+        }}
+      >
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              기본 블록 수정{editBase ? ` · ${BLOCK_LABELS[editBase.type]}` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              이 블록을 추가할 때 사용할 기본 속성입니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-auto">
+            {editBase ? (
+              <ContentForm
+                block={
+                  {
+                    id: "base",
+                    type: editBase.type,
+                    x: 0,
+                    y: 0,
+                    w: 0,
+                    h: 0,
+                    z: 1,
+                    locked: false,
+                    props: editBase.props,
+                  } as Block
+                }
+                catalog={catalog}
+                onChangeProps={(patch) =>
+                  setEditBase((eb) =>
+                    eb ? { ...eb, props: { ...eb.props, ...patch } } : eb,
+                  )
+                }
+              />
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditBase(null)}>
+              취소
+            </Button>
+            <Button onClick={saveEditBase}>저장</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

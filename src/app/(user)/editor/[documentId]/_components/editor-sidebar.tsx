@@ -16,6 +16,7 @@ type Props = {
   tab: string;
   onTabChange: (v: string) => void;
   onAdd: (type: BlockType) => void;
+  onEditBase: (type: BlockType) => void;
   catalog: CatalogOption[];
   block: Block | null;
   onChange: (patch: Partial<Block>) => void;
@@ -38,6 +39,7 @@ export function EditorSidebar({
   tab,
   onTabChange,
   onAdd,
+  onEditBase,
   catalog,
   block,
   onChange,
@@ -78,6 +80,7 @@ export function EditorSidebar({
           <TabsContent value="palette" className="mt-0">
             <BlockPalette
               onAdd={onAdd}
+              onEditBase={onEditBase}
               customBlocks={customBlocks}
               onAddCustom={onAddCustom}
               onDeleteCustom={onDeleteCustom}
