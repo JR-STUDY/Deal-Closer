@@ -85,6 +85,8 @@ src/
     format.ts          # 통화/날짜 포맷
     api.ts             # API 응답 헬퍼(ok/fail)
     email-template.ts  # 메일 템플릿 치환 변수·검증·DTO
+    signature.ts       # 메일 서명 HTML 판별·미리보기 문서·검증
+    mail-domain.ts     # 팀 발신 도메인 검증·팀 주소 조합·발신 신원 해석
   generated/prisma/    # Prisma Client (자동 생성, 커밋 안 함)
 ```
 

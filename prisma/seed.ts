@@ -140,6 +140,7 @@ async function main() {
   await prisma.document.deleteMany();
   await prisma.emailTemplate.deleteMany();
   await prisma.emailAccount.deleteMany();
+  await prisma.teamMailDomain.deleteMany();
   await prisma.catalogItem.deleteMany();
   await prisma.creditTransaction.deleteMany();
   await prisma.creditWallet.deleteMany();
@@ -296,6 +297,20 @@ async function main() {
       email: "sales-pro@gmail.com",
       isDefault: true,
       status: "CONNECTED",
+    },
+  });
+
+  // 7-0) 팀 발신 메일 도메인 (관리자 콘솔에서 관리)
+  //  · specflow.ai 를 인증·기본 도메인으로 등록 → 담당자가 발신 주소로 선택 가능
+  //  · rep 은 기본적으로 개인 계정(sales-pro@gmail.com) 발신 상태로 두어
+  //    "팀 도메인 선택" 흐름을 데모에서 직접 확인할 수 있게 한다
+  await prisma.teamMailDomain.create({
+    data: {
+      orgId: org.id,
+      domain: "specflow.ai",
+      label: "회사 공식 도메인",
+      status: "VERIFIED",
+      isDefault: true,
     },
   });
 
@@ -532,6 +547,7 @@ async function main() {
     문서항목: await prisma.documentItem.count(),
     카탈로그: await prisma.catalogItem.count(),
     메일계정: await prisma.emailAccount.count(),
+    메일도메인: await prisma.teamMailDomain.count(),
     메일템플릿: await prisma.emailTemplate.count(),
     발송이력: await prisma.emailLog.count(),
     크레딧거래: await prisma.creditTransaction.count(),

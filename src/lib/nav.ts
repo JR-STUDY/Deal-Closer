@@ -10,6 +10,7 @@ import {
   Package,
   CreditCard,
   Palette,
+  AtSign,
   UserCog,
 } from "lucide-react";
 
@@ -35,5 +36,6 @@ export const adminNav: NavItem[] = [
   { href: "/catalog", label: "마스터 데이터", icon: Package },
   { href: "/billing", label: "요금·크레딧", icon: CreditCard },
   { href: "/settings/branding", label: "브랜딩 설정", icon: Palette },
+  { href: "/settings/mail-domain", label: "메일 도메인", icon: AtSign },
   { href: "/account/profile", label: "프로필 설정", icon: UserCog },
 ];

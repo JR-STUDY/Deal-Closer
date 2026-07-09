@@ -61,6 +61,15 @@ export const EMAIL_PROVIDER_LABELS: Record<EmailProvider, string> = {
   OUTLOOK: "Outlook",
 };
 
+// ── 팀 발신 메일 도메인 인증 상태 ──
+export const MAIL_DOMAIN_STATUSES = ["PENDING", "VERIFIED"] as const;
+export type MailDomainStatus = (typeof MAIL_DOMAIN_STATUSES)[number];
+
+export const MAIL_DOMAIN_STATUS_LABELS: Record<MailDomainStatus, string> = {
+  PENDING: "인증 대기",
+  VERIFIED: "인증됨",
+};
+
 // ── 크레딧 거래 유형 ──
 export const CREDIT_TX_TYPES = ["CHARGE", "USAGE"] as const;
 export type CreditTxType = (typeof CREDIT_TX_TYPES)[number];

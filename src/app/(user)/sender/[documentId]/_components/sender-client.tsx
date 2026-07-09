@@ -40,7 +40,8 @@ type SenderClientProps = {
     clientName: string | null;
     amount: number;
   };
-  account: { email: string } | null;
+  /** 발신 신원 — 팀 도메인 선택 시 팀 주소, 아니면 개인 연동 계정 (없으면 null) */
+  sender: { email: string; kind: "team" | "personal" } | null;
   templates: EmailTemplateDTO[];
   /** 현재 사용자의 저장된 메일 서명 (없으면 빈 문자열) */
   signature: string;
@@ -49,7 +50,7 @@ type SenderClientProps = {
 /** 이메일 발송 폼 — 헤더의 발송하기 버튼과 본문 입력값 상태를 함께 관리한다 (데모: 실제 발송 없음) */
 export function SenderClient({
   document,
-  account,
+  sender,
   templates,
   signature,
 }: SenderClientProps) {
@@ -99,12 +100,12 @@ export function SenderClient({
 
       <div className="flex-1 overflow-auto p-8">
         <div className="mx-auto flex max-w-2xl flex-col gap-6">
-          {account ? (
+          {sender ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
               <span className="flex items-center gap-2">
                 <CheckCircle2 className="size-4 text-emerald-600" />
-                연동됨 · 발신 계정:{" "}
-                <span className="font-medium">{account.email}</span>
+                {sender.kind === "team" ? "팀 도메인" : "연동됨"} · 발신 계정:{" "}
+                <span className="font-medium">{sender.email}</span>
               </span>
               <Link
                 href="/settings/email"

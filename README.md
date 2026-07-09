@@ -84,6 +84,9 @@ pnpm dev                # http://localhost:3000
 | GET / POST | `/api/email-templates` | 메일 템플릿 목록 / 생성 |
 | PATCH / DELETE | `/api/email-templates/[id]` | 메일 템플릿 수정 / 삭제 |
 | PATCH | `/api/signature` | 메일 서명 저장 |
+| GET / POST | `/api/mail-domains` | 팀 발신 도메인 목록 / 등록(관리자) |
+| PATCH / DELETE | `/api/mail-domains/[id]` | 팀 발신 도메인 인증·기본지정·별칭 / 삭제 |
+| PATCH | `/api/mail-preference` | 담당자 발신 신원 선택(개인 계정 ↔ 팀 도메인) |
 
 ## 코드 품질 · CI
 

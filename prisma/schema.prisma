@@ -25,14 +25,15 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users          User[]
-  invites        Invite[]
-  documents      Document[]
-  catalogItems   CatalogItem[]
-  branding       Branding?
-  creditWallet   CreditWallet?
-  creditTxns     CreditTransaction[]
-  emailTemplates EmailTemplate[]
+  users           User[]
+  invites         Invite[]
+  documents       Document[]
+  catalogItems    CatalogItem[]
+  branding        Branding?
+  creditWallet    CreditWallet?
+  creditTxns      CreditTransaction[]
+  emailTemplates  EmailTemplate[]
+  teamMailDomains TeamMailDomain[]
 
   @@map("organizations")
 }
@@ -47,6 +48,9 @@ model User {
   signature String?  // 메일 서명 (발송 시 본문 하단에 추가)
   orgId     String
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  // 선택한 팀 발신 도메인 (null = 개인 계정으로 발송). 도메인 삭제 시 개인 계정으로 자동 복귀.
+  mailDomainId String?
+  mailDomain   TeamMailDomain? @relation(fields: [mailDomainId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -57,6 +61,7 @@ model User {
   emailTemplates EmailTemplate[] // 본인이 소유한 개인 메일 템플릿
 
   @@index([orgId])
+  @@index([mailDomainId])
   @@map("users")
 }
 
@@ -157,6 +162,28 @@ model EmailAccount {
 
   @@index([userId])
   @@map("email_accounts")
+}
+
+/// 팀(조직) 단위 발신 메일 도메인 — 관리자 콘솔(/settings/mail-domain)에서 등록·인증한다.
+/// 담당자는 개인 연동 계정 대신 이 도메인 기반 주소(<핸들>@<domain>)로 발신하도록 선택할 수 있다.
+/// - status: PENDING(인증 대기) → VERIFIED(인증됨, 데모는 관리자 수동 확인). VERIFIED 만 담당자가 선택 가능.
+/// - isDefault: 팀 권장 발신 도메인(조직당 1개). 담당자 온보딩 시 안내에 사용.
+model TeamMailDomain {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  domain    String   // 호스트명만 저장 (예: "specflow.ai", @ 제외)
+  label     String?  // 표시용 별칭 (예: "회사 공식 도메인")
+  status    String   @default("PENDING") // PENDING | VERIFIED
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]   // 이 도메인을 발신 도메인으로 선택한 담당자들
+
+  @@unique([orgId, domain])
+  @@index([orgId])
+  @@map("team_mail_domains")
 }
 
 /// 이메일 발송 이력 (/sender/:documentId)
