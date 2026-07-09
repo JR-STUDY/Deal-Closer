@@ -69,16 +69,29 @@ export default async function LibraryPage({
       },
       orderBy: { createdAt: "desc" },
     }),
-    // 내 문서함 폴더 (카드 '폴더 이동' 선택지)
+    // 내 문서함 폴더 (카드 '폴더 이동' 선택지 · 경로 표시)
     prisma.folder.findMany({
       where: { orgId: org.id, isCommon: false },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true },
+      select: { id: true, name: true, parentId: true },
     }),
   ]);
 
-  const activeFolderName =
-    folders.find((f) => f.id === activeFolder)?.name ?? null;
+  // 현재 폴더의 경로(브레드크럼) — 내 문서함 › 상위 › … › 현재
+  const byId = new Map(folders.map((f) => [f.id, f]));
+  let breadcrumb: { label: string; href?: string }[] | undefined;
+  if (activeFolder && byId.has(activeFolder)) {
+    const chain: { id: string; name: string }[] = [];
+    let cur = byId.get(activeFolder);
+    while (cur) {
+      chain.unshift({ id: cur.id, name: cur.name });
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    }
+    breadcrumb = [
+      { label: "내 문서함", href: "/library" },
+      ...chain.map((f) => ({ label: f.name, href: `/library?folder=${f.id}` })),
+    ];
+  }
 
   /** 상태 탭 링크 — 종류·검색·폴더 필터를 유지한다 */
   function statusHref(key: string): string {
@@ -94,7 +107,8 @@ export default async function LibraryPage({
   return (
     <>
       <PageHeader
-        title={activeFolderName ? `내 문서함 · ${activeFolderName}` : "내 문서함"}
+        title="내 문서함"
+        breadcrumb={breadcrumb}
         description="상태·종류로 걸러보고 제목·거래처로 검색하세요."
         actions={
           <Button asChild>

@@ -24,21 +24,38 @@ export default async function CommonDocumentsPage({
       },
       orderBy: { createdAt: "desc" },
     }),
-    // 공용문서함 폴더 (카드 '폴더 이동' 선택지)
+    // 공용문서함 폴더 (카드 '폴더 이동' 선택지 · 경로 표시)
     prisma.folder.findMany({
       where: { orgId: org.id, isCommon: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true },
+      select: { id: true, name: true, parentId: true },
     }),
   ]);
 
-  const activeFolderName =
-    folders.find((f) => f.id === activeFolder)?.name ?? null;
+  // 현재 폴더의 경로(브레드크럼) — 공용문서함 › 상위 › … › 현재
+  const byId = new Map(folders.map((f) => [f.id, f]));
+  let breadcrumb: { label: string; href?: string }[] | undefined;
+  if (activeFolder && byId.has(activeFolder)) {
+    const chain: { id: string; name: string }[] = [];
+    let cur = byId.get(activeFolder);
+    while (cur) {
+      chain.unshift({ id: cur.id, name: cur.name });
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    }
+    breadcrumb = [
+      { label: "공용문서함", href: "/library/common" },
+      ...chain.map((f) => ({
+        label: f.name,
+        href: `/library/common?folder=${f.id}`,
+      })),
+    ];
+  }
 
   return (
     <>
       <PageHeader
-        title={activeFolderName ? `공용문서함 · ${activeFolderName}` : "공용문서함"}
+        title="공용문서함"
+        breadcrumb={breadcrumb}
         description="팀이 함께 쓰는 기준 문서함입니다. 카드 메뉴의 ‘내 문서함으로 이동’으로 되돌릴 수 있습니다."
         actions={
           <Button asChild>
