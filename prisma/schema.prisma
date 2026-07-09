@@ -78,7 +78,7 @@ model Document {
   id          String   @id @default(cuid())
   title       String
   type        String   @default("QUOTE")  // QUOTE | CONTRACT | NDA | PROPOSAL
-  status      String   @default("DRAFT")  // DRAFT | SENT | COMPLETED
+  status      String   @default("DRAFT")  // DRAFT | SENT | COMPLETED | VOID(폐기)
   clientName  String?                     // 거래처명
   amount      Int      @default(0)        // 총액(KRW 정수)
   currency    String   @default("KRW")

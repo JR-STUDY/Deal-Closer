@@ -26,6 +26,9 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const doc = await prisma.document.findUnique({ where: { id } });
   if (!doc) return fail("문서를 찾을 수 없습니다.", 404);
+  if (doc.status === "VOID") {
+    return fail("폐기된 문서는 발송할 수 없습니다.");
+  }
 
   const [log] = await prisma.$transaction([
     prisma.emailLog.create({
@@ -41,7 +44,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     }),
     prisma.document.update({
       where: { id: doc.id },
-      data: { status: "SENT" },
+      // 초안만 발송완료로 전이한다 (이미 계약완료된 문서를 재발송해도 강등하지 않음).
+      data: { status: doc.status === "DRAFT" ? "SENT" : doc.status },
     }),
   ]);
 

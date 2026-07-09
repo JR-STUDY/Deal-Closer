@@ -12,7 +12,7 @@ export default async function GeneratorPage() {
   const [wallet, documents] = await Promise.all([
     prisma.creditWallet.findUnique({ where: { orgId: org.id } }),
     prisma.document.findMany({
-      where: { orgId: org.id },
+      where: { orgId: org.id, status: { not: "VOID" } },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,

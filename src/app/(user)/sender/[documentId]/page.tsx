@@ -27,6 +27,8 @@ export default async function SenderPage({
         id: document.id,
         title: document.title,
         type: document.type,
+        clientName: document.clientName,
+        amount: document.amount,
       }}
       account={account ? { email: account.email } : null}
     />

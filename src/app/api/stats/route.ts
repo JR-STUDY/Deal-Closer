@@ -8,7 +8,7 @@ export async function GET() {
   const where = { orgId: org.id };
 
   const [total, draft, sent, completed, revenue] = await Promise.all([
-    prisma.document.count({ where }),
+    prisma.document.count({ where: { ...where, status: { not: "VOID" } } }),
     prisma.document.count({ where: { ...where, status: "DRAFT" } }),
     prisma.document.count({ where: { ...where, status: "SENT" } }),
     prisma.document.count({ where: { ...where, status: "COMPLETED" } }),

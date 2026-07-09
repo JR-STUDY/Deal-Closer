@@ -38,7 +38,7 @@ export default async function AnalyticsPage() {
       }),
       prisma.document.groupBy({
         by: ["authorId"],
-        where: { orgId: org.id },
+        where: { orgId: org.id, status: { not: "VOID" } },
         _count: { _all: true },
       }),
       prisma.document.groupBy({

@@ -10,10 +10,11 @@ import {
 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge, DocTypeBadge } from "@/components/status-badge";
+import { DocTypeBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EditorClient } from "./_components/editor-client";
+import { DocumentStatusControl } from "./_components/document-status-control";
 
 /** 바이트 크기를 사람이 읽는 형태로 */
 function formatBytes(bytes: number): string {
@@ -66,7 +67,10 @@ export default async function EditorPage({
         title={document.title}
         actions={
           <>
-            <StatusBadge status={document.status} />
+            <DocumentStatusControl
+              documentId={document.id}
+              status={document.status}
+            />
             <Button asChild variant="outline">
               <Link href={`/sender/${document.id}`}>
                 <Send className="size-4" />
