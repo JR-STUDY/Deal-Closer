@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Sparkles, Mail, Pencil, FolderOpen, FileStack } from "lucide-react";
+import { Sparkles, Mail, Pencil, FolderOpen } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { formatKRW, formatDateTime } from "@/lib/format";
@@ -95,19 +95,11 @@ export default async function LibraryPage({
         title="문서 보관함"
         description="폴더로 문서를 분류하고, 자주 쓰는 문서는 베이스 템플릿으로 관리하세요."
         actions={
-          <>
-            <Button asChild variant="outline">
-              <Link href="/library/templates">
-                <FileStack className="size-4" />
-                베이스 템플릿
-              </Link>
-            </Button>
-            <Button asChild>
-              <Link href="/generator">
-                <Sparkles className="size-4" />새 문서 생성
-              </Link>
-            </Button>
-          </>
+          <Button asChild>
+            <Link href="/generator">
+              <Sparkles className="size-4" />새 문서 생성
+            </Link>
+          </Button>
         }
       />
 

@@ -29,7 +29,6 @@ model Organization {
   invites      Invite[]
   documents    Document[]
   folders      Folder[]
-  templates    DocumentTemplate[]
   catalogItems CatalogItem[]
   branding     Branding?
   creditWallet CreditWallet?
@@ -143,41 +142,6 @@ model Folder {
   @@index([orgId])
   @@index([parentId])
   @@map("folders")
-}
-
-/// 재사용 베이스 템플릿 (표준 견적서/NDA/제안서 골격 등).
-/// 실거래 문서(Document)와 분리된 "베이스 문서" 저장소. 여기서 새 문서를 복제 생성한다.
-model DocumentTemplate {
-  id          String   @id @default(cuid())
-  orgId       String
-  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  title       String
-  type        String   @default("QUOTE") // QUOTE | CONTRACT | NDA | PROPOSAL
-  description String?                    // 언제 쓰는 템플릿인지 안내
-  contentJson String?                    // 템플릿 본문(JSON 직렬화)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  items TemplateItem[]
-
-  @@index([orgId])
-  @@map("document_templates")
-}
-
-/// 베이스 템플릿의 기본 라인 아이템 (새 문서 생성 시 그대로 복제된다)
-model TemplateItem {
-  id          String   @id @default(cuid())
-  templateId  String
-  template    DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  quantity    Int      @default(1)
-  unitPrice   Int      @default(0)
-  amount      Int      @default(0)
-  sortOrder   Int      @default(0)
-
-  @@index([templateId])
-  @@map("template_items")
 }
 
 // ==================== 카탈로그(마스터 데이터) ====================

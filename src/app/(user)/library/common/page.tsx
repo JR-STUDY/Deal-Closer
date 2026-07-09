@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sparkles, Mail, Pencil, Users, ArrowLeft } from "lucide-react";
+import { Sparkles, Mail, Pencil, Users } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { formatKRW, formatDateTime } from "@/lib/format";
@@ -31,19 +31,11 @@ export default async function CommonDocumentsPage() {
         title="공통 문서"
         description="팀이 함께 쓰는 기준 문서입니다. 카드 메뉴의 ‘공통 문서에서 제외’로 일반 문서로 되돌릴 수 있습니다."
         actions={
-          <>
-            <Button asChild variant="outline">
-              <Link href="/library">
-                <ArrowLeft className="size-4" />
-                일반 문서
-              </Link>
-            </Button>
-            <Button asChild>
-              <Link href="/generator">
-                <Sparkles className="size-4" />새 문서 생성
-              </Link>
-            </Button>
-          </>
+          <Button asChild>
+            <Link href="/generator">
+              <Sparkles className="size-4" />새 문서 생성
+            </Link>
+          </Button>
         }
       />
 

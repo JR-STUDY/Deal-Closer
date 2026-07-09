@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreVertical, FolderInput, FileStack, Users, UserMinus } from "lucide-react";
+import { MoreVertical, FolderInput, Users, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -93,22 +93,6 @@ export function DocumentCardActions({
     }
   }
 
-  async function saveAsTemplate() {
-    try {
-      const res = await fetch("/api/templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromDocumentId: documentId }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "저장에 실패했습니다.");
-      toast.success("베이스 템플릿으로 저장했습니다.");
-      router.refresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "저장에 실패했습니다.");
-    }
-  }
-
   return (
     <>
       <DropdownMenu>
@@ -144,10 +128,6 @@ export function DocumentCardActions({
                 공통 문서로 지정
               </>
             )}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={saveAsTemplate}>
-            <FileStack className="size-4" />
-            베이스 템플릿으로 저장
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

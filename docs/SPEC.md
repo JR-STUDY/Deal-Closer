@@ -25,7 +25,7 @@
 | 베이스 템플릿 | `/library/templates` | 재사용 표준 문서 저장·복제 생성 ※MVP 확장 |
 | 메일 연동 관리 | `/settings/email` | Gmail/Outlook OAuth |
 
-> **MVP 확장 — 문서 보관함 강화**: 원본 기획서의 "상태 탭·검색"에 더해, 앱 사이드바의 "문서 보관함"을 **일반 문서**(`/library`)와 **공통 문서**(`/library/common`)로 나눈다. ① 일반 문서는 폴더(다단계 트리)로 분류하고, ② 공통 문서는 팀 공용 기준 문서를 모아 본다(문서는 둘 중 하나에만 속하며 카드 메뉴로 지정/해제), ③ 자주 쓰는 문서는 재사용 **베이스 템플릿**(`/library/templates`)으로 저장·복제한다. 스키마는 `Folder`·`DocumentTemplate`·`TemplateItem` + `Document.folderId`·`Document.isCommon` 로 반영했다.
+> **MVP 확장 — 문서 보관함 강화**: 원본 기획서의 "상태 탭·검색"에 더해, 앱 사이드바의 "문서 보관함"을 **일반 문서**(`/library`)와 **공통 문서**(`/library/common`)로 나눈다. ① 일반 문서는 폴더(다단계 트리)로 분류하고, ② 공통 문서는 팀 공용 기준 문서를 모아 본다. 문서는 둘 중 하나에만 속하며 카드 메뉴로 지정/해제한다. 스키마는 `Folder` + `Document.folderId`·`Document.isCommon` 로 반영했다.
 
 ### 관리자 콘솔 (admin-web)
 

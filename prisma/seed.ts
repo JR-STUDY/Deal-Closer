@@ -139,8 +139,6 @@ async function main() {
   await prisma.documentItem.deleteMany();
   await prisma.document.deleteMany();
   await prisma.folder.deleteMany();
-  await prisma.templateItem.deleteMany();
-  await prisma.documentTemplate.deleteMany();
   await prisma.emailAccount.deleteMany();
   await prisma.catalogItem.deleteMany();
   await prisma.creditTransaction.deleteMany();
@@ -492,88 +490,6 @@ async function main() {
     data: { isCommon: true },
   });
 
-  // 8-5) 베이스 템플릿 (재사용 표준 문서) — 실거래 문서와 분리된 저장소
-  await prisma.documentTemplate.create({
-    data: {
-      orgId: org.id,
-      title: "표준 IT 구축 견적서",
-      type: "QUOTE",
-      description: "시스템 구축·서버·유지보수를 포함한 기본 견적 골격입니다.",
-      items: {
-        create: [
-          {
-            name: "시스템 구축 및 셋업",
-            description: "요건 분석·설계·구축 일괄",
-            quantity: 1,
-            unitPrice: 15_000_000,
-            amount: 15_000_000,
-            sortOrder: 0,
-          },
-          {
-            name: "클라우드 서버 인스턴스",
-            description: "고성능 인스턴스",
-            quantity: 3,
-            unitPrice: 500_000,
-            amount: 1_500_000,
-            sortOrder: 1,
-          },
-          {
-            name: "연간 유지보수",
-            description: "1년 유지보수 계약",
-            quantity: 1,
-            unitPrice: 6_000_000,
-            amount: 6_000_000,
-            sortOrder: 2,
-          },
-        ],
-      },
-    },
-  });
-  await prisma.documentTemplate.create({
-    data: {
-      orgId: org.id,
-      title: "표준 용역 계약서",
-      type: "CONTRACT",
-      description: "일반 용역 계약에 사용하는 표준 계약서 양식입니다.",
-    },
-  });
-  await prisma.documentTemplate.create({
-    data: {
-      orgId: org.id,
-      title: "표준 비밀유지계약서(NDA)",
-      type: "NDA",
-      description: "상호 비밀유지 조항을 담은 표준 NDA 양식입니다.",
-    },
-  });
-  await prisma.documentTemplate.create({
-    data: {
-      orgId: org.id,
-      title: "표준 사업 제안서 골격",
-      type: "PROPOSAL",
-      description: "제안 배경·솔루션·기대효과·일정으로 구성된 제안서 골격입니다.",
-      items: {
-        create: [
-          {
-            name: "컨설팅 및 설계",
-            description: "현황 분석·솔루션 설계",
-            quantity: 1,
-            unitPrice: 8_000_000,
-            amount: 8_000_000,
-            sortOrder: 0,
-          },
-          {
-            name: "구축 및 도입",
-            description: "솔루션 구축·도입 지원",
-            quantity: 1,
-            unitPrice: 20_000_000,
-            amount: 20_000_000,
-            sortOrder: 1,
-          },
-        ],
-      },
-    },
-  });
-
   // 9) 발송 이력 (SENT 문서)
   await prisma.emailLog.create({
     data: {
@@ -635,7 +551,6 @@ async function main() {
     문서: await prisma.document.count(),
     문서항목: await prisma.documentItem.count(),
     폴더: await prisma.folder.count(),
-    템플릿: await prisma.documentTemplate.count(),
     카탈로그: await prisma.catalogItem.count(),
     메일계정: await prisma.emailAccount.count(),
     발송이력: await prisma.emailLog.count(),
