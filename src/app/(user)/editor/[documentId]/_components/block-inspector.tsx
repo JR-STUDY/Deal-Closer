@@ -81,16 +81,14 @@ export function BlockInspector({
 }: Props) {
   if (!block) {
     return (
-      <aside className="w-72 shrink-0 border-l bg-background p-4">
-        <p className="text-sm text-muted-foreground">
-          블록을 선택하면 여기에서 편집합니다.
-        </p>
-      </aside>
+      <p className="text-sm text-muted-foreground">
+        블록을 선택하면 여기에서 편집합니다.
+      </p>
     );
   }
 
   return (
-    <aside className="w-72 shrink-0 space-y-4 overflow-auto border-l bg-background p-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium">블록 속성</p>
         <Button
@@ -155,7 +153,7 @@ export function BlockInspector({
           잠금 상태입니다. 해제하면 내용을 편집할 수 있습니다.
         </p>
       )}
-    </aside>
+    </div>
   );
 }
 

@@ -11,10 +11,7 @@ export function BlockPalette({ onAdd }: { onAdd: (type: BlockType) => void }) {
   }
 
   return (
-    <aside className="w-44 shrink-0 border-r bg-background p-3">
-      <p className="mb-2 px-1 text-xs font-medium text-muted-foreground">
-        블록 추가
-      </p>
+    <div className="space-y-2">
       <div className="flex flex-col gap-1.5">
         {BLOCK_TYPES.map((type) => (
           <Button
@@ -30,9 +27,9 @@ export function BlockPalette({ onAdd }: { onAdd: (type: BlockType) => void }) {
           </Button>
         ))}
       </div>
-      <p className="mt-3 px-1 text-[11px] leading-relaxed text-muted-foreground">
+      <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
         캔버스로 끌어다 놓거나 클릭하면 추가됩니다.
       </p>
-    </aside>
+    </div>
   );
 }

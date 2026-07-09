@@ -12,8 +12,7 @@ import { createBlock } from "@/lib/editor-schema";
 import { Input } from "@/components/ui/input";
 import { EditorCanvas } from "./editor-canvas";
 import type { Geometry } from "./canvas-block";
-import { BlockPalette } from "./block-palette";
-import { BlockInspector } from "./block-inspector";
+import { EditorSidebar } from "./editor-sidebar";
 import { EditorToolbar } from "./editor-toolbar";
 
 type Props = {
@@ -30,6 +29,9 @@ export function DocumentEditor({
   const [doc, setDoc] = useState<EditorDoc>(initialDoc);
   const [docTitle, setDocTitle] = useState(initialTitle);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<"palette" | "inspector">(
+    "palette",
+  );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -38,11 +40,18 @@ export function DocumentEditor({
     [doc.blocks, selectedId],
   );
 
+  // 블록을 선택하면 속성 탭으로 자동 전환
+  const handleSelect = useCallback((id: string | null) => {
+    setSelectedId(id);
+    if (id) setSidebarTab("inspector");
+  }, []);
+
   const handleAdd = useCallback(
     (type: BlockType, pos?: { x: number; y: number }) => {
       const block = createBlock(type, pos);
       setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
       setSelectedId(block.id);
+      setSidebarTab("inspector");
       setDirty(true);
     },
     [],
@@ -163,7 +172,6 @@ export function DocumentEditor({
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      <BlockPalette onAdd={handleAdd} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b bg-background px-4 py-2">
           <Input
@@ -183,14 +191,17 @@ export function DocumentEditor({
         <EditorCanvas
           doc={doc}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={handleSelect}
           onGeometry={handleGeometry}
           onAddBlock={handleAdd}
           onRemove={handleRemove}
           onZOrder={handleZOrder}
         />
       </div>
-      <BlockInspector
+      <EditorSidebar
+        tab={sidebarTab}
+        onTabChange={(v) => setSidebarTab(v as "palette" | "inspector")}
+        onAdd={handleAdd}
         block={selectedBlock}
         onChange={handleChangeBlock}
         onChangeProps={handleChangeProps}
