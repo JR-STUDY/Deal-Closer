@@ -8,20 +8,23 @@
 
 | 영역 | 상태 | 근거 |
 |---|---|---|
-| 24개 화면 페이지 | ✅ 전부 존재 | `src/app/**/page.tsx` (14) + 상태화면 |
+| 24개 화면 페이지 | ✅ 전부 존재 | `src/app/**/page.tsx` (20, MVP 추가 화면 포함) + 상태화면 |
 | 문서 CRUD | ✅ 실제 DB | `/api/documents` GET/POST/PATCH/DELETE |
 | 크레딧 차감 | ✅ 실제 DB | `/api/generate` 트랜잭션 (10크레딧/건) |
-| **AI 생성** | ⚠️ 목업 | 정규식 `inferType()` + 빈 예시 라인 1줄, 실제 LLM 없음 |
+| **AI 생성** | ⚠️ 목업 | 정규식 `inferType()` + 첨부(엑셀/CSV 텍스트 추출)·참고문서 반영, 실제 LLM 없음 |
 | **이메일 발송** | ⚠️ 목업 | `EmailLog` 기록 + `status=SENT`만, 실제 전송·PDF 없음 |
 | **메일 OAuth** | ⚠️ UI만 | `connect-button` UI, 실제 OAuth 플로우 없음 |
 | **인증** | ⚠️ 데모 고정 | `session.ts` 홍길동/admin 하드코딩 |
-| 라인아이템 편집 저장 | ✅ 실제 DB | 문서 PATCH가 `items` 교체 + 총액 서버 재계산 |
+| 웹 문서 에디터 (블록 캔버스) | ✅ 실제 DB (MVP 추가) | 2D 블록 배치 → `contentJson` 저장, 서버가 총액·거래처 재도출. 레거시 라인아이템 폼도 유지 |
 | 문서 상태 전환·폐기 | ✅ 완료 | 수동 전환 + VOID(폐기), 발송 시 SENT 자동 |
 | 발송 수신자 검증 | ✅ 완료 | 이메일 형식·다중 파싱(VAL_*) |
 | 상태 화면 | ✅ 완료 | 404·에러 바운더리·그룹 로딩(STATE_*) |
-| 에디터 이탈 경고 | ✅ 완료 | 미저장 시 beforeunload 가드·표시(STATE_*) |
+| 에디터 이탈 경고 | ✅ 완료 | 미저장 시 beforeunload 가드·앱내 링크 가로채기(STATE_*) |
+| 보관함 폴더·공용문서함 | ✅ 실제 DB (MVP 추가) | `Folder`(다단계 트리·`/api/folders` CRUD·순서변경) + 내 문서함/공용문서함(`Document.isCommon`) 분리 |
 | 메일 템플릿 | ✅ 실제 DB (MVP 추가) | `EmailTemplate` CRUD(`/api/email-templates`) + 발송폼 불러오기·치환 변수 |
 | 메일 서명 | ✅ 실제 DB (MVP 추가) | `User.signature`(텍스트·HTML) + `/settings/email` 편집·미리보기, 발송폼 하단 추가(sandbox iframe 렌더) |
+| 팀 발신 도메인 | ✅ 실제 DB (MVP 추가) | `TeamMailDomain`(등록·인증·기본참조 `defaultCc`) + 담당자 발신 신원 선택(개인↔팀, `/api/mail-preference`) |
+| 프로필 설정 | ✅ 완료 (MVP 추가, 기획서 외) | `/settings/profile`·`/account/profile` 계정 정보·비밀번호 변경 폼 |
 
 ---
 

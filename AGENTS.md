@@ -66,7 +66,7 @@ prisma/
   migrations/          # 마이그레이션 이력 (커밋)
 src/
   app/
-    (user)/            # 영업 담당자 포털 — 사이드바 레이아웃 공유
+    (user)/            # 영업 담당자 포털 — 사이드바 공유 (에디터는 블록 캔버스, _components/ 에 co-locate)
     (admin)/           # 관리자 콘솔 — 사이드바 레이아웃 공유
     (auth)/            # 로그인 등 인증 화면 (사이드바 없음)
     api/               # REST API Route Handlers (SQLite 조회 / 목업)
@@ -74,17 +74,23 @@ src/
     page.tsx           # 랜딩 (콘솔 진입)
   components/
     ui/                # shadcn/ui (직접 수정 지양, CLI 로 관리)
-    account/           # 프로필/계정 공용 폼 (profile-form·password-form, user·admin 공유)
+    account/           # 프로필/계정 공용 폼 (profile-form·password-form·profile-tabs, user·admin 공유)
     email-template/    # 메일 템플릿 공용 폼 다이얼로그 (관리 페이지·발송폼 재사용)
     app-sidebar.tsx    # 공용 사이드바
-    page-header.tsx    # 공용 페이지 헤더
-    status-badge.tsx   # 문서 상태/종류 배지
+    sidebar-folders.tsx / add-folder-button.tsx  # 보관함 폴더 트리 UI
+    signature-html-editor.tsx / signature-preview.tsx  # 메일 서명 편집·미리보기
+    provider-logo.tsx  # Gmail/Outlook 브랜드 로고
+    page-header.tsx / back-button.tsx / status-badge.tsx / loading-state.tsx  # 공용 UI
   lib/
     db.ts              # Prisma 싱글톤 (DB 접근은 반드시 여기 경유)
     session.ts         # 현재 사용자/조직 (MVP: 데모 고정)
     constants.ts       # enum 대체 상수 + 라벨
     format.ts          # 통화/날짜 포맷
     api.ts             # API 응답 헬퍼(ok/fail)
+    nav.ts             # 사이드바 네비게이션 정의 (user/admin)
+    validation.ts      # 이메일 수신자 형식 검증·다중 파싱 (VAL_*)
+    editor-schema.ts   # 블록 캔버스 문서 모델(contentJson) 파싱·총액/거래처 재도출·시드
+    attachments.ts     # AI 생성 첨부(엑셀/CSV) 텍스트 추출
     email-template.ts  # 메일 템플릿 치환 변수·검증·DTO
     signature.ts       # 메일 서명 HTML 판별·미리보기 문서·검증
     mail-domain.ts     # 팀 발신 도메인 검증·팀 주소 조합·발신 신원 해석

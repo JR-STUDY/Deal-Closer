@@ -50,9 +50,10 @@ pnpm dev                # http://localhost:3000
 |---|---|
 | 영업 대시보드 | `/dashboard` |
 | AI 문서 생성기 | `/generator` |
-| 웹 문서 에디터 | `/editor/[documentId]` |
+| 웹 문서 에디터 (블록 캔버스) | `/editor/[documentId]` |
 | 이메일 발송 | `/sender/[documentId]` |
-| 문서 보관함 | `/library` |
+| 문서 보관함 (내 문서함) | `/library` |
+| 공용문서함 | `/library/common` |
 | 메일 연동 관리 | `/settings/email` |
 | 메일 템플릿 | `/settings/templates` |
 | 프로필 설정 | `/settings/profile` |
@@ -67,6 +68,7 @@ pnpm dev                # http://localhost:3000
 | 마스터 데이터 | `/catalog` |
 | 요금·크레딧 | `/billing` |
 | 브랜딩 설정 | `/settings/branding` |
+| 메일 도메인 설정 | `/settings/mail-domain` |
 | 프로필 설정 | `/account/profile` |
 
 ## REST API (SQLite 조회 / MVP 목업)
@@ -76,7 +78,11 @@ pnpm dev                # http://localhost:3000
 | GET / POST | `/api/documents` | 문서 목록 / 생성 |
 | GET / PATCH / DELETE | `/api/documents/[id]` | 문서 단건 / 수정 / 삭제 |
 | POST | `/api/documents/[id]/send` | 이메일 발송 (이력 기록) |
-| POST | `/api/generate` | AI 문서 생성 (목업 + 크레딧 차감) |
+| POST | `/api/generate` | AI 문서 생성 (첨부·참고문서 반영 + 크레딧 차감, 목업) |
+| GET | `/api/attachments/[id]` | AI 생성 첨부 파일 다운로드 |
+| GET / POST | `/api/folders` | 폴더 목록 / 생성 |
+| PATCH / DELETE | `/api/folders/[id]` | 폴더 이름변경·이동 / 삭제 |
+| POST | `/api/folders/reorder` | 폴더 형제 순서변경 |
 | GET | `/api/catalog` | 카탈로그 |
 | GET | `/api/credits` | 크레딧 지갑·거래내역 |
 | GET | `/api/stats` | 대시보드 통계 |
