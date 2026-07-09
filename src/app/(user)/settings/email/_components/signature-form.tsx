@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  type ChangeEvent,
-  useDeferredValue,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ChangeEvent, useDeferredValue, useRef, useState } from "react";
 import { Upload, Code, MousePointerClick } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -18,6 +12,7 @@ import {
 import { isHtmlSignature } from "@/lib/signature";
 import { SignaturePreview } from "@/components/signature-preview";
 import { SignatureHtmlEditor } from "@/components/signature-html-editor";
+import { useUnsavedGuard } from "./use-unsaved-guard";
 
 type EditMode = "wysiwyg" | "source";
 
@@ -49,16 +44,8 @@ export function SignatureForm({
   const showWysiwyg = isHtml && editMode === "wysiwyg";
   const previewSignature = useDeferredValue(signature);
 
-  // 미저장 변경 이탈 경고 (새로고침·탭 닫기·주소 이동). 정책 STATE_*.
-  useEffect(() => {
-    if (!isDirty) return;
-    const handler = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [isDirty]);
+  // 미저장 변경 시 이탈 경고 (브라우저 이탈 + 앱 내 링크 이동). 정책 STATE_*.
+  useUnsavedGuard(isDirty);
 
   /** 내용을 통째로 교체 (업로드·모드 전환) → 에디터 재렌더(srcDoc 갱신) */
   const applyValue = (value: string) => {
@@ -91,14 +78,14 @@ export function SignatureForm({
     }
     if (file.size > MAX_SIGNATURE_FILE_BYTES) {
       toast.error(
-        `파일이 너무 큽니다. 서명은 ${MAX_SIGNATURE_LENGTH.toLocaleString()}자 이내여야 합니다.`,
+        `파일이 너무 큽니다. 최대 ${Math.floor(MAX_SIGNATURE_FILE_BYTES / 1024)}KB까지 올릴 수 있습니다.`,
       );
       return;
     }
 
     try {
       const text = await file.text();
-      if (text.length > MAX_SIGNATURE_LENGTH) {
+      if (text.trim().length > MAX_SIGNATURE_LENGTH) {
         toast.error(
           `서명은 ${MAX_SIGNATURE_LENGTH.toLocaleString()}자 이내여야 합니다.`,
         );

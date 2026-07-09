@@ -47,7 +47,8 @@ export function SignatureHtmlEditor({
       measure();
       doc.addEventListener("input", () => {
         onChangeRef.current(doc.body.innerHTML);
-        measure();
+        // 매 입력마다 강제 reflow 대신 다음 프레임에 높이 측정
+        requestAnimationFrame(measure);
       });
     };
 
