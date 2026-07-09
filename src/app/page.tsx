@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { BrandMark, BrandWordmark } from "@/components/brand-logo";
+import { BrandWordmark } from "@/components/brand-logo";
+import { HeroAnimation } from "./_components/hero-animation";
 
 export default function Home() {
   return (
     <main className="flex flex-1 items-center justify-center p-6">
       <div className="w-full max-w-2xl space-y-8 text-center">
-        <div className="flex items-center justify-center gap-3">
-          <BrandMark className="size-14" />
-          <BrandWordmark className="text-4xl tracking-tighter" />
+        <div className="flex flex-col items-center justify-center gap-3">
+          <HeroAnimation />
+          <BrandWordmark className="text-3xl tracking-tighter" />
         </div>
 
         <div className="space-y-4">
