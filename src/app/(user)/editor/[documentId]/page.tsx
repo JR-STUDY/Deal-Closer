@@ -11,14 +11,27 @@ export default async function EditorPage({
 }) {
   const { documentId } = await params;
 
-  // getCurrentOrg 는 React.cache 로 사실상 무비용 → 먼저 해소 후 document·branding 병렬 (async-parallel)
+  // getCurrentOrg 는 React.cache 로 사실상 무비용 → 먼저 해소 후 document·branding·catalog 병렬 (async-parallel)
   const org = await getCurrentOrg();
-  const [document, branding] = await Promise.all([
+  const [document, branding, catalog] = await Promise.all([
     prisma.document.findUnique({
       where: { id: documentId },
       include: { items: { orderBy: { sortOrder: "asc" } } },
     }),
     prisma.branding.findUnique({ where: { orgId: org.id } }),
+    // 품목 카탈로그(마스터 데이터) — 클라 useEffect fetch 대신 서버에서 조회해 prop 전달 (no-fetch-in-effect)
+    prisma.catalogItem.findMany({
+      where: { orgId: org.id },
+      orderBy: [{ category: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        unitPrice: true,
+        description: true,
+        category: true,
+        unit: true,
+      },
+    }),
   ]);
 
   if (!document) notFound();
@@ -39,6 +52,7 @@ export default async function EditorPage({
       initialTitle={document.title}
       initialStatus={document.status}
       initialDoc={initialDoc}
+      catalog={catalog}
     />
   );
 }

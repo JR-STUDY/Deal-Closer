@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button";
 import { X, Pencil } from "lucide-react";
 import type { CustomBlock, DocTemplate } from "./template-store";
 
+function handleDragStart(e: DragEvent<HTMLButtonElement>, type: BlockType) {
+  e.dataTransfer.setData("application/x-block-type", type);
+  e.dataTransfer.effectAllowed = "copy";
+}
+
 type Props = {
   onAdd: (type: BlockType) => void;
   onEditBase: (type: BlockType) => void;
@@ -29,11 +34,6 @@ export function BlockPalette({
   onLoadTemplate,
   onDeleteTemplate,
 }: Props) {
-  function handleDragStart(e: DragEvent<HTMLButtonElement>, type: BlockType) {
-    e.dataTransfer.setData("application/x-block-type", type);
-    e.dataTransfer.effectAllowed = "copy";
-  }
-
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">

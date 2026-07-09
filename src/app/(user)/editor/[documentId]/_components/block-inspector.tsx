@@ -30,6 +30,9 @@ import { CatalogCombobox } from "./catalog-combobox";
 
 const MAX_IMAGE_BYTES = 1024 * 1024; // 1MB — 로고/직인 수준
 
+/** 숫자 입력값을 정수로 정규화 (빈값·NaN → 0) */
+const toInt = (v: string) => Math.trunc(Number(v)) || 0;
+
 const ALIGN_LABELS: Record<Align, string> = {
   left: "왼쪽",
   center: "가운데",
@@ -338,6 +341,573 @@ function LabeledFieldsForm({
   );
 }
 
+/** 텍스트·제목 블록 속성 폼 */
+function TextForm({
+  block,
+  onChangeProps,
+}: {
+  block: Block;
+  onChangeProps: (p: Record<string, unknown>) => void;
+}) {
+  const p = block.props as BlockPropsMap["text"];
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label className="text-xs">텍스트</Label>
+        <Textarea
+          value={p.text}
+          onChange={(e) => onChangeProps({ text: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label className="text-xs">글자 크기</Label>
+        <Input
+          type="number"
+          value={p.fontSize}
+          onChange={(e) =>
+            onChangeProps({ fontSize: Number(e.target.value) || 12 })
+          }
+        />
+      </div>
+      <FontFamilyField
+        value={p.fontFamily}
+        onChange={(f) => onChangeProps({ fontFamily: f })}
+      />
+      <AlignField value={p.align} onChange={(a) => onChangeProps({ align: a })} />
+      <ColorField
+        label="글자 색상"
+        value={p.color}
+        onChange={(v) => onChangeProps({ color: v })}
+      />
+      <BorderControls
+        enabled={p.border}
+        color={p.borderColor}
+        onToggle={(v) => onChangeProps({ border: v })}
+        onColor={(v) => onChangeProps({ borderColor: v })}
+      />
+    </div>
+  );
+}
+
+/** 품목표 블록 속성 폼 (#2/#4/#6/#9) */
+function ItemTableForm({
+  block,
+  catalog,
+  onChangeProps,
+}: {
+  block: Block;
+  catalog: CatalogOption[];
+  onChangeProps: (p: Record<string, unknown>) => void;
+}) {
+  const p = block.props as BlockPropsMap["itemTable"];
+  const cols = p.extraColumns ?? [];
+  const update = (rows: ItemRow[]) => onChangeProps({ rows });
+  const setCols = (next: TableColumn[]) =>
+    onChangeProps({ extraColumns: next });
+  const setExtra = (rowId: string, colId: string, val: string) =>
+    update(
+      p.rows.map((x) =>
+        x.id === rowId
+          ? { ...x, extra: { ...(x.extra ?? {}), [colId]: val } }
+          : x,
+      ),
+    );
+  const summaries = p.summaryRows ?? [];
+  const subtotal = calcItemTableTotal(p.rows);
+  const setSummary = (next: SummaryRow[]) =>
+    onChangeProps({ summaryRows: next });
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label htmlFor="showTotal" className="text-sm">
+          합계 표시
+        </Label>
+        <Switch
+          id="showTotal"
+          checked={p.showTotal}
+          onCheckedChange={(v) => onChangeProps({ showTotal: v })}
+        />
+      </div>
+
+      {/* 추가 열 관리 (#2/#4) */}
+      <div className="space-y-2 rounded border p-2">
+        <Label className="text-xs">추가 열</Label>
+        {cols.map((c) => (
+          <div key={c.id} className="space-y-1">
+            <div className="flex gap-1">
+              <Input
+                placeholder="열 이름"
+                value={c.label}
+                onChange={(e) =>
+                  setCols(
+                    cols.map((x) =>
+                      x.id === c.id ? { ...x, label: e.target.value } : x,
+                    ),
+                  )
+                }
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="열 삭제"
+                onClick={() => setCols(cols.filter((x) => x.id !== c.id))}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+            <div className="flex gap-1">
+              {(["left", "center", "right"] as const).map((a) => (
+                <Button
+                  key={a}
+                  type="button"
+                  size="sm"
+                  variant={c.align === a ? "default" : "outline"}
+                  className="flex-1 px-1"
+                  onClick={() =>
+                    setCols(
+                      cols.map((x) =>
+                        x.id === c.id ? { ...x, align: a } : x,
+                      ),
+                    )
+                  }
+                >
+                  {ALIGN_LABELS[a]}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ))}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            setCols([...cols, { id: uid(), label: "열", align: "left" }])
+          }
+        >
+          <Plus className="size-4" /> 열 추가
+        </Button>
+      </div>
+
+      {p.rows.map((r) => (
+        <div key={r.id} className="space-y-1 rounded border p-2">
+          <CatalogCombobox
+            value={r.name}
+            catalog={catalog}
+            placeholder="품목명 (입력 시 카탈로그 추천)"
+            onChange={(val) =>
+              update(
+                p.rows.map((x) =>
+                  x.id === r.id ? { ...x, name: val } : x,
+                ),
+              )
+            }
+            onPick={(item) =>
+              update(
+                p.rows.map((x) =>
+                  x.id === r.id
+                    ? {
+                        ...x,
+                        name: item.name,
+                        unitPrice: item.unitPrice,
+                        description: item.description ?? x.description,
+                      }
+                    : x,
+                ),
+              )
+            }
+          />
+          <Input
+            placeholder="설명"
+            value={r.description}
+            onChange={(e) =>
+              update(
+                p.rows.map((x) =>
+                  x.id === r.id ? { ...x, description: e.target.value } : x,
+                ),
+              )
+            }
+          />
+          <div className="grid grid-cols-2 gap-1">
+            <Input
+              type="number"
+              placeholder="수량"
+              value={r.quantity}
+              onChange={(e) =>
+                update(
+                  p.rows.map((x) =>
+                    x.id === r.id
+                      ? { ...x, quantity: toInt(e.target.value) }
+                      : x,
+                  ),
+                )
+              }
+            />
+            <Input
+              type="number"
+              placeholder="단가"
+              value={r.unitPrice}
+              onChange={(e) =>
+                update(
+                  p.rows.map((x) =>
+                    x.id === r.id
+                      ? { ...x, unitPrice: toInt(e.target.value) }
+                      : x,
+                  ),
+                )
+              }
+            />
+          </div>
+          {cols.map((c) => (
+            <Input
+              key={c.id}
+              placeholder={c.label || "추가 열"}
+              value={r.extra?.[c.id] ?? ""}
+              onChange={(e) => setExtra(r.id, c.id, e.target.value)}
+            />
+          ))}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => update(p.rows.filter((x) => x.id !== r.id))}
+          >
+            <Trash2 className="size-4" /> 행 삭제
+          </Button>
+        </div>
+      ))}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() =>
+          update([
+            ...p.rows,
+            {
+              id: uid(),
+              name: "",
+              description: "",
+              quantity: 1,
+              unitPrice: 0,
+              extra: {},
+            },
+          ])
+        }
+      >
+        <Plus className="size-4" /> 항목 추가
+      </Button>
+
+      {/* 금액 요약(수식) (#9) */}
+      <div className="space-y-2 rounded border p-2">
+        <Label className="text-xs">금액 요약 (수식)</Label>
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          변수 <code>subtotal</code> = 품목 합계. 예: <code>subtotal * 1.1</code>
+        </p>
+        {summaries.map((sr) => (
+          <div key={sr.id} className="space-y-1">
+            <div className="flex gap-1">
+              <Input
+                placeholder="라벨 (예: 부가세)"
+                value={sr.label}
+                onChange={(e) =>
+                  setSummary(
+                    summaries.map((x) =>
+                      x.id === sr.id ? { ...x, label: e.target.value } : x,
+                    ),
+                  )
+                }
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="요약 행 삭제"
+                onClick={() =>
+                  setSummary(summaries.filter((x) => x.id !== sr.id))
+                }
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-1">
+              <Input
+                placeholder="수식 (예: subtotal*0.1)"
+                value={sr.formula}
+                className="font-mono text-xs"
+                onChange={(e) =>
+                  setSummary(
+                    summaries.map((x) =>
+                      x.id === sr.id
+                        ? { ...x, formula: e.target.value }
+                        : x,
+                    ),
+                  )
+                }
+              />
+              <span className="w-24 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
+                ={" "}
+                {Math.round(
+                  evalFormula(sr.formula, { subtotal }),
+                ).toLocaleString("ko-KR")}
+              </span>
+            </div>
+          </div>
+        ))}
+        <div className="flex flex-wrap gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setSummary([
+                ...summaries,
+                { id: uid(), label: "합계", formula: "subtotal" },
+              ])
+            }
+          >
+            <Plus className="size-4" /> 행 추가
+          </Button>
+          {FORMULA_PRESETS.map((preset) => (
+            <Button
+              key={preset.label}
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                setSummary(
+                  preset.rows.map((r) => ({ id: uid(), ...r })),
+                )
+              }
+            >
+              {preset.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 이미지 블록 속성 폼 */
+function ImageForm({
+  block,
+  onChangeProps,
+}: {
+  block: Block;
+  onChangeProps: (p: Record<string, unknown>) => void;
+}) {
+  const p = block.props as BlockPropsMap["image"];
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label className="text-xs">이미지 업로드 (최대 1MB)</Label>
+        <Input
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            if (file.size > MAX_IMAGE_BYTES) {
+              toast.error(
+                "이미지가 너무 큽니다. 1MB 이하 파일을 사용해주세요.",
+              );
+              e.target.value = "";
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = () =>
+              onChangeProps({ dataUrl: String(reader.result) });
+            reader.readAsDataURL(file);
+          }}
+        />
+      </div>
+      <div>
+        <Label className="text-xs">대체 텍스트</Label>
+        <Input
+          value={p.alt}
+          onChange={(e) => onChangeProps({ alt: e.target.value })}
+        />
+      </div>
+      <div>
+        <Label className="text-xs">투명도: {p.opacity}%</Label>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={p.opacity}
+          onChange={(e) => onChangeProps({ opacity: Number(e.target.value) })}
+          className="w-full"
+          aria-label="투명도"
+        />
+      </div>
+      <BorderControls
+        enabled={p.border}
+        color={p.borderColor}
+        onToggle={(v) => onChangeProps({ border: v })}
+        onColor={(v) => onChangeProps({ borderColor: v })}
+      />
+    </div>
+  );
+}
+
+/** 범용 표 블록 속성 폼 (#2/#4) */
+function TableForm({
+  block,
+  catalog,
+  onChangeProps,
+}: {
+  block: Block;
+  catalog: CatalogOption[];
+  onChangeProps: (p: Record<string, unknown>) => void;
+}) {
+  const p = block.props as BlockPropsMap["table"];
+  const cells = p.cells;
+  const aligns = p.colAligns ?? [];
+  const nCols = cells.reduce((m, r) => Math.max(m, r.length), 0);
+  const setCell = (ri: number, ci: number, val: string) =>
+    onChangeProps({
+      cells: cells.map((row, r) =>
+        r === ri ? row.map((c, ci2) => (ci2 === ci ? val : c)) : row,
+      ),
+    });
+  const addRow = () =>
+    onChangeProps({ cells: [...cells, Array(nCols || 1).fill("")] });
+  const addCol = () =>
+    onChangeProps({
+      cells: cells.map((row) => [...row, ""]),
+      colAligns: [...aligns, "left"],
+    });
+  const delRow = (ri: number) =>
+    onChangeProps({ cells: cells.filter((_, r) => r !== ri) });
+  const delCol = (ci: number) =>
+    onChangeProps({
+      cells: cells.map((row) => row.filter((_, c) => c !== ci)),
+      colAligns: aligns.filter((_, c) => c !== ci),
+    });
+  const setAlign = (ci: number, a: Align) => {
+    const next = [...aligns];
+    while (next.length < nCols) next.push("left");
+    next[ci] = a;
+    onChangeProps({ colAligns: next });
+  };
+  return (
+    <div className="space-y-3">
+      <datalist id="catalog-datalist">
+        {catalog.map((c) => (
+          <option key={c.id} value={c.name} />
+        ))}
+      </datalist>
+      <div className="flex items-center justify-between">
+        <Label htmlFor="hasHeader" className="text-sm">
+          첫 행 헤더
+        </Label>
+        <Switch
+          id="hasHeader"
+          checked={p.hasHeader}
+          onCheckedChange={(v) => onChangeProps({ hasHeader: v })}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs">열 정렬</Label>
+        {Array.from({ length: nCols }).map((_, ci) => (
+          <div key={ci} className="flex items-center gap-1">
+            <span className="w-7 shrink-0 text-[11px] text-muted-foreground">
+              열{ci + 1}
+            </span>
+            {(["left", "center", "right"] as const).map((a) => (
+              <Button
+                key={a}
+                type="button"
+                size="sm"
+                variant={(aligns[ci] ?? "left") === a ? "default" : "outline"}
+                className="flex-1 px-1"
+                onClick={() => setAlign(ci, a)}
+              >
+                {ALIGN_LABELS[a]}
+              </Button>
+            ))}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="열 삭제"
+              onClick={() => delCol(ci)}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs">셀 내용</Label>
+        {cells.map((row, ri) => (
+          <div key={ri} className="flex items-center gap-1">
+            {row.map((cell, ci) => (
+              <Input
+                key={ci}
+                value={cell}
+                list="catalog-datalist"
+                className="text-xs"
+                onChange={(e) => setCell(ri, ci, e.target.value)}
+              />
+            ))}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="행 삭제"
+              onClick={() => delRow(ri)}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-1">
+        <Button variant="outline" size="sm" className="flex-1" onClick={addRow}>
+          <Plus className="size-4" /> 행 추가
+        </Button>
+        <Button variant="outline" size="sm" className="flex-1" onClick={addCol}>
+          <Plus className="size-4" /> 열 추가
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** 구분선 블록 속성 폼 */
+function DividerForm({
+  block,
+  onChangeProps,
+}: {
+  block: Block;
+  onChangeProps: (p: Record<string, unknown>) => void;
+}) {
+  const p = block.props as BlockPropsMap["divider"];
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label className="text-xs">두께(px)</Label>
+        <Input
+          type="number"
+          value={p.thickness}
+          onChange={(e) =>
+            onChangeProps({ thickness: Number(e.target.value) || 1 })
+          }
+        />
+      </div>
+      <ColorField
+        label="색상"
+        value={p.color}
+        onChange={(v) => onChangeProps({ color: v })}
+      />
+      <div className="flex items-center justify-between">
+        <Label htmlFor="dashed" className="text-sm">
+          점선
+        </Label>
+        <Switch
+          id="dashed"
+          checked={p.dashed}
+          onCheckedChange={(v) => onChangeProps({ dashed: v })}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** 블록 타입별 속성 폼 디스패처 — 타입별 하위 폼으로 위임 (no-giant-component) */
 export function ContentForm({
   block,
   catalog,
@@ -349,49 +919,8 @@ export function ContentForm({
 }) {
   switch (block.type) {
     case "title":
-    case "text": {
-      const p = block.props as BlockPropsMap["text"];
-      return (
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <Label className="text-xs">텍스트</Label>
-            <Textarea
-              value={p.text}
-              onChange={(e) => onChangeProps({ text: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">글자 크기</Label>
-            <Input
-              type="number"
-              value={p.fontSize}
-              onChange={(e) =>
-                onChangeProps({ fontSize: Number(e.target.value) || 12 })
-              }
-            />
-          </div>
-          <FontFamilyField
-            value={p.fontFamily}
-            onChange={(f) => onChangeProps({ fontFamily: f })}
-          />
-          <AlignField
-            value={p.align}
-            onChange={(a) => onChangeProps({ align: a })}
-          />
-          <ColorField
-            label="글자 색상"
-            value={p.color}
-            onChange={(v) => onChangeProps({ color: v })}
-          />
-          <BorderControls
-            enabled={p.border}
-            color={p.borderColor}
-            onToggle={(v) => onChangeProps({ border: v })}
-            onColor={(v) => onChangeProps({ borderColor: v })}
-          />
-        </div>
-      );
-    }
+    case "text":
+      return <TextForm block={block} onChangeProps={onChangeProps} />;
     case "supplier":
     case "clientMeta": {
       const p = block.props as BlockPropsMap["clientMeta"];
@@ -403,501 +932,26 @@ export function ContentForm({
         />
       );
     }
-    case "itemTable": {
-      const p = block.props as BlockPropsMap["itemTable"];
-      const cols = p.extraColumns ?? [];
-      const update = (rows: ItemRow[]) => onChangeProps({ rows });
-      const setCols = (next: TableColumn[]) =>
-        onChangeProps({ extraColumns: next });
-      const toInt = (v: string) => Math.trunc(Number(v)) || 0;
-      const setExtra = (rowId: string, colId: string, val: string) =>
-        update(
-          p.rows.map((x) =>
-            x.id === rowId
-              ? { ...x, extra: { ...(x.extra ?? {}), [colId]: val } }
-              : x,
-          ),
-        );
-      const summaries = p.summaryRows ?? [];
-      const subtotal = calcItemTableTotal(p.rows);
-      const setSummary = (next: SummaryRow[]) =>
-        onChangeProps({ summaryRows: next });
+    case "itemTable":
       return (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="showTotal" className="text-sm">
-              합계 표시
-            </Label>
-            <Switch
-              id="showTotal"
-              checked={p.showTotal}
-              onCheckedChange={(v) => onChangeProps({ showTotal: v })}
-            />
-          </div>
-
-          {/* 추가 열 관리 (#2/#4) */}
-          <div className="space-y-2 rounded border p-2">
-            <Label className="text-xs">추가 열</Label>
-            {cols.map((c) => (
-              <div key={c.id} className="space-y-1">
-                <div className="flex gap-1">
-                  <Input
-                    placeholder="열 이름"
-                    value={c.label}
-                    onChange={(e) =>
-                      setCols(
-                        cols.map((x) =>
-                          x.id === c.id ? { ...x, label: e.target.value } : x,
-                        ),
-                      )
-                    }
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="열 삭제"
-                    onClick={() => setCols(cols.filter((x) => x.id !== c.id))}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-                <div className="flex gap-1">
-                  {(["left", "center", "right"] as const).map((a) => (
-                    <Button
-                      key={a}
-                      type="button"
-                      size="sm"
-                      variant={c.align === a ? "default" : "outline"}
-                      className="flex-1 px-1"
-                      onClick={() =>
-                        setCols(
-                          cols.map((x) =>
-                            x.id === c.id ? { ...x, align: a } : x,
-                          ),
-                        )
-                      }
-                    >
-                      {ALIGN_LABELS[a]}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            ))}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setCols([...cols, { id: uid(), label: "열", align: "left" }])
-              }
-            >
-              <Plus className="size-4" /> 열 추가
-            </Button>
-          </div>
-
-          {p.rows.map((r) => (
-            <div key={r.id} className="space-y-1 rounded border p-2">
-              <CatalogCombobox
-                value={r.name}
-                catalog={catalog}
-                placeholder="품목명 (입력 시 카탈로그 추천)"
-                onChange={(val) =>
-                  update(
-                    p.rows.map((x) =>
-                      x.id === r.id ? { ...x, name: val } : x,
-                    ),
-                  )
-                }
-                onPick={(item) =>
-                  update(
-                    p.rows.map((x) =>
-                      x.id === r.id
-                        ? {
-                            ...x,
-                            name: item.name,
-                            unitPrice: item.unitPrice,
-                            description: item.description ?? x.description,
-                          }
-                        : x,
-                    ),
-                  )
-                }
-              />
-              <Input
-                placeholder="설명"
-                value={r.description}
-                onChange={(e) =>
-                  update(
-                    p.rows.map((x) =>
-                      x.id === r.id ? { ...x, description: e.target.value } : x,
-                    ),
-                  )
-                }
-              />
-              <div className="grid grid-cols-2 gap-1">
-                <Input
-                  type="number"
-                  placeholder="수량"
-                  value={r.quantity}
-                  onChange={(e) =>
-                    update(
-                      p.rows.map((x) =>
-                        x.id === r.id
-                          ? { ...x, quantity: toInt(e.target.value) }
-                          : x,
-                      ),
-                    )
-                  }
-                />
-                <Input
-                  type="number"
-                  placeholder="단가"
-                  value={r.unitPrice}
-                  onChange={(e) =>
-                    update(
-                      p.rows.map((x) =>
-                        x.id === r.id
-                          ? { ...x, unitPrice: toInt(e.target.value) }
-                          : x,
-                      ),
-                    )
-                  }
-                />
-              </div>
-              {cols.map((c) => (
-                <Input
-                  key={c.id}
-                  placeholder={c.label || "추가 열"}
-                  value={r.extra?.[c.id] ?? ""}
-                  onChange={(e) => setExtra(r.id, c.id, e.target.value)}
-                />
-              ))}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => update(p.rows.filter((x) => x.id !== r.id))}
-              >
-                <Trash2 className="size-4" /> 행 삭제
-              </Button>
-            </div>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              update([
-                ...p.rows,
-                {
-                  id: uid(),
-                  name: "",
-                  description: "",
-                  quantity: 1,
-                  unitPrice: 0,
-                  extra: {},
-                },
-              ])
-            }
-          >
-            <Plus className="size-4" /> 항목 추가
-          </Button>
-
-          {/* 금액 요약(수식) (#9) */}
-          <div className="space-y-2 rounded border p-2">
-            <Label className="text-xs">금액 요약 (수식)</Label>
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              변수 <code>subtotal</code> = 품목 합계. 예: <code>subtotal * 1.1</code>
-            </p>
-            {summaries.map((sr) => (
-              <div key={sr.id} className="space-y-1">
-                <div className="flex gap-1">
-                  <Input
-                    placeholder="라벨 (예: 부가세)"
-                    value={sr.label}
-                    onChange={(e) =>
-                      setSummary(
-                        summaries.map((x) =>
-                          x.id === sr.id ? { ...x, label: e.target.value } : x,
-                        ),
-                      )
-                    }
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="요약 행 삭제"
-                    onClick={() =>
-                      setSummary(summaries.filter((x) => x.id !== sr.id))
-                    }
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Input
-                    placeholder="수식 (예: subtotal*0.1)"
-                    value={sr.formula}
-                    className="font-mono text-xs"
-                    onChange={(e) =>
-                      setSummary(
-                        summaries.map((x) =>
-                          x.id === sr.id
-                            ? { ...x, formula: e.target.value }
-                            : x,
-                        ),
-                      )
-                    }
-                  />
-                  <span className="w-24 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
-                    ={" "}
-                    {Math.round(
-                      evalFormula(sr.formula, { subtotal }),
-                    ).toLocaleString("ko-KR")}
-                  </span>
-                </div>
-              </div>
-            ))}
-            <div className="flex flex-wrap gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setSummary([
-                    ...summaries,
-                    { id: uid(), label: "합계", formula: "subtotal" },
-                  ])
-                }
-              >
-                <Plus className="size-4" /> 행 추가
-              </Button>
-              {FORMULA_PRESETS.map((preset) => (
-                <Button
-                  key={preset.label}
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    setSummary(
-                      preset.rows.map((r) => ({ id: uid(), ...r })),
-                    )
-                  }
-                >
-                  {preset.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </div>
+        <ItemTableForm
+          block={block}
+          catalog={catalog}
+          onChangeProps={onChangeProps}
+        />
       );
-    }
-    case "image": {
-      const p = block.props as BlockPropsMap["image"];
+    case "image":
+      return <ImageForm block={block} onChangeProps={onChangeProps} />;
+    case "table":
       return (
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <Label className="text-xs">이미지 업로드 (최대 1MB)</Label>
-            <Input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                if (file.size > MAX_IMAGE_BYTES) {
-                  toast.error(
-                    "이미지가 너무 큽니다. 1MB 이하 파일을 사용해주세요.",
-                  );
-                  e.target.value = "";
-                  return;
-                }
-                const reader = new FileReader();
-                reader.onload = () =>
-                  onChangeProps({ dataUrl: String(reader.result) });
-                reader.readAsDataURL(file);
-              }}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">대체 텍스트</Label>
-            <Input
-              value={p.alt}
-              onChange={(e) => onChangeProps({ alt: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">투명도: {p.opacity}%</Label>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={p.opacity}
-              onChange={(e) =>
-                onChangeProps({ opacity: Number(e.target.value) })
-              }
-              className="w-full"
-              aria-label="투명도"
-            />
-          </div>
-          <BorderControls
-            enabled={p.border}
-            color={p.borderColor}
-            onToggle={(v) => onChangeProps({ border: v })}
-            onColor={(v) => onChangeProps({ borderColor: v })}
-          />
-        </div>
+        <TableForm
+          block={block}
+          catalog={catalog}
+          onChangeProps={onChangeProps}
+        />
       );
-    }
-    case "table": {
-      const p = block.props as BlockPropsMap["table"];
-      const cells = p.cells;
-      const aligns = p.colAligns ?? [];
-      const nCols = cells.reduce((m, r) => Math.max(m, r.length), 0);
-      const setCell = (ri: number, ci: number, val: string) =>
-        onChangeProps({
-          cells: cells.map((row, r) =>
-            r === ri ? row.map((c, ci2) => (ci2 === ci ? val : c)) : row,
-          ),
-        });
-      const addRow = () =>
-        onChangeProps({ cells: [...cells, Array(nCols || 1).fill("")] });
-      const addCol = () =>
-        onChangeProps({
-          cells: cells.map((row) => [...row, ""]),
-          colAligns: [...aligns, "left"],
-        });
-      const delRow = (ri: number) =>
-        onChangeProps({ cells: cells.filter((_, r) => r !== ri) });
-      const delCol = (ci: number) =>
-        onChangeProps({
-          cells: cells.map((row) => row.filter((_, c) => c !== ci)),
-          colAligns: aligns.filter((_, c) => c !== ci),
-        });
-      const setAlign = (ci: number, a: Align) => {
-        const next = [...aligns];
-        while (next.length < nCols) next.push("left");
-        next[ci] = a;
-        onChangeProps({ colAligns: next });
-      };
-      return (
-        <div className="space-y-3">
-          <datalist id="catalog-datalist">
-            {catalog.map((c) => (
-              <option key={c.id} value={c.name} />
-            ))}
-          </datalist>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="hasHeader" className="text-sm">
-              첫 행 헤더
-            </Label>
-            <Switch
-              id="hasHeader"
-              checked={p.hasHeader}
-              onCheckedChange={(v) => onChangeProps({ hasHeader: v })}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">열 정렬</Label>
-            {Array.from({ length: nCols }).map((_, ci) => (
-              <div key={ci} className="flex items-center gap-1">
-                <span className="w-7 shrink-0 text-[11px] text-muted-foreground">
-                  열{ci + 1}
-                </span>
-                {(["left", "center", "right"] as const).map((a) => (
-                  <Button
-                    key={a}
-                    type="button"
-                    size="sm"
-                    variant={(aligns[ci] ?? "left") === a ? "default" : "outline"}
-                    className="flex-1 px-1"
-                    onClick={() => setAlign(ci, a)}
-                  >
-                    {ALIGN_LABELS[a]}
-                  </Button>
-                ))}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="열 삭제"
-                  onClick={() => delCol(ci)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">셀 내용</Label>
-            {cells.map((row, ri) => (
-              <div key={ri} className="flex items-center gap-1">
-                {row.map((cell, ci) => (
-                  <Input
-                    key={ci}
-                    value={cell}
-                    list="catalog-datalist"
-                    className="text-xs"
-                    onChange={(e) => setCell(ri, ci, e.target.value)}
-                  />
-                ))}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="행 삭제"
-                  onClick={() => delRow(ri)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={addRow}
-            >
-              <Plus className="size-4" /> 행 추가
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={addCol}
-            >
-              <Plus className="size-4" /> 열 추가
-            </Button>
-          </div>
-        </div>
-      );
-    }
-    case "divider": {
-      const p = block.props as BlockPropsMap["divider"];
-      return (
-        <div className="space-y-3">
-          <div>
-            <Label className="text-xs">두께(px)</Label>
-            <Input
-              type="number"
-              value={p.thickness}
-              onChange={(e) =>
-                onChangeProps({ thickness: Number(e.target.value) || 1 })
-              }
-            />
-          </div>
-          <ColorField
-            label="색상"
-            value={p.color}
-            onChange={(v) => onChangeProps({ color: v })}
-          />
-          <div className="flex items-center justify-between">
-            <Label htmlFor="dashed" className="text-sm">
-              점선
-            </Label>
-            <Switch
-              id="dashed"
-              checked={p.dashed}
-              onCheckedChange={(v) => onChangeProps({ dashed: v })}
-            />
-          </div>
-        </div>
-      );
-    }
+    case "divider":
+      return <DividerForm block={block} onChangeProps={onChangeProps} />;
     default:
       return null;
   }
