@@ -1,0 +1,247 @@
+// SpecFlow AI (Deal-Closer) — Prisma schema
+// docs: https://pris.ly/d/prisma-schema
+//
+// SQLite 제약 메모:
+//  - enum 미지원 → String + 앱 레벨 상수(src/lib/constants.ts)로 관리
+//  - 배열/Json scalar 미지원 → 다중 값은 관계 테이블 또는 문자열(JSON/구분자) 직렬화
+//  - 금액은 원(KRW) 단위 정수(Int)로 저장한다
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ========================= 조직 & 사용자 =========================
+
+/// 팀/회사 단위. 모든 데이터의 최상위 소유자.
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  invites      Invite[]
+  documents    Document[]
+  catalogItems CatalogItem[]
+  branding     Branding?
+  creditWallet CreditWallet?
+  creditTxns   CreditTransaction[]
+
+  @@map("organizations")
+}
+
+/// 영업 담당자 / 리더 / 관리자
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      String   @default("SALES_REP") // SALES_REP | LEADER | ADMIN
+  avatarUrl String?
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents     Document[]
+  emailAccounts EmailAccount[]
+  emailLogs     EmailLog[]
+  generations   GenerationRequest[]
+
+  @@index([orgId])
+  @@map("users")
+}
+
+/// 팀원 초대 (관리자 콘솔 /team/members)
+model Invite {
+  id        String   @id @default(cuid())
+  email     String
+  role      String   @default("SALES_REP")
+  status    String   @default("PENDING") // PENDING | ACCEPTED | EXPIRED
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([orgId])
+  @@map("invites")
+}
+
+// ============================ 문서 ============================
+
+/// 견적서/계약서/NDA/제안서 등 영업 문서
+model Document {
+  id          String   @id @default(cuid())
+  title       String
+  type        String   @default("QUOTE")  // QUOTE | CONTRACT | NDA | PROPOSAL
+  status      String   @default("DRAFT")  // DRAFT | SENT | COMPLETED
+  clientName  String?                     // 거래처명
+  amount      Int      @default(0)        // 총액(KRW 정수)
+  currency    String   @default("KRW")
+  contentJson String?                     // 에디터 본문(JSON 직렬화)
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items      DocumentItem[]
+  emailLogs  EmailLog[]
+  generation GenerationRequest?
+
+  @@index([orgId])
+  @@index([authorId])
+  @@index([status])
+  @@map("documents")
+}
+
+/// 문서 라인 아이템 (견적 항목)
+model DocumentItem {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  quantity    Int      @default(1)
+  unitPrice   Int      @default(0)
+  amount      Int      @default(0)
+  sortOrder   Int      @default(0)
+
+  @@index([documentId])
+  @@map("document_items")
+}
+
+// ==================== 카탈로그(마스터 데이터) ====================
+
+/// 상품/서비스 카탈로그 (관리자 콘솔 /catalog)
+model CatalogItem {
+  id          String   @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  category    String
+  name        String
+  sku         String?
+  unit        String   @default("EA")
+  unitPrice   Int      @default(0)
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([category])
+  @@map("catalog_items")
+}
+
+// ====================== 메일 연동 & 발송 ======================
+
+/// Gmail/Outlook 연동 계정 (/settings/email)
+model EmailAccount {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider  String   // GMAIL | OUTLOOK
+  email     String
+  isDefault Boolean  @default(false)
+  status    String   @default("CONNECTED") // CONNECTED | DISCONNECTED
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("email_accounts")
+}
+
+/// 이메일 발송 이력 (/sender/:documentId)
+model EmailLog {
+  id             String   @id @default(cuid())
+  documentId     String
+  document       Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User     @relation(fields: [senderId], references: [id])
+  recipients     String   // 세미콜론(;) 구분 다중 수신자
+  subject        String
+  body           String?
+  attachmentName String?
+  status         String   @default("SENT") // SENT | FAILED
+  sentAt         DateTime @default(now())
+
+  @@index([documentId])
+  @@map("email_logs")
+}
+
+// ======================= 크레딧 & 과금 =======================
+
+/// 조직별 크레딧 잔액 (문서 생성 시 차감)
+model CreditWallet {
+  id        String   @id @default(cuid())
+  orgId     String   @unique
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  balance   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("credit_wallets")
+}
+
+/// 크레딧 충전/사용 내역 (관리자 콘솔 /billing)
+model CreditTransaction {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  amount    Int      // +충전 / -사용
+  type      String   // CHARGE | USAGE
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([orgId])
+  @@map("credit_transactions")
+}
+
+// ===================== AI 문서 생성 요청 =====================
+
+/// AI 대화형 문서 생성 요청 (/generator)
+model GenerationRequest {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  prompt      String
+  status      String    @default("PENDING") // PENDING | PROCESSING | DONE | FAILED
+  creditsUsed Int       @default(0)
+  documentId  String?   @unique
+  document    Document? @relation(fields: [documentId], references: [id])
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@map("generation_requests")
+}
+
+// ========================= 브랜딩 =========================
+
+/// 조직 브랜딩 설정 (관리자 콘솔 /settings/branding)
+model Branding {
+  id           String   @id @default(cuid())
+  orgId        String   @unique
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  companyName  String?
+  logoUrl      String?
+  primaryColor String   @default("#4F46E5")
+  updatedAt    DateTime @updatedAt
+
+  @@map("brandings")
+}
+
+// ================= 정책 (기획서 정책 라이브러리) =================
+
+/// 기획서 정책 라이브러리 (24개 정책: AUTH_*, VAL_*, FORM_*, STATE_*, legal-* 등)
+model Policy {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  scope       String   @default("project")
+  description String
+  createdAt   DateTime @default(now())
+
+  @@map("policies")
+}
