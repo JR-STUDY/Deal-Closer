@@ -92,6 +92,8 @@ model Document {
   // 문서 분류용 폴더(선택). null 이면 "미분류". 폴더 삭제 시 문서는 미분류로 내려간다.
   folderId    String?
   folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  // 팀 공통(공유) 베이스 문서 여부. 폴더 배치와 무관한 교차 분류이며 "공통 문서" 탭에서 모아 본다.
+  isCommon    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

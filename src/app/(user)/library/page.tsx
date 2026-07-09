@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Sparkles, Mail, Pencil, FolderOpen, FileStack } from "lucide-react";
+import { Sparkles, Mail, Pencil, FolderOpen, FileStack, Users } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { formatKRW, formatDateTime } from "@/lib/format";
@@ -31,36 +31,47 @@ export default async function LibraryPage({
   ]);
 
   const activeStatus = STATUS_TABS.some((t) => t.key === status) ? status! : "ALL";
-  const activeFolder = folder === "none" ? "none" : folder ? folder : null;
+  const activeFolder =
+    folder === "none" || folder === "common" ? folder : folder ? folder : null;
 
   const statusWhere =
     activeStatus === "ALL" ? { status: { not: "VOID" } } : { status: activeStatus };
   const folderWhere =
     activeFolder === "none"
       ? { folderId: null }
-      : activeFolder
-        ? { folderId: activeFolder }
-        : {};
+      : activeFolder === "common"
+        ? { isCommon: true }
+        : activeFolder
+          ? { folderId: activeFolder }
+          : {};
 
-  const [folders, documents, totalActive, folderCounts] = await Promise.all([
-    prisma.folder.findMany({
-      where: { orgId: org.id },
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    }),
-    prisma.document.findMany({
-      where: { orgId: org.id, ...statusWhere, ...folderWhere },
-      orderBy: { createdAt: "desc" },
-      include: { author: true },
-    }),
-    prisma.document.count({ where: { orgId: org.id, status: { not: "VOID" } } }),
-    // 폴더별 활성 문서 수 (폐기 제외) — 트리 배지·미분류 카운트에 사용
-    prisma.document.groupBy({
-      by: ["folderId"],
-      where: { orgId: org.id, status: { not: "VOID" } },
-      _count: { _all: true },
-    }),
-  ]);
+  const [folders, documents, totalActive, commonDocs, folderCounts] =
+    await Promise.all([
+      prisma.folder.findMany({
+        where: { orgId: org.id },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      }),
+      prisma.document.findMany({
+        where: { orgId: org.id, ...statusWhere, ...folderWhere },
+        orderBy: { createdAt: "desc" },
+        include: { author: true },
+      }),
+      prisma.document.count({ where: { orgId: org.id, status: { not: "VOID" } } }),
+      // 공통 문서 목록 — 사이드 패널에서 하위 항목으로 펼쳐 보여준다
+      prisma.document.findMany({
+        where: { orgId: org.id, status: { not: "VOID" }, isCommon: true },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, title: true, type: true },
+      }),
+      // 폴더별 활성 문서 수 (폐기 제외) — 트리 배지·미분류 카운트에 사용
+      prisma.document.groupBy({
+        by: ["folderId"],
+        where: { orgId: org.id, status: { not: "VOID" } },
+        _count: { _all: true },
+      }),
+    ]);
 
+  const commonCount = commonDocs.length;
   const countByFolder = new Map<string | null, number>();
   for (const g of folderCounts) countByFolder.set(g.folderId, g._count._all);
   const unfiledCount = countByFolder.get(null) ?? 0;
@@ -116,6 +127,8 @@ export default async function LibraryPage({
                 folders={folderNodes}
                 selected={activeFolder}
                 totalCount={totalActive}
+                commonCount={commonCount}
+                commonDocs={commonDocs}
                 unfiledCount={unfiledCount}
               />
             </Suspense>
@@ -162,12 +175,19 @@ export default async function LibraryPage({
                             documentId={doc.id}
                             documentTitle={doc.title}
                             currentFolderId={doc.folderId}
+                            isCommon={doc.isCommon}
                             folders={flatFolders}
                           />
                         </div>
                       </div>
                       <div>
                         <h3 className="line-clamp-2 font-semibold leading-snug">
+                          {doc.isCommon ? (
+                            <Users
+                              className="mr-1 inline size-3.5 align-[-2px] text-primary"
+                              aria-label="공통 문서"
+                            />
+                          ) : null}
                           {doc.title}
                         </h3>
                         {doc.clientName ? (

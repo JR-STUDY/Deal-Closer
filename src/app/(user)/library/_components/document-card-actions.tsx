@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreVertical, FolderInput, FileStack } from "lucide-react";
+import { MoreVertical, FolderInput, FileStack, Users, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -34,6 +34,7 @@ type Props = {
   documentId: string;
   documentTitle: string;
   currentFolderId: string | null;
+  isCommon: boolean;
   folders: FlatFolder[];
 };
 
@@ -43,6 +44,7 @@ export function DocumentCardActions({
   documentId,
   documentTitle,
   currentFolderId,
+  isCommon,
   folders,
 }: Props) {
   const router = useRouter();
@@ -70,6 +72,24 @@ export function DocumentCardActions({
       toast.error(e instanceof Error ? e.message : "이동에 실패했습니다.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function toggleCommon() {
+    try {
+      const res = await fetch(`/api/documents/${documentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isCommon: !isCommon }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "요청에 실패했습니다.");
+      toast.success(
+        isCommon ? "공통 문서에서 제외했습니다." : "공통 문서로 지정했습니다.",
+      );
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "요청에 실패했습니다.");
     }
   }
 
@@ -111,6 +131,19 @@ export function DocumentCardActions({
           >
             <FolderInput className="size-4" />
             폴더 이동
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={toggleCommon}>
+            {isCommon ? (
+              <>
+                <UserMinus className="size-4" />
+                공통 문서에서 제외
+              </>
+            ) : (
+              <>
+                <Users className="size-4" />
+                공통 문서로 지정
+              </>
+            )}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={saveAsTemplate}>
             <FileStack className="size-4" />

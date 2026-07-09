@@ -310,6 +310,7 @@ async function main() {
       status: "DRAFT",
       clientName: "(주)에이비씨 테크놀로지",
       amount: 24_500_000,
+      isCommon: true, // 팀 공통 베이스 견적서 예시
       createdAt: new Date("2026-07-06T14:30:00+09:00"),
       items: {
         create: [
@@ -474,6 +475,12 @@ async function main() {
   await prisma.document.updateMany({
     where: { orgId: org.id, type: "NDA", folderId: null },
     data: { folderId: folderNda.id },
+  });
+
+  // 팀 공통(공유) 베이스 문서 지정 — "표준"이 들어간 문서를 공통으로 표시
+  await prisma.document.updateMany({
+    where: { orgId: org.id, title: { contains: "표준" } },
+    data: { isCommon: true },
   });
 
   // 8-5) 베이스 템플릿 (재사용 표준 문서) — 실거래 문서와 분리된 저장소
