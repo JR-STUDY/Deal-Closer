@@ -1,13 +1,13 @@
 "use client";
 
 import {
+  Area,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
   ComposedChart,
   Label,
-  Line,
   Pie,
   PieChart,
   XAxis,
@@ -26,13 +26,18 @@ function toEok(value: number): string {
   return `${(value / 100_000_000).toFixed(1)}억`;
 }
 
-// ── 월별 문서·매출 추이 (막대 = 문서 수, 선 = 계약 매출) ──
+// ── 월별 문서 발행 + 누적 계약 매출 추이 (막대 = 문서 수, 면적 = 누적 매출) ──
 const trendConfig = {
   count: { label: "문서 수", color: "#4f46e5" },
-  revenue: { label: "계약 매출", color: "#10b981" },
+  cumulative: { label: "누적 계약 매출", color: "#10b981" },
 } satisfies ChartConfig;
 
-export type TrendPoint = { label: string; count: number; revenue: number };
+export type TrendPoint = {
+  label: string;
+  count: number;
+  revenue: number;
+  cumulative: number;
+};
 
 export function TrendChart({ data }: { data: TrendPoint[] }) {
   return (
@@ -41,6 +46,20 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
         data={data}
         margin={{ top: 12, right: 12, left: 4, bottom: 0 }}
       >
+        <defs>
+          <linearGradient id="fillCumulative" x1="0" y1="0" x2="0" y2="1">
+            <stop
+              offset="5%"
+              stopColor="var(--color-cumulative)"
+              stopOpacity={0.35}
+            />
+            <stop
+              offset="95%"
+              stopColor="var(--color-cumulative)"
+              stopOpacity={0.04}
+            />
+          </linearGradient>
+        </defs>
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
         <XAxis
           dataKey="label"
@@ -74,7 +93,7 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
                       name}
                   </span>
                   <span className="font-mono font-medium tabular-nums text-foreground">
-                    {name === "revenue"
+                    {name === "cumulative"
                       ? `₩${Number(value).toLocaleString("ko-KR")}`
                       : `${value}건`}
                   </span>
@@ -90,13 +109,14 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
           radius={[4, 4, 0, 0]}
           maxBarSize={40}
         />
-        <Line
+        <Area
           yAxisId="right"
           type="monotone"
-          dataKey="revenue"
-          stroke="var(--color-revenue)"
+          dataKey="cumulative"
+          stroke="var(--color-cumulative)"
           strokeWidth={2.5}
-          dot={{ r: 3 }}
+          fill="url(#fillCumulative)"
+          dot={{ r: 2.5 }}
           activeDot={{ r: 5 }}
         />
       </ComposedChart>

@@ -38,7 +38,7 @@ const DOMAIN_PATTERN =
 
 /**
  * 입력 도메인을 정규화한다. 앞의 `@`·`mailto:`·공백을 제거하고 소문자로 바꾼다.
- * (사용자가 "@specflow.ai" 나 "hong@specflow.ai" 처럼 붙여넣는 경우 대비)
+ * (사용자가 "@rainmaker.ai" 나 "hong@rainmaker.ai" 처럼 붙여넣는 경우 대비)
  */
 export function normalizeDomain(input: string): string {
   let value = input.trim().toLowerCase();
@@ -60,7 +60,7 @@ export function emailLocalPart(email: string): string {
   return at > 0 ? email.slice(0, at) : email;
 }
 
-/** 담당자 이메일 핸들 + 팀 도메인 → 팀 발신 주소 (예: kildong.hong@specflow.ai) */
+/** 담당자 이메일 핸들 + 팀 도메인 → 팀 발신 주소 (예: rain.kim@rainmaker.ai) */
 export function teamAddress(userEmail: string, domain: string): string {
   return `${emailLocalPart(userEmail)}@${domain}`;
 }

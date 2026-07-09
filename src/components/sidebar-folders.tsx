@@ -6,6 +6,16 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { ChevronRight, Folder as FolderIcon, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export type SidebarFolder = {
   id: string;
@@ -41,6 +51,9 @@ export function SidebarFolders({
   const [manualEditId, setManualEditId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  // 삭제 확인 대상 (STATE_BACK_NAV_CONFIRM: 되돌릴 수 없는 동작은 컨펌창을 노출)
+  const [pendingDelete, setPendingDelete] = useState<SidebarFolder | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const byId = useMemo(
     () => new Map(folders.map((f) => [f.id, f])),
@@ -116,6 +129,7 @@ export function SidebarFolders({
 
   async function remove(folder: SidebarFolder) {
     const hasChildren = (childrenOf.get(folder.id) ?? []).length > 0;
+    setDeleting(true);
     try {
       const res = await fetch(`/api/folders/${folder.id}`, { method: "DELETE" });
       const json = await res.json();
@@ -125,9 +139,12 @@ export function SidebarFolders({
           ? "폴더와 하위 폴더를 삭제했습니다. (문서는 미분류로 이동)"
           : "폴더를 삭제했습니다. (문서는 미분류로 이동)",
       );
+      setPendingDelete(null);
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -240,7 +257,7 @@ export function SidebarFolders({
               <button
                 type="button"
                 aria-label={`${folder.name} 폴더 삭제`}
-                onClick={() => remove(folder)}
+                onClick={() => setPendingDelete(folder)}
                 className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover/folder:opacity-100"
               >
                 <X className="size-3.5" />
@@ -263,9 +280,47 @@ export function SidebarFolders({
     );
   }
 
+  const pendingHasChildren = pendingDelete
+    ? (childrenOf.get(pendingDelete.id) ?? []).length > 0
+    : false;
+
   return (
-    <div className="mt-1 space-y-0.5">
-      {roots.map((f) => renderFolder(f, 0))}
-    </div>
+    <>
+      <div className="mt-1 space-y-0.5">
+        {roots.map((f) => renderFolder(f, 0))}
+      </div>
+
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ‘{pendingDelete?.name}’ 폴더를 삭제할까요?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingHasChildren
+                ? "하위 폴더도 함께 삭제됩니다. 폴더 안 문서는 삭제되지 않고 미분류로 이동합니다. 이 작업은 되돌릴 수 없습니다."
+                : "폴더 안 문서는 삭제되지 않고 미분류로 이동합니다. 이 작업은 되돌릴 수 없습니다."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault();
+                if (pendingDelete) remove(pendingDelete);
+              }}
+            >
+              {deleting ? "삭제 중…" : "삭제"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

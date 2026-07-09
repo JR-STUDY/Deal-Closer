@@ -33,7 +33,7 @@ export function LoginForm() {
         <Input
           id="admin-email"
           type="email"
-          placeholder="admin@specflow.ai"
+          placeholder="admin@rainmaker.ai"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />

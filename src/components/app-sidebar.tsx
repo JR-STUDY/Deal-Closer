@@ -3,10 +3,11 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight, Sparkles } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { userNav, adminNav } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { BrandMark, BrandWordmark } from "@/components/brand-logo";
 import { SidebarFolders, type SidebarFolder } from "@/components/sidebar-folders";
 import { AddFolderButton } from "@/components/add-folder-button";
 
@@ -47,14 +48,12 @@ export function AppSidebar({
     <aside className="flex w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
       <Link
         href="/"
-        aria-label="SpecFlow AI 메인 페이지로 이동"
+        aria-label="RAINMAKER 메인 페이지로 이동"
         className="flex h-16 items-center gap-2.5 border-b px-6 transition-colors hover:bg-sidebar-accent/60"
       >
-        <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Sparkles className="size-4.5" />
-        </div>
+        <BrandMark className="size-8" />
         <div className="leading-tight">
-          <div className="text-sm font-semibold">SpecFlow AI</div>
+          <BrandWordmark className="text-sm" />
           <div className="text-[11px] text-muted-foreground">{kicker}</div>
         </div>
       </Link>

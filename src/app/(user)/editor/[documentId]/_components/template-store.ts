@@ -8,9 +8,9 @@ import type {
 } from "@/lib/editor-schema";
 
 // 사용자 지정 블록/문서 템플릿을 브라우저 localStorage 에 저장한다 (#3, 스키마 변경 없음).
-const CUSTOM_BLOCKS_KEY = "specflow:editor:customBlocks";
-const TEMPLATES_KEY = "specflow:editor:templates";
-const BASE_DEFAULTS_KEY = "specflow:editor:baseDefaults";
+const CUSTOM_BLOCKS_KEY = "rainmaker:editor:customBlocks";
+const TEMPLATES_KEY = "rainmaker:editor:templates";
+const BASE_DEFAULTS_KEY = "rainmaker:editor:baseDefaults";
 
 /** 팔레트에 추가되는 사용자 지정 블록 (위치·id 제외한 블록 스냅샷) */
 export type CustomBlock = {

@@ -12,15 +12,15 @@ import { prisma } from "./db";
  * → docs/REACT_BEST_PRACTICES.md · server-cache-react
  */
 
-const DEMO_REP_EMAIL = "kildong.hong@specflow.ai";
-const DEMO_ADMIN_EMAIL = "admin@specflow.ai";
+const DEMO_REP_EMAIL = "rain.kim@rainmaker.ai";
+const DEMO_ADMIN_EMAIL = "admin@rainmaker.ai";
 
 /** 현재 데모 조직 */
 export const getCurrentOrg = cache(async () => {
   return prisma.organization.findFirstOrThrow();
 });
 
-/** 영업 담당자 포털(user-web)의 현재 사용자 — 홍길동 */
+/** 영업 담당자 포털(user-web)의 현재 사용자 — 김레인 */
 export const getCurrentUser = cache(async () => {
   return prisma.user.findUniqueOrThrow({
     where: { email: DEMO_REP_EMAIL },

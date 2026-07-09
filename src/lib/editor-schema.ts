@@ -438,6 +438,8 @@ export function seedTemplate(input: {
     quantity: number;
     unitPrice: number;
   }[];
+  /** 하단 약관/안내 섹션 (기타사항·기술지원 안내·특이사항 등) */
+  notes?: { heading: string; lines: string[] }[];
 }): EditorDoc {
   const typeLabel =
     DOCUMENT_TYPE_LABELS[input.type as DocumentType] ?? "견적서";
@@ -480,14 +482,32 @@ export function seedTemplate(input: {
     }),
   );
 
-  const notice = createBlock("text", { x: 40, y: 650 });
+  const notice = createBlock("text", { x: 40, y: 636 });
   notice.w = 714;
+  notice.h = 26;
   (notice.props as BlockPropsMap["text"]).text =
     "※ 상기 견적은 부가세 별도입니다.";
+
+  const blocks: Block[] = [logo, title, supplier, clientMeta, itemTable, notice];
+
+  // 하단 약관/안내 섹션(있을 때만) — 기타사항·기술지원 안내·특이사항 등
+  if (input.notes?.length) {
+    let y = 678;
+    for (const note of input.notes) {
+      const section = createBlock("text", { x: 40, y });
+      section.w = 714;
+      section.h = 22 + (note.lines.length + 1) * 20;
+      const p = section.props as BlockPropsMap["text"];
+      p.text = [`▶ ${note.heading}`, ...note.lines].join("\n");
+      p.fontSize = 12;
+      blocks.push(section);
+      y += section.h + 10;
+    }
+  }
 
   return {
     version: 1,
     canvas: { w: A4.w, h: A4.h, pages: 1 },
-    blocks: [logo, title, supplier, clientMeta, itemTable, notice],
+    blocks,
   };
 }
