@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { DragEvent } from "react";
-import type { EditorDoc, BlockType, ZOrderAction } from "@/lib/editor-schema";
+import type { EditorDoc, BlockType, ZOrderAction, Block } from "@/lib/editor-schema";
 import { BLOCK_TYPES, pageCount } from "@/lib/editor-schema";
 import { CanvasBlock, type Geometry } from "./canvas-block";
 import { useAutoHideScroll } from "./use-auto-hide-scroll";
@@ -18,6 +18,8 @@ type Props = {
   onEdit: (id: string) => void;
 };
 
+const SNAP_GAP = 6; // 정렬 가이드/스냅 허용 오차(px)
+
 export function EditorCanvas({
   doc,
   selectedId,
@@ -32,6 +34,50 @@ export function EditorCanvas({
   const onScroll = useAutoHideScroll();
   const pages = pageCount(doc);
   const pageH = doc.canvas.h;
+  const totalH = pageH * pages;
+  const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({
+    x: [],
+    y: [],
+  });
+
+  // 특정 블록을 제외한 정렬 기준선(다른 블록의 좌/중앙/우·상/중앙/하 + 캔버스·페이지 경계)
+  function targets(excludeId: string) {
+    const xs = [0, doc.canvas.w / 2, doc.canvas.w];
+    const ys: number[] = [];
+    for (let i = 0; i <= pages; i++) ys.push(i * pageH);
+    for (const b of doc.blocks) {
+      if (b.id === excludeId) continue;
+      xs.push(b.x, b.x + b.w / 2, b.x + b.w);
+      ys.push(b.y, b.y + b.h / 2, b.y + b.h);
+    }
+    return { xs, ys };
+  }
+
+  function handleDragMove(block: Block, x: number, y: number) {
+    const { xs, ys } = targets(block.id);
+    const xEdges = [x, x + block.w / 2, x + block.w];
+    const yEdges = [y, y + block.h / 2, y + block.h];
+    const gx = xs.filter((t) => xEdges.some((e) => Math.abs(e - t) <= SNAP_GAP));
+    const gy = ys.filter((t) => yEdges.some((e) => Math.abs(e - t) <= SNAP_GAP));
+    setGuides({ x: [...new Set(gx)], y: [...new Set(gy)] });
+  }
+
+  function handleDragEnd(block: Block, x: number, y: number) {
+    const { xs, ys } = targets(block.id);
+    const snap = (pos: number, offsets: number[], ts: number[]) => {
+      let best = SNAP_GAP + 1;
+      for (const off of offsets)
+        for (const t of ts) {
+          const d = t - (pos + off);
+          if (Math.abs(d) < Math.abs(best)) best = d;
+        }
+      return Math.abs(best) <= SNAP_GAP ? pos + best : pos;
+    };
+    const nx = Math.max(0, Math.round(snap(x, [0, block.w / 2, block.w], xs)));
+    const ny = Math.max(0, Math.round(snap(y, [0, block.h / 2, block.h], ys)));
+    onGeometry(block.id, { x: nx, y: ny, w: block.w, h: block.h });
+    setGuides({ x: [], y: [] });
+  }
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -45,7 +91,7 @@ export function EditorCanvas({
 
   return (
     <div
-      className="overlay-scroll flex flex-1 justify-center overflow-auto bg-muted/40 p-8"
+      className="overlay-scroll flex min-h-0 flex-1 justify-center overflow-auto bg-muted/40 p-8"
       onScroll={onScroll}
     >
       <div
@@ -55,13 +101,12 @@ export function EditorCanvas({
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
         onMouseDown={(e) => {
-          // 블록 바깥(빈 캔버스)을 누르면 선택 해제
           if (!(e.target as HTMLElement).closest("[data-block-id]")) {
             onSelect(null);
           }
         }}
         className="relative shrink-0 bg-white shadow-sm ring-1 ring-border"
-        style={{ width: doc.canvas.w, height: pageH * pages }}
+        style={{ width: doc.canvas.w, height: totalH }}
       >
         {/* 페이지 구분선 + 페이지 번호 (#8) */}
         {Array.from({ length: pages }).map((_, i) => (
@@ -78,6 +123,23 @@ export function EditorCanvas({
             ) : null}
           </div>
         ))}
+
+        {/* 정렬 가이드라인 (드래그 중) */}
+        {guides.x.map((gx, i) => (
+          <div
+            key={`gx-${i}`}
+            className="pointer-events-none absolute top-0 z-50 w-px bg-sky-500"
+            style={{ left: gx, height: totalH }}
+          />
+        ))}
+        {guides.y.map((gy, i) => (
+          <div
+            key={`gy-${i}`}
+            className="pointer-events-none absolute left-0 z-50 h-px bg-sky-500"
+            style={{ top: gy, width: doc.canvas.w }}
+          />
+        ))}
+
         {doc.blocks.map((b) => (
           <CanvasBlock
             key={b.id}
@@ -88,6 +150,8 @@ export function EditorCanvas({
             onRemove={onRemove}
             onZOrder={onZOrder}
             onEdit={onEdit}
+            onDragMove={handleDragMove}
+            onDragEnd={handleDragEnd}
           />
         ))}
       </div>

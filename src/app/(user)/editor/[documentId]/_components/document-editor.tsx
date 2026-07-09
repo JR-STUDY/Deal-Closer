@@ -421,15 +421,15 @@ export function DocumentEditor({
 
   return (
     <>
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex items-center gap-3 border-b bg-background px-4 py-2">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex flex-col gap-2 border-b bg-background px-4 py-2">
           <Input
             value={docTitle}
             onChange={(e) => handleTitleChange(e.target.value)}
             aria-label="문서 제목"
             placeholder="문서 제목"
-            className="min-w-0 max-w-xs flex-1 font-medium"
+            className="w-full max-w-md font-medium"
           />
           <EditorToolbar
             documentId={documentId}
@@ -481,13 +481,13 @@ export function DocumentEditor({
         }}
       >
         <DialogContent>
-          <DialogHeader>
+          <DialogHeader className="gap-6">
             <DialogTitle>저장하지 않은 변경사항이 있습니다</DialogTitle>
             <DialogDescription>
               이 페이지를 떠나기 전에 변경사항을 저장하시겠습니까?
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+          <DialogFooter className="p-3">
             <Button variant="outline" onClick={discardAndGo}>
               저장하지 않음
             </Button>

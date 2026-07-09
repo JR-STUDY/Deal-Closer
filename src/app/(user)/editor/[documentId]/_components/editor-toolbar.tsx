@@ -26,7 +26,7 @@ export function EditorToolbar({
   onPreview,
 }: Props) {
   return (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex w-full items-center gap-2">
       {/* 페이지 컨트롤 (#8) */}
       <div className="flex shrink-0 items-center gap-0.5 rounded-md border px-1">
         <Button
@@ -57,6 +57,8 @@ export function EditorToolbar({
         <Eye className="size-4" />
         미리보기
       </Button>
+
+      <div className="flex-1" />
 
       {dirty ? (
         <span

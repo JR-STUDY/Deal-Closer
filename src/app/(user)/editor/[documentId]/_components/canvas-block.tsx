@@ -23,6 +23,8 @@ type Props = {
   onRemove: (id: string) => void;
   onZOrder: (id: string, action: ZOrderAction) => void;
   onEdit: (id: string) => void;
+  onDragMove: (block: Block, x: number, y: number) => void;
+  onDragEnd: (block: Block, x: number, y: number) => void;
 };
 
 function CanvasBlockImpl({
@@ -33,6 +35,8 @@ function CanvasBlockImpl({
   onRemove,
   onZOrder,
   onEdit,
+  onDragMove,
+  onDragEnd,
 }: Props) {
   return (
     <Rnd
@@ -41,9 +45,8 @@ function CanvasBlockImpl({
       bounds="parent"
       dragHandleClassName="block-drag-handle"
       onMouseDown={() => onSelect(block.id)}
-      onDragStop={(_e, d) =>
-        onGeometry(block.id, { x: d.x, y: d.y, w: block.w, h: block.h })
-      }
+      onDrag={(_e, d) => onDragMove(block, d.x, d.y)}
+      onDragStop={(_e, d) => onDragEnd(block, d.x, d.y)}
       onResizeStop={(_e, _dir, ref, _delta, pos) =>
         onGeometry(block.id, {
           x: pos.x,
