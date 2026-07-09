@@ -19,7 +19,8 @@ export type SidebarFolder = {
  * - 하위 폴더가 있으면 chevron 으로 접기/펼치기
  * - 이름 더블클릭 인라인 편집, 형제끼리 드래그 순서 변경, 호버 삭제
  * - 폴더 클릭 시 해당 문서함을 그 폴더로 필터(basePath?folder=id)
- * 하위 폴더 생성은 상단 '폴더 생성' 버튼(CreateFolderDialog)에서 한다.
+ * - URL 의 edit=<id> 가 있으면 그 폴더를 편집 상태로 열고 상위를 자동 펼침
+ *   ('폴더 추가' 버튼이 새 폴더 생성 직후 이 파라미터로 이동해 바로 편집)
  */
 export function SidebarFolders({
   folders,
@@ -34,12 +35,17 @@ export function SidebarFolders({
   const searchParams = useSearchParams();
   const activeFolder =
     pathname === basePath ? searchParams.get("folder") : null;
+  const editParam = searchParams.get("edit");
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
+  const [manualEditId, setManualEditId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+
+  const byId = useMemo(
+    () => new Map(folders.map((f) => [f.id, f])),
+    [folders],
+  );
 
   // parentId → 자식들 (서버에서 sortOrder 순으로 내려옴)
   const childrenOf = useMemo(() => {
@@ -52,6 +58,17 @@ export function SidebarFolders({
     return map;
   }, [folders]);
 
+  // 편집 대상(edit 파라미터)의 상위들 — 보이도록 강제로 펼친다
+  const forceOpen = useMemo(() => {
+    const set = new Set<string>();
+    let cur = editParam ? byId.get(editParam) : undefined;
+    while (cur?.parentId) {
+      set.add(cur.parentId);
+      cur = byId.get(cur.parentId);
+    }
+    return set;
+  }, [editParam, byId]);
+
   function toggle(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -61,11 +78,23 @@ export function SidebarFolders({
     });
   }
 
-  async function rename(id: string) {
-    const name = draft.trim();
-    setEditingId(null);
+  function clearEditParam() {
+    if (!editParam) return;
+    const sp = new URLSearchParams(searchParams.toString());
+    sp.delete("edit");
+    const qs = sp.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }
+
+  async function finishEdit(id: string, value: string) {
+    const wasParam = editParam === id;
+    setManualEditId(null);
+    if (wasParam) clearEditParam();
+
+    const name = value.trim();
     const current = folders.find((f) => f.id === id);
     if (!name || !current || name === current.name) return;
+
     try {
       const res = await fetch(`/api/folders/${id}`, {
         method: "PATCH",
@@ -78,6 +107,11 @@ export function SidebarFolders({
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "이름 변경에 실패했습니다.");
     }
+  }
+
+  function cancelEdit() {
+    setManualEditId(null);
+    clearEditParam();
   }
 
   async function remove(folder: SidebarFolder) {
@@ -128,8 +162,8 @@ export function SidebarFolders({
   function renderFolder(folder: SidebarFolder, depth: number) {
     const kids = childrenOf.get(folder.id) ?? [];
     const hasKids = kids.length > 0;
-    const isOpen = expanded.has(folder.id);
-    const isEditing = editingId === folder.id;
+    const isOpen = expanded.has(folder.id) || forceOpen.has(folder.id);
+    const isEditing = manualEditId === folder.id || editParam === folder.id;
     const active = activeFolder === folder.id;
 
     return (
@@ -179,12 +213,12 @@ export function SidebarFolders({
             <input
               autoFocus
               aria-label="폴더 이름 편집"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={() => rename(folder.id)}
+              defaultValue={folder.name}
+              onFocus={(e) => e.currentTarget.select()}
+              onBlur={(e) => finishEdit(folder.id, e.currentTarget.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") rename(folder.id);
-                if (e.key === "Escape") setEditingId(null);
+                if (e.key === "Enter") finishEdit(folder.id, e.currentTarget.value);
+                if (e.key === "Escape") cancelEdit();
               }}
               className="my-0.5 w-full rounded border bg-background px-1.5 py-1 text-sm text-foreground outline-none"
             />
@@ -195,8 +229,7 @@ export function SidebarFolders({
                 draggable={false}
                 onDoubleClick={(e) => {
                   e.preventDefault();
-                  setDraft(folder.name);
-                  setEditingId(folder.id);
+                  setManualEditId(folder.id);
                 }}
                 title="더블클릭하여 이름 변경"
                 className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5"
@@ -226,11 +259,13 @@ export function SidebarFolders({
   const roots = childrenOf.get(null) ?? [];
   if (roots.length === 0) {
     return (
-      <p className="py-1 pl-6 text-xs text-muted-foreground">
-        폴더가 없습니다.
-      </p>
+      <p className="py-1 pl-6 text-xs text-muted-foreground">폴더가 없습니다.</p>
     );
   }
 
-  return <div className="mt-1 space-y-0.5">{roots.map((f) => renderFolder(f, 0))}</div>;
+  return (
+    <div className="mt-1 space-y-0.5">
+      {roots.map((f) => renderFolder(f, 0))}
+    </div>
+  );
 }

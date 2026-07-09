@@ -8,7 +8,7 @@ import { userNav, adminNav } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SidebarFolders, type SidebarFolder } from "@/components/sidebar-folders";
-import { CreateFolderDialog } from "@/components/create-folder-dialog";
+import { AddFolderButton } from "@/components/add-folder-button";
 
 type AppSidebarProps = {
   /** 콘솔 종류 — nav/라벨은 클라이언트에서 직접 선택한다 (함수 prop 전달 방지) */
@@ -91,18 +91,35 @@ export function AppSidebar({
               {item.label}
             </Link>
           );
+          const groupKey = `group:${item.href}`;
+          const groupCollapsed = collapsedBoxes.has(groupKey);
           return (
             <div key={item.href}>
               {hasChildren ? (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    aria-label={groupCollapsed ? "펼치기" : "접기"}
+                    onClick={() => toggleBox(groupKey)}
+                    className="flex size-5 shrink-0 items-center justify-center text-muted-foreground"
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "size-3.5 transition-transform",
+                        !groupCollapsed && "rotate-90",
+                      )}
+                    />
+                  </button>
                   {parentLink}
-                  <CreateFolderDialog folders={folders} />
+                  <Suspense fallback={null}>
+                    <AddFolderButton />
+                  </Suspense>
                 </div>
               ) : (
                 parentLink
               )}
 
-              {hasChildren ? (
+              {hasChildren && !groupCollapsed ? (
                 <div className="mt-1 ml-4 space-y-1 border-l pl-3">
                   {item.children!.map((child) => {
                     const childActive = pathname === child.href;
