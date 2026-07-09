@@ -83,8 +83,10 @@ export function EditorCanvas({
     };
     const nx = Math.max(0, Math.round(snap(x, [0, block.w / 2, block.w], xs)));
     const ny = Math.max(0, Math.round(snap(y, [0, block.h / 2, block.h], ys)));
-    onGeometry(block.id, { x: nx, y: ny, w: block.w, h: block.h });
     setGuides({ x: [], y: [] });
+    // 위치 변화가 없으면(단순 클릭) 갱신하지 않아 불필요한 dirty 를 막는다
+    if (nx === block.x && ny === block.y) return;
+    onGeometry(block.id, { x: nx, y: ny, w: block.w, h: block.h });
   }
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
