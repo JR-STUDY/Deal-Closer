@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type {
   Block,
@@ -10,6 +11,15 @@ import type {
 } from "@/lib/editor-schema";
 import { createBlock } from "@/lib/editor-schema";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { EditorCanvas } from "./editor-canvas";
 import type { Geometry } from "./canvas-block";
 import { EditorSidebar } from "./editor-sidebar";
@@ -34,6 +44,8 @@ export function DocumentEditor({
   );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [navTarget, setNavTarget] = useState<string | null>(null);
+  const router = useRouter();
 
   const selectedBlock = useMemo(
     () => doc.blocks.find((b) => b.id === selectedId) ?? null,
@@ -170,9 +182,98 @@ export function DocumentEditor({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [dirty]);
 
+  // 블록 단축키 (#5): 선택된 블록에 Backspace/Delete=삭제, Esc=선택해제, 방향키=이동
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!selectedId) return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.isContentEditable ||
+          t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT")
+      ) {
+        return; // 입력 중에는 무시
+      }
+      if (e.key === "Backspace" || e.key === "Delete") {
+        e.preventDefault();
+        handleRemove(selectedId);
+      } else if (e.key === "Escape") {
+        setSelectedId(null);
+      } else if (e.key.startsWith("Arrow")) {
+        const b = doc.blocks.find((x) => x.id === selectedId);
+        if (!b) return;
+        const step = e.shiftKey ? 10 : 1;
+        const dx =
+          e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+        const dy =
+          e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+        if (dx || dy) {
+          e.preventDefault();
+          handleGeometry(selectedId, {
+            x: Math.max(0, b.x + dx),
+            y: Math.max(0, b.y + dy),
+            w: b.w,
+            h: b.h,
+          });
+        }
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId, doc.blocks, handleRemove, handleGeometry]);
+
+  // 미저장 상태에서 앱 내 링크 이동 시 가로채기 (#7) — 사이드바/발송 링크 포함
+  useEffect(() => {
+    if (!dirty) return;
+    function onClick(e: MouseEvent) {
+      if (
+        e.defaultPrevented ||
+        e.button !== 0 ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.shiftKey ||
+        e.altKey
+      ) {
+        return;
+      }
+      const anchor = (e.target as HTMLElement | null)?.closest("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (
+        !href ||
+        !href.startsWith("/") ||
+        anchor.target === "_blank" ||
+        anchor.hasAttribute("download")
+      ) {
+        return;
+      }
+      e.preventDefault();
+      setNavTarget(href);
+    }
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [dirty]);
+
+  async function saveAndGo() {
+    await handleSave();
+    const target = navTarget;
+    setNavTarget(null);
+    if (target) router.push(target);
+  }
+
+  function discardAndGo() {
+    const target = navTarget;
+    setNavTarget(null);
+    setDirty(false);
+    if (target) router.push(target);
+  }
+
   return (
-    <div className="flex flex-1 overflow-hidden">
-      <div className="flex flex-1 flex-col overflow-hidden">
+    <>
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b bg-background px-4 py-2">
           <Input
             value={docTitle}
@@ -208,6 +309,34 @@ export function DocumentEditor({
         onRemove={handleRemove}
         onZOrder={handleZOrderSelected}
       />
-    </div>
+      </div>
+
+      <Dialog
+        open={navTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) setNavTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>저장하지 않은 변경사항이 있습니다</DialogTitle>
+            <DialogDescription>
+              이 페이지를 떠나기 전에 변경사항을 저장하시겠습니까?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setNavTarget(null)}>
+              취소
+            </Button>
+            <Button variant="outline" onClick={discardAndGo}>
+              저장 안 함
+            </Button>
+            <Button onClick={saveAndGo} disabled={saving}>
+              {saving ? "저장 중…" : "저장 후 이동"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

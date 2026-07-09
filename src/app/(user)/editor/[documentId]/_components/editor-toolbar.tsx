@@ -24,20 +24,7 @@ export function EditorToolbar({ documentId, dirty, saving, onSave }: Props) {
         {saving ? "저장 중…" : "저장"}
       </Button>
       <Button asChild variant="outline">
-        <Link
-          href={`/sender/${documentId}`}
-          onClick={(e) => {
-            // beforeunload 는 SPA 라우트 이동을 못 잡으므로 여기서 직접 확인 (정책 STATE_)
-            if (
-              dirty &&
-              !window.confirm(
-                "저장하지 않은 변경사항이 있습니다. 페이지를 이동하시겠습니까?",
-              )
-            ) {
-              e.preventDefault();
-            }
-          }}
-        >
+        <Link href={`/sender/${documentId}`}>
           <Send className="size-4" />
           발송하기
         </Link>

@@ -32,32 +32,6 @@ function CanvasBlockImpl({
   onRemove,
   onZOrder,
 }: Props) {
-  // 키보드 접근성 (정책 ACC_): Delete=삭제, 방향키=이동(Shift 시 10px)
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Delete") {
-      e.preventDefault();
-      onRemove(block.id);
-      return;
-    }
-    const step = e.shiftKey ? 10 : 1;
-    const move: Record<string, [number, number]> = {
-      ArrowLeft: [-step, 0],
-      ArrowRight: [step, 0],
-      ArrowUp: [0, -step],
-      ArrowDown: [0, step],
-    };
-    const delta = move[e.key];
-    if (delta) {
-      e.preventDefault();
-      onGeometry(block.id, {
-        x: Math.max(0, block.x + delta[0]),
-        y: Math.max(0, block.y + delta[1]),
-        w: block.w,
-        h: block.h,
-      });
-    }
-  }
-
   return (
     <Rnd
       size={{ width: block.w, height: block.h }}
@@ -90,7 +64,6 @@ function CanvasBlockImpl({
             role="button"
             tabIndex={0}
             aria-label={`${BLOCK_LABELS[block.type]} 블록`}
-            onKeyDown={handleKeyDown}
             onFocus={() => onSelect(block.id)}
             className="block-drag-handle h-full w-full cursor-move overflow-hidden bg-background outline-none"
           >
