@@ -2,14 +2,7 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { isHtmlSignature } from "@/lib/signature";
-
-/** HTML 조각을 미리보기용 최소 문서로 감싼다 (앱 CSS와 격리, body 여백 정리) */
-function toSrcDoc(html: string): string {
-  const trimmed = html.trimStart();
-  if (/^<!doctype|^<html/i.test(trimmed)) return html;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>html,body{margin:0;padding:8px;background:#fff;font-family:'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',Arial,sans-serif;}</style></head><body>${html}</body></html>`;
-}
+import { isHtmlSignature, signatureSrcDoc } from "@/lib/signature";
 
 /**
  * 메일 서명 미리보기.
@@ -46,7 +39,7 @@ export function SignaturePreview({
       title="메일 서명 미리보기"
       // allow-same-origin(스크립트 미허용): 스크립트 실행은 막고 높이만 측정
       sandbox="allow-same-origin"
-      srcDoc={toSrcDoc(signature)}
+      srcDoc={signatureSrcDoc(signature)}
       onLoad={(e) => {
         try {
           const doc = e.currentTarget.contentWindow?.document;

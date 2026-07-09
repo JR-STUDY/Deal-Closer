@@ -13,6 +13,16 @@ export function isHtmlSignature(value: string): boolean {
 }
 
 /**
+ * HTML 조각을 미리보기·편집용 최소 문서로 감싼다.
+ * 앱 CSS 와 격리하고 body 여백을 정리한다. 이미 완전한 문서면 그대로 둔다.
+ */
+export function signatureSrcDoc(html: string): string {
+  const trimmed = html.trimStart();
+  if (/^<!doctype|^<html/i.test(trimmed)) return html;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>html,body{margin:0;padding:8px;background:#fff;font-family:'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',Arial,sans-serif;}</style></head><body>${html}</body></html>`;
+}
+
+/**
  * PATCH /api/signature 본문 검증·정규화 (텍스트/HTML 공용).
  * - 잘못된 형식(문자열 아님·null 등)이면 사용자용 메시지를 담은 `{ error }` 반환
  * - 빈 값은 null(서명 없음)로 정규화
