@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, BookmarkPlus } from "lucide-react";
 
 const MAX_IMAGE_BYTES = 1024 * 1024; // 1MB — 로고/직인 수준
 
@@ -49,6 +49,7 @@ type Props = {
   onChangeProps: (propsPatch: Record<string, unknown>) => void;
   onRemove: (id: string) => void;
   onZOrder: (action: ZOrderAction) => void;
+  onSaveAsCustom: () => void;
 };
 
 /** 색상 선택 (스와치 + hex 입력) */
@@ -89,6 +90,7 @@ export function BlockInspector({
   onChangeProps,
   onRemove,
   onZOrder,
+  onSaveAsCustom,
 }: Props) {
   if (!block) {
     return (
@@ -102,14 +104,25 @@ export function BlockInspector({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium">블록 속성</p>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onRemove(block.id)}
-          aria-label="블록 삭제"
-        >
-          <Trash2 className="size-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onSaveAsCustom}
+            aria-label="내 블록으로 저장"
+            title="내 블록으로 저장"
+          >
+            <BookmarkPlus className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onRemove(block.id)}
+            aria-label="블록 삭제"
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
       </div>
 
       {/* 순서(z) */}

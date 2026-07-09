@@ -10,7 +10,17 @@ import type {
   ZOrderAction,
   CatalogOption,
 } from "@/lib/editor-schema";
-import { createBlock } from "@/lib/editor-schema";
+import { createBlock, uid } from "@/lib/editor-schema";
+import {
+  getCustomBlocks,
+  saveCustomBlock,
+  deleteCustomBlock,
+  getTemplates,
+  saveTemplate,
+  deleteTemplate,
+  type CustomBlock,
+  type DocTemplate,
+} from "./template-store";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +57,13 @@ export function DocumentEditor({
   const [saving, setSaving] = useState(false);
   const [navTarget, setNavTarget] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<CatalogOption[]>([]);
+  // 에디터는 ssr:false(클라이언트 전용)라 초기화 시 localStorage 를 안전하게 읽는다 (#3)
+  const [customBlocks, setCustomBlocks] = useState<CustomBlock[]>(() =>
+    getCustomBlocks(),
+  );
+  const [templates, setTemplates] = useState<DocTemplate[]>(() =>
+    getTemplates(),
+  );
   const router = useRouter();
 
   // 카탈로그(마스터 데이터) 로드 — 품목표 드롭다운용 (#6)
@@ -160,6 +177,79 @@ export function DocumentEditor({
     },
     [selectedId, handleZOrder],
   );
+
+  // ── 사용자 지정 블록 (#3) ──
+  const handleAddCustomBlock = useCallback((cb: CustomBlock) => {
+    const block: Block = {
+      id: uid(),
+      type: cb.type,
+      x: 40,
+      y: 40,
+      w: cb.w,
+      h: cb.h,
+      z: 1,
+      locked: false,
+      props: JSON.parse(JSON.stringify(cb.props)),
+    };
+    setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
+    setSelectedId(block.id);
+    setSidebarTab("inspector");
+    setDirty(true);
+  }, []);
+
+  const handleSaveAsCustom = useCallback(() => {
+    if (!selectedBlock) return;
+    const name = window.prompt(
+      "내 블록 이름을 입력하세요.",
+      selectedBlock.type,
+    );
+    if (!name) return;
+    setCustomBlocks(
+      saveCustomBlock({
+        id: uid(),
+        name: name.trim(),
+        type: selectedBlock.type,
+        w: selectedBlock.w,
+        h: selectedBlock.h,
+        props: JSON.parse(JSON.stringify(selectedBlock.props)),
+      }),
+    );
+    toast.success("내 블록으로 저장했습니다.");
+  }, [selectedBlock]);
+
+  const handleDeleteCustomBlock = useCallback((id: string) => {
+    setCustomBlocks(deleteCustomBlock(id));
+  }, []);
+
+  // ── 문서 템플릿 (#3) ──
+  const handleSaveTemplate = useCallback(() => {
+    const name = window.prompt("템플릿 이름을 입력하세요.", docTitle);
+    if (!name) return;
+    setTemplates(
+      saveTemplate({
+        id: uid(),
+        name: name.trim(),
+        canvas: doc.canvas,
+        blocks: doc.blocks,
+      }),
+    );
+    toast.success("현재 배치를 템플릿으로 저장했습니다.");
+  }, [doc, docTitle]);
+
+  const handleLoadTemplate = useCallback((t: DocTemplate) => {
+    setDoc({
+      version: 1,
+      canvas: t.canvas ?? { w: 794, h: 1123 },
+      blocks: t.blocks.map((b) => ({ ...b, id: uid() })),
+    });
+    setSelectedId(null);
+    setDirty(true);
+    toast.success(`템플릿 '${t.name}'을(를) 불러왔습니다.`);
+  }, []);
+
+  const handleDeleteTemplate = useCallback((id: string) => {
+    setTemplates(deleteTemplate(id));
+  }, []);
 
   const handleTitleChange = useCallback((v: string) => {
     setDocTitle(v);
@@ -325,6 +415,14 @@ export function DocumentEditor({
         onChangeProps={handleChangeProps}
         onRemove={handleRemove}
         onZOrder={handleZOrderSelected}
+        customBlocks={customBlocks}
+        onAddCustom={handleAddCustomBlock}
+        onDeleteCustom={handleDeleteCustomBlock}
+        onSaveAsCustom={handleSaveAsCustom}
+        templates={templates}
+        onSaveTemplate={handleSaveTemplate}
+        onLoadTemplate={handleLoadTemplate}
+        onDeleteTemplate={handleDeleteTemplate}
       />
       </div>
 
