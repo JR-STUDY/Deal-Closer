@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/session";
+import { toTemplateDTO } from "@/lib/email-template";
 import { SenderClient } from "./_components/sender-client";
 
 export default async function SenderPage({
@@ -8,18 +10,26 @@ export default async function SenderPage({
   params: Promise<{ documentId: string }>;
 }) {
   const { documentId } = await params;
+  const user = await getCurrentUser();
 
-  const document = await prisma.document.findUnique({
-    where: { id: documentId },
-  });
+  // 문서·발신 계정·메일 템플릿을 병렬 조회 (독립 쿼리 — REACT_BEST_PRACTICES)
+  const [document, account, templates] = await Promise.all([
+    prisma.document.findUnique({ where: { id: documentId } }),
+    prisma.emailAccount
+      .findFirst({ where: { userId: user.id, isDefault: true } })
+      .then((a) => a ?? prisma.emailAccount.findFirst({ where: { userId: user.id } })),
+    prisma.emailTemplate.findMany({
+      where: {
+        orgId: user.orgId,
+        OR: [{ ownerId: null }, { ownerId: user.id }],
+      },
+      orderBy: [{ ownerId: "asc" }, { updatedAt: "desc" }],
+    }),
+  ]);
 
   if (!document) {
     notFound();
   }
-
-  const account =
-    (await prisma.emailAccount.findFirst({ where: { isDefault: true } })) ??
-    (await prisma.emailAccount.findFirst());
 
   return (
     <SenderClient
@@ -31,6 +41,7 @@ export default async function SenderPage({
         amount: document.amount,
       }}
       account={account ? { email: account.email } : null}
+      templates={templates.map(toTemplateDTO)}
     />
   );
 }

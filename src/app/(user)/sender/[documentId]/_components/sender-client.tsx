@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -22,7 +22,9 @@ import {
 } from "@/components/ui/card";
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants";
 import { formatKRW } from "@/lib/format";
+import type { EmailTemplateDTO, TemplateContext } from "@/lib/email-template";
 import { DocTypeBadge } from "@/components/status-badge";
+import { EmailTemplateToolbar } from "./email-template-toolbar";
 
 const DEFAULT_BODY =
   "안녕하세요, SpecFlow AI를 통해 생성된 문서를 전달드립니다. 첨부된 문서를 확인해주시기 바랍니다. 감사합니다.";
@@ -36,10 +38,15 @@ type SenderClientProps = {
     amount: number;
   };
   account: { email: string } | null;
+  templates: EmailTemplateDTO[];
 };
 
 /** 이메일 발송 폼 — 헤더의 발송하기 버튼과 본문 입력값 상태를 함께 관리한다 (데모: 실제 발송 없음) */
-export function SenderClient({ document, account }: SenderClientProps) {
+export function SenderClient({
+  document,
+  account,
+  templates,
+}: SenderClientProps) {
   const typeLabel =
     DOCUMENT_TYPE_LABELS[document.type as DocumentType] ?? document.type;
   const attachmentName = `[${typeLabel}] ${document.title}.pdf`;
@@ -47,6 +54,17 @@ export function SenderClient({ document, account }: SenderClientProps) {
   const [recipients, setRecipients] = useState("");
   const [subject, setSubject] = useState(`[${typeLabel}] ${document.title}`);
   const [body, setBody] = useState(DEFAULT_BODY);
+
+  // 템플릿 {{변수}} 치환에 쓸 현재 문서 값
+  const templateContext = useMemo<TemplateContext>(
+    () => ({
+      거래처: document.clientName ?? "",
+      문서제목: document.title,
+      문서종류: typeLabel,
+      총액: formatKRW(document.amount),
+    }),
+    [document.clientName, document.title, document.amount, typeLabel],
+  );
 
   const handleSend = () => {
     if (!recipients.trim()) {
@@ -99,6 +117,17 @@ export function SenderClient({ document, account }: SenderClientProps) {
               </Link>
             </div>
           )}
+
+          <EmailTemplateToolbar
+            initialTemplates={templates}
+            context={templateContext}
+            currentSubject={subject}
+            currentBody={body}
+            onApply={(nextSubject, nextBody) => {
+              setSubject(nextSubject);
+              setBody(nextBody);
+            }}
+          />
 
           <Card>
             <CardHeader>
