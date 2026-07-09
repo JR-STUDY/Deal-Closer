@@ -17,7 +17,7 @@ export default async function UserLayout({
   });
 
   return (
-    <div className="flex h-full flex-1">
+    <div className="flex h-screen overflow-hidden">
       <AppSidebar
         variant="user"
         user={{

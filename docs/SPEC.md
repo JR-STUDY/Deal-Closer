@@ -18,7 +18,7 @@
 |---|---|---|
 | 영업 대시보드 | `/dashboard` | KPI·최근 문서 |
 | AI 대화형 문서 생성기 | `/generator` | 자연어 프롬프트 |
-| 웹 문서 에디터 | `/editor/:documentId` | 라인아이템 편집 |
+| 웹 문서 에디터 | `/editor/:documentId` | 블록 캔버스 에디터(2D 배치·contentJson 저장) |
 | 이메일 발송 | `/sender/:documentId` | 수신자·참조(CC)·담당자명·PDF 첨부·템플릿·발송 미리보기 |
 | 문서 라이브러리 | `/library` | **내 문서함** — 상태 탭·검색·종류 필터·카드/목록 보기·폴더 |
 | 공용문서함 | `/library/common` | **공용문서함** — 팀 공용 기준 문서·폴더 |
