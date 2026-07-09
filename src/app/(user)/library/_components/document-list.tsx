@@ -29,17 +29,9 @@ export type DocRow = {
   isCommon: boolean;
 };
 
-type FlatFolder = { id: string; name: string; parentId: string | null };
-
 type View = "card" | "list";
 
-export function DocumentList({
-  documents,
-  folders,
-}: {
-  documents: DocRow[];
-  folders: FlatFolder[];
-}) {
+export function DocumentList({ documents }: { documents: DocRow[] }) {
   const [view, setView] = useState<View>("card");
 
   return (
@@ -82,9 +74,7 @@ export function DocumentList({
                     <DocumentCardActions
                       documentId={doc.id}
                       documentTitle={doc.title}
-                      currentFolderId={doc.folderId}
                       isCommon={doc.isCommon}
-                      folders={folders}
                     />
                   </div>
                 </div>
@@ -185,9 +175,7 @@ export function DocumentList({
                       <DocumentCardActions
                         documentId={doc.id}
                         documentTitle={doc.title}
-                        currentFolderId={doc.folderId}
                         isCommon={doc.isCommon}
-                        folders={folders}
                       />
                     </div>
                   </TableCell>

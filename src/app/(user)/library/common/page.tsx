@@ -9,17 +9,10 @@ import { DocumentList } from "../_components/document-list";
 export default async function CommonDocumentsPage() {
   const org = await getCurrentOrg();
 
-  const [documents, folders] = await Promise.all([
-    prisma.document.findMany({
-      where: { orgId: org.id, isCommon: true, status: { not: "VOID" } },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.folder.findMany({
-      where: { orgId: org.id },
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, parentId: true },
-    }),
-  ]);
+  const documents = await prisma.document.findMany({
+    where: { orgId: org.id, isCommon: true, status: { not: "VOID" } },
+    orderBy: { createdAt: "desc" },
+  });
 
   return (
     <>
@@ -48,7 +41,7 @@ export default async function CommonDocumentsPage() {
             </Button>
           </div>
         ) : (
-          <DocumentList documents={documents} folders={folders} />
+          <DocumentList documents={documents} />
         )}
       </div>
     </>
