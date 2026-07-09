@@ -22,7 +22,16 @@ type ProfileFormProps = {
   roleLabel: string;
 };
 
-/** 관리자 프로필 폼 — 이름 수정 후 저장을 목업 처리한다 */
+/** 저장 목업 — 컴포넌트 상태에 의존하지 않아 모듈 스코프에 둔다 (매 렌더 재생성 방지) */
+function handleSave() {
+  toast.success("프로필이 저장되었습니다 (데모)");
+}
+
+/**
+ * 계정 정보 폼 — 영업 담당자 포털·관리자 콘솔이 공용으로 사용한다.
+ * 이름 수정 후 저장을 목업(toast)으로 처리한다.
+ * 인증 도입 시 handleSave 에서 서버로 전송하도록 교체한다.
+ */
 export function ProfileForm({
   initialName,
   email,
@@ -30,16 +39,12 @@ export function ProfileForm({
 }: ProfileFormProps) {
   const [name, setName] = useState(initialName);
 
-  function handleSave() {
-    toast.success("프로필이 저장되었습니다 (데모)");
-  }
-
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">계정 정보</CardTitle>
         <CardDescription>
-          이름은 문서 및 콘솔 전반에 표시됩니다.
+          이름은 문서 및 서비스 전반에 표시됩니다.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
