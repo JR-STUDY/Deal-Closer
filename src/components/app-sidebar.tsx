@@ -97,11 +97,12 @@ export function AppSidebar({
             <div key={item.href}>
               {hasChildren ? (
                 <div className="flex items-center gap-0.5">
+                  {parentLink}
                   <button
                     type="button"
                     aria-label={groupCollapsed ? "펼치기" : "접기"}
                     onClick={() => toggleBox(groupKey)}
-                    className="flex size-5 shrink-0 items-center justify-center text-muted-foreground"
+                    className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
                   >
                     <ChevronRight
                       className={cn(
@@ -110,7 +111,6 @@ export function AppSidebar({
                       )}
                     />
                   </button>
-                  {parentLink}
                   <Suspense fallback={null}>
                     <AddFolderButton />
                   </Suspense>
