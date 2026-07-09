@@ -95,13 +95,19 @@ export default async function DashboardPage() {
     monthMap.set(key, bucket);
   }
 
-  const trend = [...monthMap.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, v]) => ({
-      label: `${Number(key.slice(5))}월`,
-      count: v.count,
-      revenue: v.revenue,
-    }));
+  // 월별 추이 + 누적 계약 매출 — 누적선은 우상향 곡선으로 성장 추세를 보여준다.
+  // (월 수가 적어 각 시점 누적을 앞구간 합으로 구한다 — 렌더 중 외부 변수 재할당 회피)
+  const sortedMonths = [...monthMap.entries()].sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  const trend = sortedMonths.map(([key, v], i) => ({
+    label: `${Number(key.slice(5))}월`,
+    count: v.count,
+    revenue: v.revenue,
+    cumulative: sortedMonths
+      .slice(0, i + 1)
+      .reduce((sum, [, m]) => sum + m.revenue, 0),
+  }));
 
   const statusData = ACTIVE_DOCUMENT_STATUSES.flatMap((s) =>
     byStatus[s] > 0
@@ -119,6 +125,9 @@ export default async function DashboardPage() {
   const reached = byStatus.SENT + byStatus.COMPLETED;
   const conversionRate =
     reached > 0 ? Math.round((byStatus.COMPLETED / reached) * 100) : 0;
+  // 평균 계약 규모 — 계약완료 매출 ÷ 계약완료 건수
+  const avgDeal =
+    byStatus.COMPLETED > 0 ? Math.round(revenue / byStatus.COMPLETED) : 0;
 
   const kpis = [
     {
@@ -143,7 +152,7 @@ export default async function DashboardPage() {
       label: "계약 매출",
       value: formatKRW(revenue),
       icon: TrendingUp,
-      hint: "계약완료 합계",
+      hint: `평균 계약 ${formatKRW(avgDeal)}`,
     },
   ];
 
@@ -187,9 +196,10 @@ export default async function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">월별 문서 · 계약 매출 추이</CardTitle>
+            <CardTitle className="text-base">문서 발행 · 누적 계약 매출 추이</CardTitle>
             <CardDescription>
-              최근 {trend.length}개월간 생성한 문서 수(막대)와 계약 완료 매출(선)입니다.
+              최근 {trend.length}개월간 생성한 문서 수(막대)와 누적 계약 매출(면적)입니다.
+              누적 매출은 {formatKRW(revenue)}까지 우상향했습니다.
             </CardDescription>
           </CardHeader>
           <CardContent>
