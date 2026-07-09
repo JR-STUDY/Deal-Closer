@@ -138,6 +138,7 @@ async function main() {
   await prisma.generationRequest.deleteMany();
   await prisma.documentItem.deleteMany();
   await prisma.document.deleteMany();
+  await prisma.emailTemplate.deleteMany();
   await prisma.emailAccount.deleteMany();
   await prisma.catalogItem.deleteMany();
   await prisma.creditTransaction.deleteMany();
@@ -294,6 +295,33 @@ async function main() {
       isDefault: true,
       status: "CONNECTED",
     },
+  });
+
+  // 7-1) 메일 발송 템플릿 (팀 공용 2 + 개인 1) — 발송 화면에서 불러와 사용
+  await prisma.emailTemplate.createMany({
+    data: [
+      {
+        orgId: org.id,
+        ownerId: null, // 팀 공용
+        name: "견적서 안내 (표준)",
+        subject: "[{{문서종류}}] {{거래처}}님께 드리는 {{문서제목}}",
+        body: "안녕하세요, {{거래처}} 담당자님.\n\n요청주신 {{문서제목}} 건에 대한 {{문서종류}}를 첨부와 같이 보내드립니다. 총액은 {{총액}}이며, 상세 내역은 첨부 문서를 확인 부탁드립니다.\n\n궁금하신 점이 있으시면 언제든 회신 주세요. 감사합니다.",
+      },
+      {
+        orgId: org.id,
+        ownerId: null, // 팀 공용
+        name: "계약서 송부",
+        subject: "[{{문서종류}}] {{거래처}} 계약 관련 문서 전달",
+        body: "안녕하세요, {{거래처}} 담당자님.\n\n협의된 내용을 반영한 {{문서제목}}({{문서종류}})를 송부드립니다. 내용 검토 후 서명 회신 부탁드립니다.\n\n감사합니다.",
+      },
+      {
+        orgId: org.id,
+        ownerId: rep.id, // 홍길동 개인 템플릿
+        name: "빠른 팔로업",
+        subject: "Re: {{문서제목}} 관련 안내",
+        body: "안녕하세요, {{거래처}}님.\n\n앞서 전달드린 {{문서제목}} 관련하여 검토는 잘 진행되고 계신지 확인차 연락드립니다. 추가로 필요하신 자료가 있으면 편하게 말씀해 주세요.\n\n감사합니다.",
+      },
+    ],
   });
 
   // 8) 문서 — 최근 7개월(2026-01 ~ 2026-07)에 걸쳐 우상향 실적 스토리로 분포
@@ -469,6 +497,7 @@ async function main() {
     문서항목: await prisma.documentItem.count(),
     카탈로그: await prisma.catalogItem.count(),
     메일계정: await prisma.emailAccount.count(),
+    메일템플릿: await prisma.emailTemplate.count(),
     발송이력: await prisma.emailLog.count(),
     크레딧거래: await prisma.creditTransaction.count(),
     초대: await prisma.invite.count(),

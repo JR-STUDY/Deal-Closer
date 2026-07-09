@@ -25,13 +25,14 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users        User[]
-  invites      Invite[]
-  documents    Document[]
-  catalogItems CatalogItem[]
-  branding     Branding?
-  creditWallet CreditWallet?
-  creditTxns   CreditTransaction[]
+  users          User[]
+  invites        Invite[]
+  documents      Document[]
+  catalogItems   CatalogItem[]
+  branding       Branding?
+  creditWallet   CreditWallet?
+  creditTxns     CreditTransaction[]
+  emailTemplates EmailTemplate[]
 
   @@map("organizations")
 }
@@ -52,6 +53,7 @@ model User {
   emailAccounts EmailAccount[]
   emailLogs     EmailLog[]
   generations   GenerationRequest[]
+  emailTemplates EmailTemplate[] // 본인이 소유한 개인 메일 템플릿
 
   @@index([orgId])
   @@map("users")
@@ -172,6 +174,26 @@ model EmailLog {
 
   @@index([documentId])
   @@map("email_logs")
+}
+
+/// 메일 발송 템플릿 (제목·본문 저장 → 발송 화면·관리 페이지에서 불러오기)
+/// - ownerId 가 null 이면 팀 공용(조직 전체 공유), 값이 있으면 개인 전용이다.
+/// - subject·body 의 {{거래처}}·{{문서제목}}·{{문서종류}}·{{총액}} 은 발송 시 현재 문서 값으로 치환한다.
+model EmailTemplate {
+  id        String       @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  ownerId   String? // null = 팀 공용, 값 있으면 개인 소유자
+  owner     User?        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String
+  subject   String
+  body      String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([orgId])
+  @@index([ownerId])
+  @@map("email_templates")
 }
 
 // ======================= 크레딧 & 과금 =======================
