@@ -7,12 +7,19 @@ import type {
   ItemRow,
   MetaField,
   TableColumn,
+  SummaryRow,
   CatalogOption,
   Align,
   FontFamily,
   ZOrderAction,
 } from "@/lib/editor-schema";
-import { uid, FONT_FAMILY_LABELS } from "@/lib/editor-schema";
+import {
+  uid,
+  FONT_FAMILY_LABELS,
+  FORMULA_PRESETS,
+  evalFormula,
+  calcItemTableTotal,
+} from "@/lib/editor-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -397,6 +404,10 @@ function ContentForm({
               : x,
           ),
         );
+      const summaries = p.summaryRows ?? [];
+      const subtotal = calcItemTableTotal(p.rows);
+      const setSummary = (next: SummaryRow[]) =>
+        onChangeProps({ summaryRows: next });
       return (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -589,6 +600,91 @@ function ContentForm({
           >
             <Plus className="size-4" /> 항목 추가
           </Button>
+
+          {/* 금액 요약(수식) (#9) */}
+          <div className="space-y-2 rounded border p-2">
+            <Label className="text-xs">금액 요약 (수식)</Label>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              변수 <code>subtotal</code> = 품목 합계. 예: <code>subtotal * 1.1</code>
+            </p>
+            {summaries.map((sr) => (
+              <div key={sr.id} className="space-y-1">
+                <div className="flex gap-1">
+                  <Input
+                    placeholder="라벨 (예: 부가세)"
+                    value={sr.label}
+                    onChange={(e) =>
+                      setSummary(
+                        summaries.map((x) =>
+                          x.id === sr.id ? { ...x, label: e.target.value } : x,
+                        ),
+                      )
+                    }
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="요약 행 삭제"
+                    onClick={() =>
+                      setSummary(summaries.filter((x) => x.id !== sr.id))
+                    }
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Input
+                    placeholder="수식 (예: subtotal*0.1)"
+                    value={sr.formula}
+                    className="font-mono text-xs"
+                    onChange={(e) =>
+                      setSummary(
+                        summaries.map((x) =>
+                          x.id === sr.id
+                            ? { ...x, formula: e.target.value }
+                            : x,
+                        ),
+                      )
+                    }
+                  />
+                  <span className="w-24 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
+                    ={" "}
+                    {Math.round(
+                      evalFormula(sr.formula, { subtotal }),
+                    ).toLocaleString("ko-KR")}
+                  </span>
+                </div>
+              </div>
+            ))}
+            <div className="flex flex-wrap gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setSummary([
+                    ...summaries,
+                    { id: uid(), label: "합계", formula: "subtotal" },
+                  ])
+                }
+              >
+                <Plus className="size-4" /> 행 추가
+              </Button>
+              {FORMULA_PRESETS.map((preset) => (
+                <Button
+                  key={preset.label}
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    setSummary(
+                      preset.rows.map((r) => ({ id: uid(), ...r })),
+                    )
+                  }
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
       );
     }

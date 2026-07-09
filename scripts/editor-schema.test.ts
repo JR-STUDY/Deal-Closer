@@ -6,8 +6,34 @@ import {
   calcItemTableTotal,
   createBlock,
   extractClientName,
+  evalFormula,
+  itemTableGrandTotal,
   type BlockPropsMap,
 } from "../src/lib/editor-schema";
+
+// #9 안전 수식 평가기
+assert.equal(evalFormula("subtotal * 1.1", { subtotal: 10000 }), 11000);
+assert.equal(evalFormula("subtotal * 0.1", { subtotal: 10000 }), 1000);
+assert.equal(evalFormula("(subtotal + 100) * 2", { subtotal: 50 }), 300);
+assert.equal(evalFormula("subtotal / 0", { subtotal: 10 }), 0); // 0 나눗셈 안전
+assert.equal(evalFormula("unknown + 5", {}), 5); // 미지정 변수 = 0
+assert.equal(evalFormula("", { subtotal: 99 }), 0);
+
+// itemTableGrandTotal: 요약 행 있으면 마지막 행 값(VAT 포함)
+assert.equal(
+  itemTableGrandTotal({
+    rows: [
+      { id: "r", name: "x", description: "", quantity: 2, unitPrice: 5000 },
+    ],
+    showTotal: true,
+    extraColumns: [],
+    summaryRows: [
+      { id: "s1", label: "공급가액", formula: "subtotal" },
+      { id: "s2", label: "합계", formula: "subtotal * 1.1" },
+    ],
+  }),
+  11000, // 10000 * 1.1
+);
 
 // parseContentJson: 잘못된 입력은 null
 assert.equal(parseContentJson(null), null);

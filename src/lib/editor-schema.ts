@@ -75,6 +75,9 @@ export type ItemRow = {
 /** 품목표 사용자 추가 열 정의 */
 export type TableColumn = { id: string; label: string; align: Align };
 
+/** 품목표 요약(수식) 행 — 예: 공급가액/부가세/합계 (#9) */
+export type SummaryRow = { id: string; label: string; formula: string };
+
 /** 카탈로그(마스터 데이터) 품목 — 품목표에서 드롭다운으로 선택 (#6) */
 export type CatalogOption = {
   id: string;
@@ -96,6 +99,7 @@ export type BlockPropsMap = {
     rows: ItemRow[];
     showTotal: boolean;
     extraColumns: TableColumn[];
+    summaryRows: SummaryRow[];
   };
   table: { hasHeader: boolean; cells: string[][]; colAligns: Align[] };
   image: {
@@ -193,7 +197,7 @@ export function defaultProps(type: BlockType): AnyBlockProps {
         ],
       };
     case "itemTable":
-      return { rows: [], showTotal: true, extraColumns: [] };
+      return { rows: [], showTotal: true, extraColumns: [], summaryRows: [] };
     case "table":
       return {
         hasHeader: true,
@@ -250,15 +254,104 @@ export function calcItemTableTotal(rows: ItemRow[]): number {
   );
 }
 
+/**
+ * 안전한 산술 수식 평가기 (eval/Function 미사용 — 서버·클라이언트 공용).
+ * 지원: 숫자, + - * / , 괄호, 단항 -, 변수(vars 맵). 알 수 없는 토큰은 0.
+ * 사용 변수: subtotal(품목 수량×단가 합계).
+ */
+export function evalFormula(expr: string, vars: Record<string, number>): number {
+  const tokens = String(expr).match(/\d+\.?\d*|[a-zA-Z_]\w*|[()+\-*/]/g) ?? [];
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const next = () => tokens[pos++];
+
+  function factor(): number {
+    const t = peek();
+    if (t === "(") {
+      next();
+      const v = expr2();
+      if (peek() === ")") next();
+      return v;
+    }
+    if (t === "-") {
+      next();
+      return -factor();
+    }
+    if (t === undefined) return 0;
+    next();
+    if (/^\d/.test(t)) return parseFloat(t);
+    return vars[t] ?? 0;
+  }
+  function term(): number {
+    let v = factor();
+    while (peek() === "*" || peek() === "/") {
+      const op = next();
+      const r = factor();
+      v = op === "*" ? v * r : r === 0 ? 0 : v / r;
+    }
+    return v;
+  }
+  function expr2(): number {
+    let v = term();
+    while (peek() === "+" || peek() === "-") {
+      const op = next();
+      const r = term();
+      v = op === "+" ? v + r : v - r;
+    }
+    return v;
+  }
+  const result = expr2();
+  return Number.isFinite(result) ? result : 0;
+}
+
+/** 품목표 요약 행들을 평가한다 (subtotal = 품목 합계). 값은 KRW 정수로 반올림. */
+export function evalSummaryRows(
+  props: BlockPropsMap["itemTable"],
+): { row: SummaryRow; value: number }[] {
+  const subtotal = calcItemTableTotal(props.rows);
+  return (props.summaryRows ?? []).map((row) => ({
+    row,
+    value: Math.round(evalFormula(row.formula, { subtotal })),
+  }));
+}
+
+/** 품목표의 최종 총계: 요약 행이 있으면 마지막 행 값, 없으면 품목 합계. */
+export function itemTableGrandTotal(props: BlockPropsMap["itemTable"]): number {
+  const summaries = props.summaryRows ?? [];
+  const subtotal = calcItemTableTotal(props.rows);
+  if (!summaries.length) return subtotal;
+  return Math.round(
+    evalFormula(summaries[summaries.length - 1].formula, { subtotal }),
+  );
+}
+
 export function computeAmount(doc: EditorDoc): number {
   return doc.blocks
     .filter((b) => b.type === "itemTable")
     .reduce(
-      (sum, b) =>
-        sum + calcItemTableTotal((b.props as BlockPropsMap["itemTable"]).rows),
+      (sum, b) => sum + itemTableGrandTotal(b.props as BlockPropsMap["itemTable"]),
       0,
     );
 }
+
+/** 금액 수식 예시 프리셋 (#9) — 인스펙터에서 불러오기 */
+export const FORMULA_PRESETS: {
+  label: string;
+  rows: { label: string; formula: string }[];
+}[] = [
+  {
+    label: "부가세 포함 합계",
+    rows: [
+      { label: "공급가액", formula: "subtotal" },
+      { label: "부가세 (10%)", formula: "subtotal * 0.1" },
+      { label: "합계 (VAT 포함)", formula: "subtotal * 1.1" },
+    ],
+  },
+  {
+    label: "합계만",
+    rows: [{ label: "합계", formula: "subtotal" }],
+  },
+];
 
 /** 블록 하나가 렌더 가능한 최소 형태를 갖췄는지 검증한다. */
 function isValidBlock(b: unknown): b is Block {

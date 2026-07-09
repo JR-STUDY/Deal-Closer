@@ -1,11 +1,13 @@
 import type { Block, BlockPropsMap } from "@/lib/editor-schema";
-import { calcItemTableTotal } from "@/lib/editor-schema";
+import { calcItemTableTotal, evalSummaryRows } from "@/lib/editor-schema";
 import { formatKRW } from "@/lib/format";
 
 export function ItemTableBlock({ block }: { block: Block }) {
   const p = block.props as BlockPropsMap["itemTable"];
   const extraCols = p.extraColumns ?? [];
   const total = calcItemTableTotal(p.rows);
+  const summaries = evalSummaryRows(p);
+  const labelSpan = 3 + extraCols.length;
   return (
     <table className="h-full w-full border-collapse text-xs">
       <thead>
@@ -53,12 +55,28 @@ export function ItemTableBlock({ block }: { block: Block }) {
           </tr>
         ))}
       </tbody>
-      {p.showTotal ? (
+      {summaries.length > 0 ? (
+        <tfoot>
+          {summaries.map(({ row, value }, i) => (
+            <tr key={row.id} className={i === summaries.length - 1 ? "font-semibold" : ""}>
+              <td
+                className="border px-2 py-1 text-right"
+                colSpan={labelSpan}
+              >
+                {row.label}
+              </td>
+              <td className="border px-2 py-1 text-right tabular-nums">
+                {formatKRW(value)}
+              </td>
+            </tr>
+          ))}
+        </tfoot>
+      ) : p.showTotal ? (
         <tfoot>
           <tr>
             <td
               className="border px-2 py-1 text-right font-semibold"
-              colSpan={3 + extraCols.length}
+              colSpan={labelSpan}
             >
               합계
             </td>
