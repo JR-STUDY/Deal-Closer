@@ -17,6 +17,7 @@
 | **인증** | ⚠️ 데모 고정 | `session.ts` 홍길동/admin 하드코딩 |
 | 라인아이템 편집 저장 | ⚠️ 공백 | 문서 PATCH가 `items`(라인아이템) 미반영 |
 | 메일 템플릿 | ✅ 실제 DB (MVP 추가) | `EmailTemplate` CRUD(`/api/email-templates`) + 발송폼 불러오기·치환 변수 |
+| 메일 서명 | ✅ 실제 DB (MVP 추가) | `User.signature` + `/settings/email` 편집, 발송폼 본문 하단 추가 |
 
 ---
 

@@ -83,6 +83,7 @@ pnpm dev                # http://localhost:3000
 | GET | `/api/email-accounts` | 메일 연동 계정 |
 | GET / POST | `/api/email-templates` | 메일 템플릿 목록 / 생성 |
 | PATCH / DELETE | `/api/email-templates/[id]` | 메일 템플릿 수정 / 삭제 |
+| PATCH | `/api/signature` | 메일 서명 저장 |
 
 ## 코드 품질 · CI
 

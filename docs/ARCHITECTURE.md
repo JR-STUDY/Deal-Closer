@@ -59,7 +59,7 @@ erDiagram
 | 모델 | 역할 |
 |---|---|
 | `Organization` | 팀/회사. 모든 데이터의 최상위 소유자 |
-| `User` | 사용자. `role` = SALES_REP · LEADER · ADMIN |
+| `User` | 사용자. `role` = SALES_REP · LEADER · ADMIN · `signature`(메일 서명) |
 | `Invite` | 팀원 초대 (PENDING/ACCEPTED/EXPIRED) |
 | `Document` | 영업 문서. `type`(QUOTE/CONTRACT/NDA/PROPOSAL) · `status`(DRAFT/SENT/COMPLETED) · `amount`(KRW 정수) |
 | `DocumentItem` | 문서 라인 아이템 (수량·단가·금액) |
