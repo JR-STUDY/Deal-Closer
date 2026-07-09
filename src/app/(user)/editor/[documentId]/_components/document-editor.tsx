@@ -53,6 +53,7 @@ type Props = {
   initialTitle: string;
   initialStatus: string;
   initialDoc: EditorDoc;
+  catalog: CatalogOption[];
 };
 
 export function DocumentEditor({
@@ -60,6 +61,7 @@ export function DocumentEditor({
   initialTitle,
   initialStatus,
   initialDoc,
+  catalog,
 }: Props) {
   const [doc, setDoc] = useState<EditorDoc>(initialDoc);
   const [docTitle, setDocTitle] = useState(initialTitle);
@@ -77,7 +79,6 @@ export function DocumentEditor({
     onConfirm: (v: string) => void;
   } | null>(null);
   const [nameValue, setNameValue] = useState("");
-  const [catalog, setCatalog] = useState<CatalogOption[]>([]);
   // 팔레트로 블록 추가 시 놓을 y (현재 보이는 화면 기준) — editor-canvas 스크롤에서 갱신
   const addYRef = useRef(40);
   // 에디터는 ssr:false(클라이언트 전용)라 초기화 시 localStorage 를 안전하게 읽는다 (#3)
@@ -87,29 +88,18 @@ export function DocumentEditor({
   const [templates, setTemplates] = useState<DocTemplate[]>(() =>
     getTemplates(),
   );
-  // 기본 블록 사용자 지정 기본 속성 (블록 추가 탭에서 수정)
-  const [baseDefaults, setBaseDefaults] = useState<BaseDefaults>(() =>
-    getBaseDefaults(),
-  );
+  // 기본 블록 사용자 지정 기본 속성 (블록 추가 탭에서 수정) — 화면에 표시되지 않고
+  // 핸들러에서만 읽고 쓰므로 useRef 로 보관해 불필요한 재렌더를 피한다
+  // (rerender-state-only-in-handlers). lazy-init 으로 localStorage 는 최초 1회만 읽는다.
+  const baseDefaultsRef = useRef<BaseDefaults | null>(null);
+  if (baseDefaultsRef.current === null) {
+    baseDefaultsRef.current = getBaseDefaults();
+  }
   const [editBase, setEditBase] = useState<{
     type: BlockType;
     props: AnyBlockProps;
   } | null>(null);
   const router = useRouter();
-
-  // 카탈로그(마스터 데이터) 로드 — 품목표 드롭다운용 (#6)
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/catalog")
-      .then((r) => r.json())
-      .then((d) => {
-        if (alive && Array.isArray(d?.data)) setCatalog(d.data);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const selectedBlock = useMemo(
     () => doc.blocks.find((b) => b.id === selectedId) ?? null,
@@ -127,14 +117,14 @@ export function DocumentEditor({
       // 팔레트 클릭 추가는 현재 보이는 화면 기준 위치에 놓는다
       const block = createBlock(type, pos ?? { x: 40, y: addYRef.current });
       // 사용자가 '블록 추가' 탭에서 수정한 기본 속성이 있으면 그걸로 시작
-      const override = baseDefaults[type];
-      if (override) block.props = JSON.parse(JSON.stringify(override));
+      const override = baseDefaultsRef.current?.[type];
+      if (override) block.props = structuredClone(override);
       setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
       setSelectedId(block.id);
       setSidebarTab("inspector");
       setDirty(true);
     },
-    [baseDefaults],
+    [],
   );
 
   // '블록 추가' 탭의 기본 블록 수정 (#3) — 타입별 기본 속성 편집
@@ -142,17 +132,17 @@ export function DocumentEditor({
     (type: BlockType) => {
       setEditBase({
         type,
-        props: JSON.parse(
-          JSON.stringify(baseDefaults[type] ?? defaultProps(type)),
+        props: structuredClone(
+          baseDefaultsRef.current?.[type] ?? defaultProps(type),
         ),
       });
     },
-    [baseDefaults],
+    [],
   );
 
   function saveEditBase() {
     if (!editBase) return;
-    setBaseDefaults(saveBaseDefault(editBase.type, editBase.props));
+    baseDefaultsRef.current = saveBaseDefault(editBase.type, editBase.props);
     setEditBase(null);
     toast.success("기본 블록을 수정했습니다.");
   }
@@ -244,7 +234,7 @@ export function DocumentEditor({
       h: cb.h,
       z: 1,
       locked: false,
-      props: JSON.parse(JSON.stringify(cb.props)),
+      props: structuredClone(cb.props),
     };
     setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
     setSelectedId(block.id);
@@ -265,7 +255,7 @@ export function DocumentEditor({
             type: selectedBlock.type,
             w: selectedBlock.w,
             h: selectedBlock.h,
-            props: JSON.parse(JSON.stringify(selectedBlock.props)),
+            props: structuredClone(selectedBlock.props),
           }),
         );
         toast.success("내 블록으로 저장했습니다.");

@@ -8,7 +8,8 @@ import { TableBlock } from "./table-block";
 import { ImageBlock } from "./image-block";
 import { DividerBlock } from "./divider-block";
 
-export function renderBlock(block: Block) {
+/** 블록 타입별 렌더러 — 컴포넌트로 두어 React 가 경계를 추적하도록 한다 */
+export function RenderBlock({ block }: { block: Block }) {
   switch (block.type) {
     case "title":
       return <TitleBlock block={block} />;
@@ -26,5 +27,7 @@ export function renderBlock(block: Block) {
       return <ImageBlock block={block} />;
     case "divider":
       return <DividerBlock block={block} />;
+    default:
+      return null;
   }
 }

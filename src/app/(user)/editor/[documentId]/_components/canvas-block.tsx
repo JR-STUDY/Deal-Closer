@@ -12,7 +12,7 @@ import {
   ContextMenuSeparator,
 } from "@/components/ui/context-menu";
 import { Pencil, Trash2 } from "lucide-react";
-import { renderBlock } from "./blocks";
+import { RenderBlock } from "./blocks";
 
 export type Geometry = { x: number; y: number; w: number; h: number };
 
@@ -100,7 +100,7 @@ function CanvasBlockImpl({
               onFocus={() => onSelect(block.id)}
               className="block-drag-handle h-full w-full cursor-move overflow-hidden bg-background outline-none"
             >
-              {renderBlock(block)}
+              <RenderBlock block={block} />
             </div>
           </ContextMenuTrigger>
         <ContextMenuContent>

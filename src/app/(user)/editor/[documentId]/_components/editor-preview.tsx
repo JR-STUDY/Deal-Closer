@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { renderBlock } from "./blocks";
+import { RenderBlock } from "./blocks";
 
 type Props = {
   open: boolean;
@@ -93,7 +93,7 @@ export function EditorPreview({ open, onOpenChange, doc, title }: Props) {
                     zIndex: b.z,
                   }}
                 >
-                  {renderBlock(b)}
+                  <RenderBlock block={b} />
                 </div>
               ))}
             </div>
