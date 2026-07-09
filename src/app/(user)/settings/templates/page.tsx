@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
-import { toTemplateDTO } from "@/lib/email-template";
+import { toTemplateDTO, visibleTemplatesWhere } from "@/lib/email-template";
 import { PageHeader } from "@/components/page-header";
 import { TemplatesManager } from "./_components/templates-manager";
 
@@ -13,10 +13,7 @@ export default async function EmailTemplatesPage() {
   const user = await getCurrentUser();
 
   const templates = await prisma.emailTemplate.findMany({
-    where: {
-      orgId: user.orgId,
-      OR: [{ ownerId: null }, { ownerId: user.id }],
-    },
+    where: visibleTemplatesWhere(user.orgId, user.id),
     orderBy: [{ ownerId: "asc" }, { updatedAt: "desc" }],
   });
 

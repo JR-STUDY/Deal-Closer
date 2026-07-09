@@ -55,6 +55,17 @@ export type EmailTemplateDTO = {
   scope: TemplateScope;
 };
 
+/**
+ * "현재 사용자가 볼 수 있는 템플릿" Prisma where 조건 (팀 공용 + 본인 개인).
+ * 인가 규칙이므로 한 곳에서만 관리한다 — 목록 조회하는 모든 지점이 이 헬퍼를 쓴다.
+ */
+export function visibleTemplatesWhere(orgId: string, userId: string) {
+  return {
+    orgId,
+    OR: [{ ownerId: null }, { ownerId: userId }],
+  };
+}
+
 /** Prisma 레코드(부분) → DTO. ownerId 유무로 공용/개인을 판별한다. */
 export function toTemplateDTO(record: {
   id: string;

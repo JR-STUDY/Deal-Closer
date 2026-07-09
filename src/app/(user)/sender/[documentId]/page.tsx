@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
-import { toTemplateDTO } from "@/lib/email-template";
+import { toTemplateDTO, visibleTemplatesWhere } from "@/lib/email-template";
 import { SenderClient } from "./_components/sender-client";
 
 export default async function SenderPage({
@@ -19,10 +19,7 @@ export default async function SenderPage({
       .findFirst({ where: { userId: user.id, isDefault: true } })
       .then((a) => a ?? prisma.emailAccount.findFirst({ where: { userId: user.id } })),
     prisma.emailTemplate.findMany({
-      where: {
-        orgId: user.orgId,
-        OR: [{ ownerId: null }, { ownerId: user.id }],
-      },
+      where: visibleTemplatesWhere(user.orgId, user.id),
       orderBy: [{ ownerId: "asc" }, { updatedAt: "desc" }],
     }),
   ]);

@@ -37,6 +37,11 @@ type TemplateFormDialogProps = {
   initial: TemplateFormInitial;
   title: string;
   description?: string;
+  /**
+   * 공유 범위 스위치를 잠근다 (팀 공용 템플릿 수정 시).
+   * 팀 공용을 개인으로 되돌리면 팀원이 접근을 잃으므로 서버에서도 막는다.
+   */
+  lockShared?: boolean;
   /** 저장 성공 시 저장된 템플릿 전달 */
   onSaved: (template: EmailTemplateDTO) => void;
   /** 다이얼로그가 닫힐 때 (성공/취소 공통) */
@@ -53,6 +58,7 @@ export function TemplateFormDialog({
   initial,
   title,
   description,
+  lockShared = false,
   onSaved,
   onClose,
 }: TemplateFormDialogProps) {
@@ -155,13 +161,15 @@ export function TemplateFormDialog({
                 팀 공용으로 공유
               </Label>
               <p className="text-xs text-muted-foreground">
-                켜면 조직의 모든 팀원이 사용·수정할 수 있습니다. 끄면 나만 보는
-                개인 템플릿입니다.
+                {lockShared
+                  ? "팀 공용 템플릿입니다. 팀원 전체가 사용 중이라 공유 범위는 변경할 수 없습니다."
+                  : "켜면 조직의 모든 팀원이 사용·수정할 수 있습니다. 끄면 나만 보는 개인 템플릿입니다."}
               </p>
             </div>
             <Switch
               id="template-shared"
               checked={shared}
+              disabled={lockShared}
               onCheckedChange={setShared}
             />
           </div>

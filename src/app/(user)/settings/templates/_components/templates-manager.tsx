@@ -190,6 +190,7 @@ export function TemplatesManager({
           templateId={form.mode === "edit" ? form.template.id : undefined}
           title={form.mode === "edit" ? "템플릿 수정" : "새 메일 템플릿"}
           description="제목·본문에 변수를 넣으면 발송 시 현재 문서 값으로 치환됩니다."
+          lockShared={form.mode === "edit" && form.template.scope === "team"}
           initial={
             form.mode === "edit"
               ? {
@@ -217,6 +218,9 @@ export function TemplatesManager({
             <AlertDialogDescription>
               &ldquo;{pendingDelete?.name}&rdquo; 템플릿을 삭제합니다. 이 작업은
               되돌릴 수 없습니다.
+              {pendingDelete?.scope === "team"
+                ? " 이 템플릿은 팀 전체가 사용 중이며, 삭제하면 모든 팀원에게서 사라집니다."
+                : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

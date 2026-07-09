@@ -2,7 +2,11 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
-import { parseTemplateInput, toTemplateDTO } from "@/lib/email-template";
+import {
+  parseTemplateInput,
+  toTemplateDTO,
+  visibleTemplatesWhere,
+} from "@/lib/email-template";
 
 /**
  * GET /api/email-templates — 현재 사용자가 볼 수 있는 메일 템플릿 목록.
@@ -11,10 +15,7 @@ import { parseTemplateInput, toTemplateDTO } from "@/lib/email-template";
 export async function GET() {
   const user = await getCurrentUser();
   const templates = await prisma.emailTemplate.findMany({
-    where: {
-      orgId: user.orgId,
-      OR: [{ ownerId: null }, { ownerId: user.id }],
-    },
+    where: visibleTemplatesWhere(user.orgId, user.id),
     // 팀 공용(null)이 먼저, 각 그룹 안에서는 최근 수정 순
     orderBy: [{ ownerId: "asc" }, { updatedAt: "desc" }],
   });

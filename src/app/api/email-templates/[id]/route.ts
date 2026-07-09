@@ -46,14 +46,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const parsed = parseTemplateInput(body);
   if ("error" in parsed) return fail(parsed.error);
 
+  // 소유권 전환 규칙 (팀 자원 보호):
+  // - 팀 공용(ownerId=null)은 공용으로 유지한다. 개인으로 되돌리면 소유권이
+  //   편집자에게 넘어가 나머지 팀원이 목록에서 이 템플릿을 잃기 때문.
+  // - 개인 템플릿은 본인 소유를 유지하되, 팀 공용으로 승격(shared=true)만 허용한다.
+  const nextOwnerId =
+    loaded.ownerId === null ? null : parsed.shared ? null : loaded.ownerId;
+
   const updated = await prisma.emailTemplate.update({
     where: { id },
     data: {
       name: parsed.name,
       subject: parsed.subject,
       body: parsed.body,
-      // 공유 범위 전환 허용: 공용 ↔ 개인(본인 소유)
-      ownerId: parsed.shared ? null : user.id,
+      ownerId: nextOwnerId,
     },
   });
 
