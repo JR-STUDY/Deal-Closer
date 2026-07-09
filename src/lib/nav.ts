@@ -4,6 +4,7 @@ import {
   Sparkles,
   FolderClosed,
   Mail,
+  MailPlus,
   BarChart3,
   Users,
   Package,
@@ -24,6 +25,7 @@ export const userNav: NavItem[] = [
   { href: "/generator", label: "새 문서 생성", icon: Sparkles },
   { href: "/library", label: "문서 보관함", icon: FolderClosed },
   { href: "/settings/email", label: "메일 연동", icon: Mail },
+  { href: "/settings/templates", label: "메일 템플릿", icon: MailPlus },
 ];
 
 /** 관리자 콘솔 (admin-web) 네비게이션 */
