@@ -3,12 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, Trash2, Users, User as UserIcon } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScopeBadge } from "@/components/email-template/scope-badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -107,25 +107,16 @@ export function TemplateDetail({ template: initial }: { template: EmailTemplateD
 
       <div className="flex-1 overflow-auto p-8">
         <div className="mx-auto max-w-3xl space-y-6">
-          <Link
-            href={LIST_HREF}
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="size-4" />
-            메일 템플릿 목록으로
-          </Link>
-
-          <Badge variant="outline" className="gap-1.5">
-            {isTeam ? (
-              <>
-                <Users className="size-3.5" />팀 공용
-              </>
-            ) : (
-              <>
-                <UserIcon className="size-3.5" />개인
-              </>
-            )}
-          </Badge>
+          <div className="flex items-center justify-between gap-3">
+            <Link
+              href={LIST_HREF}
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="size-4" />
+              목록으로
+            </Link>
+            <ScopeBadge scope={template.scope} showIcon />
+          </div>
 
           <Card>
             <CardHeader>

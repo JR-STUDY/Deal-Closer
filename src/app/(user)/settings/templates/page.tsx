@@ -10,8 +10,8 @@ import {
 } from "@/lib/email-template";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { ScopeBadge } from "@/components/email-template/scope-badge";
 
 const SECTIONS: {
   scope: TemplateScope;
@@ -48,9 +48,9 @@ function TemplateCard({ template }: { template: EmailTemplateDTO }) {
               {template.subject}
             </p>
           </div>
-          <Badge variant="outline" className="shrink-0">
-            {template.scope === "team" ? "공용" : "개인"}
-          </Badge>
+          <div className="shrink-0">
+            <ScopeBadge scope={template.scope} />
+          </div>
         </CardHeader>
         <CardContent>
           <p className="line-clamp-3 whitespace-pre-line text-sm text-muted-foreground">

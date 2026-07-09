@@ -15,20 +15,13 @@ import type { EmailTemplateDTO, TemplateFormValues } from "@/lib/email-template"
 import { TemplateFields } from "./template-fields";
 import { submitTemplate } from "./submit-template";
 
-/** 폼 초기값 (생성 시 빈 값, 현재 내용 저장 시 채워진 값) */
+/** 폼 초기값 (빈 값 또는 현재 작성 내용) */
 export type TemplateFormInitial = TemplateFormValues;
 
 type TemplateFormDialogProps = {
-  /** 수정 대상 id (없으면 새로 생성) */
-  templateId?: string;
   initial: TemplateFormInitial;
   title: string;
   description?: string;
-  /**
-   * 공유 범위 스위치를 잠근다 (팀 공용 템플릿 수정 시).
-   * 팀 공용을 개인으로 되돌리면 팀원이 접근을 잃으므로 서버에서도 막는다.
-   */
-  lockShared?: boolean;
   /** 저장 성공 시 저장된 템플릿 전달 */
   onSaved: (template: EmailTemplateDTO) => void;
   /** 다이얼로그가 닫힐 때 (성공/취소 공통) */
@@ -36,16 +29,15 @@ type TemplateFormDialogProps = {
 };
 
 /**
- * 메일 템플릿 저장 다이얼로그 (발송 화면의 "현재 내용 저장" 등 작성 흐름 중 빠른 저장용).
+ * 메일 템플릿 "빠른 저장" 다이얼로그 — 발송 화면의 "현재 내용 저장" 전용(신규 생성).
+ * 조회·수정은 전체 화면 상세(/settings/templates/[id])에서 처리한다.
  * 부모가 열고 싶을 때만 마운트하고 `key` 로 구분하면, 열 때마다 initial 로
  * 새로 초기화된다 (파생 state 문제 회피 — 지연 초기화 + 리마운트).
  */
 export function TemplateFormDialog({
-  templateId,
   initial,
   title,
   description,
-  lockShared = false,
   onSaved,
   onClose,
 }: TemplateFormDialogProps) {
@@ -57,14 +49,14 @@ export function TemplateFormDialog({
 
   const handleSubmit = async () => {
     setIsSaving(true);
-    const result = await submitTemplate(templateId, { name, subject, body, shared });
+    const result = await submitTemplate(undefined, { name, subject, body, shared });
     setIsSaving(false);
     if ("error" in result) {
       toast.error(result.error);
       return;
     }
     onSaved(result.template);
-    toast.success(templateId ? "템플릿을 수정했습니다." : "템플릿을 저장했습니다.");
+    toast.success("템플릿을 저장했습니다.");
     onClose();
   };
 
@@ -92,7 +84,6 @@ export function TemplateFormDialog({
           onSubjectChange={setSubject}
           onBodyChange={setBody}
           onSharedChange={setShared}
-          lockShared={lockShared}
         />
 
         <DialogFooter>
