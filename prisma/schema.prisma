@@ -28,6 +28,8 @@ model Organization {
   users        User[]
   invites      Invite[]
   documents    Document[]
+  folders      Folder[]
+  templates    DocumentTemplate[]
   catalogItems CatalogItem[]
   branding     Branding?
   creditWallet CreditWallet?
@@ -87,6 +89,9 @@ model Document {
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   authorId    String
   author      User     @relation(fields: [authorId], references: [id])
+  // 문서 분류용 폴더(선택). null 이면 "미분류". 폴더 삭제 시 문서는 미분류로 내려간다.
+  folderId    String?
+  folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -98,6 +103,7 @@ model Document {
   @@index([orgId])
   @@index([authorId])
   @@index([status])
+  @@index([folderId])
   @@map("documents")
 }
 
@@ -115,6 +121,61 @@ model DocumentItem {
 
   @@index([documentId])
   @@map("document_items")
+}
+
+/// 문서 분류용 폴더 (다단계 트리). parentId 로 자기 자신을 참조해 중첩 폴더를 구성한다.
+/// 상위 폴더 삭제 시 하위 폴더도 함께 삭제(Cascade)되고, 각 폴더의 문서는 미분류로 내려간다.
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderTree")
+  documents Document[]
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([parentId])
+  @@map("folders")
+}
+
+/// 재사용 베이스 템플릿 (표준 견적서/NDA/제안서 골격 등).
+/// 실거래 문서(Document)와 분리된 "베이스 문서" 저장소. 여기서 새 문서를 복제 생성한다.
+model DocumentTemplate {
+  id          String   @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  title       String
+  type        String   @default("QUOTE") // QUOTE | CONTRACT | NDA | PROPOSAL
+  description String?                    // 언제 쓰는 템플릿인지 안내
+  contentJson String?                    // 템플릿 본문(JSON 직렬화)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items TemplateItem[]
+
+  @@index([orgId])
+  @@map("document_templates")
+}
+
+/// 베이스 템플릿의 기본 라인 아이템 (새 문서 생성 시 그대로 복제된다)
+model TemplateItem {
+  id          String   @id @default(cuid())
+  templateId  String
+  template    DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  quantity    Int      @default(1)
+  unitPrice   Int      @default(0)
+  amount      Int      @default(0)
+  sortOrder   Int      @default(0)
+
+  @@index([templateId])
+  @@map("template_items")
 }
 
 // ==================== 카탈로그(마스터 데이터) ====================

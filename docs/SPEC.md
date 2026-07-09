@@ -20,8 +20,11 @@
 | AI 대화형 문서 생성기 | `/generator` | 자연어 프롬프트 |
 | 웹 문서 에디터 | `/editor/:documentId` | 라인아이템 편집 |
 | 이메일 발송 | `/sender/:documentId` | 다중 수신자·PDF 첨부 |
-| 문서 라이브러리 | `/library` | 상태 탭·검색 |
+| 문서 라이브러리 | `/library` | 상태 탭·**폴더 트리 분류**(다단계) |
+| 베이스 템플릿 | `/library/templates` | 재사용 표준 문서 저장·복제 생성 ※MVP 확장 |
 | 메일 연동 관리 | `/settings/email` | Gmail/Outlook OAuth |
+
+> **MVP 확장 — 문서 보관함 강화**: 원본 기획서의 "상태 탭·검색"에 더해, 폴더(다단계 트리)로 문서를 분류하고 자주 쓰는 문서를 재사용 **베이스 템플릿**으로 저장·복제한다. 스키마는 `Folder`·`DocumentTemplate`·`TemplateItem` + `Document.folderId` 로 반영했다.
 
 ### 관리자 콘솔 (admin-web)
 
