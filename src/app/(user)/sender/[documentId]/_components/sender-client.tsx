@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/card";
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants";
 import { formatKRW } from "@/lib/format";
+import { parseRecipients } from "@/lib/validation";
 import { DocTypeBadge } from "@/components/status-badge";
 
 const DEFAULT_BODY =
@@ -47,13 +48,30 @@ export function SenderClient({ document, account }: SenderClientProps) {
   const [recipients, setRecipients] = useState("");
   const [subject, setSubject] = useState(`[${typeLabel}] ${document.title}`);
   const [body, setBody] = useState(DEFAULT_BODY);
+  const [recipientError, setRecipientError] = useState<string | null>(null);
 
   const handleSend = () => {
-    if (!recipients.trim()) {
-      toast.error("수신자를 입력해주세요.");
+    const { valid, invalid } = parseRecipients(recipients);
+
+    if (valid.length === 0 && invalid.length === 0) {
+      const message = "수신자를 입력해주세요.";
+      setRecipientError(message);
+      toast.error(message);
       return;
     }
-    toast.success("이메일이 발송되었습니다 (데모)");
+    if (invalid.length > 0) {
+      const message = `올바르지 않은 이메일 형식: ${invalid.join(", ")}`;
+      setRecipientError(message);
+      toast.error(message);
+      return;
+    }
+    if (!account) {
+      toast.error("발신 계정을 먼저 연동해주세요.");
+      return;
+    }
+
+    setRecipientError(null);
+    toast.success(`${valid.length}명에게 이메일이 발송되었습니다 (데모)`);
   };
 
   return (
@@ -137,10 +155,26 @@ export function SenderClient({ document, account }: SenderClientProps) {
               <Textarea
                 id="recipients"
                 value={recipients}
-                onChange={(e) => setRecipients(e.target.value)}
-                placeholder="example@company.com; (세미콜론으로 다중 입력 가능)"
+                onChange={(e) => {
+                  setRecipients(e.target.value);
+                  if (recipientError) setRecipientError(null);
+                }}
+                placeholder="example@company.com; (세미콜론·쉼표로 다중 입력 가능)"
                 className="min-h-20"
+                aria-invalid={recipientError ? true : undefined}
+                aria-describedby={
+                  recipientError ? "recipients-error" : undefined
+                }
               />
+              {recipientError ? (
+                <p
+                  id="recipients-error"
+                  role="alert"
+                  className="mt-2 text-sm text-destructive"
+                >
+                  {recipientError}
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 
