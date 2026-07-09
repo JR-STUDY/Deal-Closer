@@ -74,6 +74,7 @@ src/
     page.tsx           # 랜딩 (콘솔 진입)
   components/
     ui/                # shadcn/ui (직접 수정 지양, CLI 로 관리)
+    email-template/    # 메일 템플릿 공용 폼 다이얼로그 (관리 페이지·발송폼 재사용)
     app-sidebar.tsx    # 공용 사이드바
     page-header.tsx    # 공용 페이지 헤더
     status-badge.tsx   # 문서 상태/종류 배지
@@ -83,6 +84,7 @@ src/
     constants.ts       # enum 대체 상수 + 라벨
     format.ts          # 통화/날짜 포맷
     api.ts             # API 응답 헬퍼(ok/fail)
+    email-template.ts  # 메일 템플릿 치환 변수·검증·DTO
   generated/prisma/    # Prisma Client (자동 생성, 커밋 안 함)
 ```
 

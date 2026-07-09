@@ -2,7 +2,7 @@
 
 AI로 영업 문서(견적서·계약서·NDA·제안서)를 생성하고, 웹에서 편집한 뒤 이메일로 발송하는 **영업 문서 자동화 SaaS MVP**.
 
-- **영업 담당자 포털(user-web)** — 대시보드 · AI 문서 생성 · 웹 에디터 · 이메일 발송 · 문서 보관함 · 메일 연동
+- **영업 담당자 포털(user-web)** — 대시보드 · AI 문서 생성 · 웹 에디터 · 이메일 발송 · 문서 보관함 · 메일 연동 · 메일 템플릿
 - **관리자 콘솔(admin-web)** — 팀원 관리 · 마스터 데이터 · 요금/크레딧 · 브랜딩 · 통계
 
 ## 빠른 시작
@@ -54,6 +54,7 @@ pnpm dev                # http://localhost:3000
 | 이메일 발송 | `/sender/[documentId]` |
 | 문서 보관함 | `/library` |
 | 메일 연동 관리 | `/settings/email` |
+| 메일 템플릿 | `/settings/templates` |
 
 **관리자 콘솔 (admin-web)**
 
@@ -80,6 +81,8 @@ pnpm dev                # http://localhost:3000
 | GET | `/api/stats` | 대시보드 통계 |
 | GET | `/api/policies` | 정책 라이브러리 |
 | GET | `/api/email-accounts` | 메일 연동 계정 |
+| GET / POST | `/api/email-templates` | 메일 템플릿 목록 / 생성 |
+| PATCH / DELETE | `/api/email-templates/[id]` | 메일 템플릿 수정 / 삭제 |
 
 ## 코드 품질 · CI
 

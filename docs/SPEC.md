@@ -10,7 +10,7 @@
 핵심 사용자 여정:
 `영업 대시보드 → AI 문서 생성기 → 웹 에디터 → 이메일 발송`
 
-## 화면 인벤토리 (24)
+## 화면 인벤토리 (24 + MVP 추가)
 
 ### 영업 담당자 포털 (user-web)
 
@@ -19,9 +19,10 @@
 | 영업 대시보드 | `/dashboard` | KPI·최근 문서 |
 | AI 대화형 문서 생성기 | `/generator` | 자연어 프롬프트 |
 | 웹 문서 에디터 | `/editor/:documentId` | 라인아이템 편집 |
-| 이메일 발송 | `/sender/:documentId` | 다중 수신자·PDF 첨부 |
+| 이메일 발송 | `/sender/:documentId` | 다중 수신자·PDF 첨부·템플릿 불러오기 |
 | 문서 라이브러리 | `/library` | 상태 탭·검색 |
 | 메일 연동 관리 | `/settings/email` | Gmail/Outlook OAuth |
+| 메일 템플릿 | `/settings/templates` | 발송 문구 저장·불러오기 (MVP 추가) |
 
 ### 관리자 콘솔 (admin-web)
 

@@ -16,6 +16,7 @@
 | **메일 OAuth** | ⚠️ UI만 | `connect-button` UI, 실제 OAuth 플로우 없음 |
 | **인증** | ⚠️ 데모 고정 | `session.ts` 홍길동/admin 하드코딩 |
 | 라인아이템 편집 저장 | ⚠️ 공백 | 문서 PATCH가 `items`(라인아이템) 미반영 |
+| 메일 템플릿 | ✅ 실제 DB (MVP 추가) | `EmailTemplate` CRUD(`/api/email-templates`) + 발송폼 불러오기·치환 변수 |
 
 ---
 

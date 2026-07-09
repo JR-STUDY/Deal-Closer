@@ -45,9 +45,11 @@ erDiagram
   Organization ||--|| Branding : has
   Organization ||--|| CreditWallet : has
   Organization ||--o{ CreditTransaction : logs
+  Organization ||--o{ EmailTemplate : has
   User ||--o{ Document : authors
   User ||--o{ EmailAccount : connects
   User ||--o{ EmailLog : sends
+  User ||--o{ EmailTemplate : owns
   User ||--o{ GenerationRequest : requests
   Document ||--o{ DocumentItem : contains
   Document ||--o{ EmailLog : sent_via
@@ -64,6 +66,7 @@ erDiagram
 | `CatalogItem` | 마스터 데이터(상품/서비스 카탈로그) |
 | `EmailAccount` | Gmail/Outlook 연동 계정 |
 | `EmailLog` | 이메일 발송 이력 |
+| `EmailTemplate` | 메일 발송 템플릿(제목·본문). `ownerId=null`=팀 공용, 값 있으면 개인 |
 | `CreditWallet` / `CreditTransaction` | 조직 크레딧 잔액 / 충전·사용 내역 |
 | `GenerationRequest` | AI 문서 생성 요청 이력 |
 | `Branding` | 조직 브랜딩(회사명·로고·색상) |
