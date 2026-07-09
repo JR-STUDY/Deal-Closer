@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { userNav, adminNav } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -33,16 +33,6 @@ export function AppSidebar({ variant, user }: AppSidebarProps) {
           <div className="text-[11px] text-muted-foreground">{kicker}</div>
         </div>
       </Link>
-
-      <div className="border-b p-3">
-        <Link
-          href="/"
-          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-        >
-          <ArrowLeft className="size-4" />
-          메인으로
-        </Link>
-      </div>
 
       <nav className="flex-1 space-y-1 p-3">
         {nav.map((item) => {
