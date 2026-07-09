@@ -18,7 +18,7 @@
 |---|---|---|
 | 영업 대시보드 | `/dashboard` | KPI·최근 문서 |
 | AI 대화형 문서 생성기 | `/generator` | 자연어 프롬프트 |
-| 웹 문서 에디터 | `/editor/:documentId` | 라인아이템 편집 |
+| 웹 문서 에디터 | `/editor/:documentId` | 블록 캔버스 에디터(2D 배치·contentJson 저장) |
 | 이메일 발송 | `/sender/:documentId` | 다중 수신자·PDF 첨부 |
 | 문서 라이브러리 | `/library` | 상태 탭·검색 |
 | 메일 연동 관리 | `/settings/email` | Gmail/Outlook OAuth |

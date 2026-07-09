@@ -158,6 +158,7 @@ async function main() {
     data: {
       orgId: org.id,
       companyName: "SpecFlow AI",
+      logoUrl: "/brand-logo.png",
       primaryColor: "#4F46E5",
     },
   });

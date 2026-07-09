@@ -2,6 +2,11 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/api";
 import { DOCUMENT_STATUSES, DOCUMENT_TYPES } from "@/lib/constants";
+import {
+  parseContentJson,
+  computeAmount,
+  extractClientName,
+} from "@/lib/editor-schema";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -35,7 +40,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 /**
  * PATCH /api/documents/:id — 문서 수정
- * - items 배열이 오면 라인아이템을 통째로 교체하고 총액(amount)을 서버에서 재계산한다
+ * - items 배열이 오면(레거시 폼 에디터) 라인아이템을 통째로 교체하고 총액을 서버 재계산한다.
+ * - contentJson 이 오면(블록 캔버스 에디터) 총액·거래처명을 contentJson 에서 서버 재도출한다.
  *   (정책 VAL: 금액 서버 재계산 — 클라이언트가 보낸 총액은 신뢰하지 않는다).
  * - type/status 는 허용된 값인지 검증한다.
  */
@@ -65,7 +71,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return fail("알 수 없는 문서 상태입니다.");
   }
 
-  // ── 라인아이템 정규화 (있을 때만) ──
+  // ── 라인아이템 정규화 (레거시 폼 에디터: items 가 있을 때만) ──
   const hasItems = Array.isArray(body.items);
   const normalizedItems = hasItems
     ? (body.items as RawItem[])
@@ -90,6 +96,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     : [];
   const itemsTotal = normalizedItems.reduce((sum, it) => sum + it.amount, 0);
 
+  // ── contentJson 파생 (블록 캔버스 에디터) ──
+  const contentJson =
+    typeof body.contentJson === "string" ? body.contentJson : undefined;
+  const parsed = contentJson ? parseContentJson(contentJson) : null;
+  const recomputedAmount = parsed ? computeAmount(parsed) : undefined;
+  const derivedClientName = parsed ? extractClientName(parsed) : null;
+
+  const bodyClientName =
+    typeof body.clientName === "string" ? body.clientName.trim() || null : undefined;
+
   const doc = await prisma.$transaction(async (tx) => {
     if (hasItems) {
       await tx.documentItem.deleteMany({ where: { documentId: id } });
@@ -106,18 +122,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         title: typeof body.title === "string" ? body.title.trim() : undefined,
         type: typeof body.type === "string" ? body.type : undefined,
         status: typeof body.status === "string" ? body.status : undefined,
-        clientName:
-          typeof body.clientName === "string"
-            ? body.clientName.trim() || null
-            : undefined,
-        // items 가 오면 서버 재계산 총액을 우선한다.
+        // 거래처명: 블록 에디터는 contentJson 에서 파생, 그 외엔 본문 값
+        clientName: derivedClientName ?? bodyClientName,
+        // 총액 우선순위: items(레거시) → contentJson(블록 에디터) → body.amount
         amount: hasItems
           ? itemsTotal
-          : typeof body.amount === "number"
-            ? body.amount
-            : undefined,
-        contentJson:
-          typeof body.contentJson === "string" ? body.contentJson : undefined,
+          : (recomputedAmount ??
+            (typeof body.amount === "number" ? body.amount : undefined)),
+        contentJson,
       },
       include: { items: { orderBy: { sortOrder: "asc" } } },
     });
