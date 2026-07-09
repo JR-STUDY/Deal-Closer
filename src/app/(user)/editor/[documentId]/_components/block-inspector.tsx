@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Trash2, Plus, BookmarkPlus } from "lucide-react";
+import { CatalogCombobox } from "./catalog-combobox";
 
 const MAX_IMAGE_BYTES = 1024 * 1024; // 1MB — 로고/직인 수준
 
@@ -423,11 +424,6 @@ export function ContentForm({
         onChangeProps({ summaryRows: next });
       return (
         <div className="space-y-2">
-          <datalist id="catalog-datalist">
-            {catalog.map((c) => (
-              <option key={c.id} value={c.name} />
-            ))}
-          </datalist>
           <div className="flex items-center justify-between">
             <Label htmlFor="showTotal" className="text-sm">
               합계 표시
@@ -500,28 +496,31 @@ export function ContentForm({
 
           {p.rows.map((r) => (
             <div key={r.id} className="space-y-1 rounded border p-2">
-              <Input
-                placeholder="품목명 (입력 시 카탈로그 추천)"
-                list="catalog-datalist"
+              <CatalogCombobox
                 value={r.name}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  const match = catalog.find((c) => c.name === val);
+                catalog={catalog}
+                placeholder="품목명 (입력 시 카탈로그 추천)"
+                onChange={(val) =>
+                  update(
+                    p.rows.map((x) =>
+                      x.id === r.id ? { ...x, name: val } : x,
+                    ),
+                  )
+                }
+                onPick={(item) =>
                   update(
                     p.rows.map((x) =>
                       x.id === r.id
-                        ? match
-                          ? {
-                              ...x,
-                              name: val,
-                              unitPrice: match.unitPrice,
-                              description: match.description ?? x.description,
-                            }
-                          : { ...x, name: val }
+                        ? {
+                            ...x,
+                            name: item.name,
+                            unitPrice: item.unitPrice,
+                            description: item.description ?? x.description,
+                          }
                         : x,
                     ),
-                  );
-                }}
+                  )
+                }
               />
               <Input
                 placeholder="설명"
