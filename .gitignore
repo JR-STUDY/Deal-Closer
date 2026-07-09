@@ -48,3 +48,8 @@ next-env.d.ts
 *.db-journal
 *.db-wal
 *.db-shm
+
+# AI 코딩 도구 로컬 산출물 (Claude Code / oh-my-claudecode / superpowers) — 커밋하지 않는다
+.claude/
+.omc/
+docs/superpowers/
