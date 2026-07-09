@@ -1,0 +1,39 @@
+name: React Doctor
+
+# PR 자동 리뷰 + main 푸시 시 상태 표기로 커밋 안정성 확보.
+# react-doctor 는 React 코드의 보안·성능·정확성 이슈를 정적 분석한다 (API 키 불필요).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# 동일 PR/브랜치의 이전 실행은 취소해 러너를 아낀다.
+concurrency:
+  group: react-doctor-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write # PR 요약 코멘트 · 인라인 리뷰
+  statuses: write # 커밋 상태(점수) 표기
+
+jobs:
+  react-doctor:
+    name: Scan React codebase
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # changed 스코프의 base 비교를 위해 전체 히스토리가 필요하다.
+          fetch-depth: 0
+
+      - name: Run react-doctor
+        uses: millionco/react-doctor@v2
+        with:
+          scope: changed # PR 이 새로 유발한 이슈만 리포트
+          blocking: none # 도입 초기에는 advisory(항상 통과). 팀이 익숙해지면 warning→error 로 강화
+          comment: true # PR 에 sticky 요약 코멘트
+          review-comments: true # 변경 라인에 인라인 리뷰
+          commit-status: true # 점수/이슈 수를 커밋 상태로 표기
