@@ -138,7 +138,9 @@ async function main() {
   await prisma.generationRequest.deleteMany();
   await prisma.documentItem.deleteMany();
   await prisma.document.deleteMany();
+  await prisma.emailTemplate.deleteMany();
   await prisma.emailAccount.deleteMany();
+  await prisma.teamMailDomain.deleteMany();
   await prisma.catalogItem.deleteMany();
   await prisma.creditTransaction.deleteMany();
   await prisma.creditWallet.deleteMany();
@@ -185,6 +187,8 @@ async function main() {
       email: "kildong.hong@specflow.ai",
       name: "홍길동",
       role: "SALES_REP",
+      signature:
+        "홍길동 | 영업팀\nSpecFlow AI\nkildong.hong@specflow.ai · 02-1234-5678",
     },
   });
 
@@ -294,6 +298,84 @@ async function main() {
       isDefault: true,
       status: "CONNECTED",
     },
+  });
+
+  // 7-0) 팀 발신 메일 도메인 (관리자 콘솔에서 관리)
+  //  · specflow.ai 를 인증·기본 도메인으로 등록 → 담당자가 발신 주소로 선택 가능
+  //  · rep 은 기본적으로 개인 계정(sales-pro@gmail.com) 발신 상태로 두어
+  //    "팀 도메인 선택" 흐름을 데모에서 직접 확인할 수 있게 한다
+  //  · defaultCc: 팀 도메인 발송 시 기본 참조(CC) — 영업팀(리더·담당자) 전원
+  await prisma.teamMailDomain.create({
+    data: {
+      orgId: org.id,
+      domain: "specflow.ai",
+      label: "회사 공식 도메인",
+      status: "VERIFIED",
+      isDefault: true,
+      defaultCc: `${leader.email}; ${rep.email}`,
+    },
+  });
+
+  // 7-1) 메일 발송 템플릿 — 발송 화면에서 불러와 사용
+  //  · 팀 공용(ownerId=null) 4건: 문서 4종(견적서·계약서·NDA·제안서)을 각각 커버
+  //  · 개인(ownerId=rep) 3건: 팔로업·감사·리마인드 등 실무 시나리오
+  //  · 제목/본문의 {{거래처}}·{{문서제목}}·{{문서종류}}·{{총액}} 은 발송 시 치환된다
+  await prisma.emailTemplate.createMany({
+    data: [
+      // ── 팀 공용 ──
+      {
+        orgId: org.id,
+        ownerId: null,
+        name: "견적서 안내 (표준)",
+        subject: "[{{문서종류}}] {{거래처}}님께 드리는 {{문서제목}}",
+        body: "안녕하세요, {{거래처}} 담당자님.\n\n요청주신 {{문서제목}} 건에 대한 {{문서종류}}를 첨부와 같이 보내드립니다. 총액은 {{총액}}(부가세 포함)이며, 상세 내역은 첨부 문서를 확인 부탁드립니다.\n\n견적 유효기간은 발행일로부터 30일입니다. 궁금하신 점이 있으시면 언제든 회신 주세요.\n\n감사합니다.",
+      },
+      {
+        orgId: org.id,
+        ownerId: null,
+        name: "계약서 송부",
+        subject: "[{{문서종류}}] {{거래처}} 계약 체결 관련 문서 송부",
+        body: "안녕하세요, {{거래처}} 담당자님.\n\n협의된 내용을 반영한 {{문서제목}}({{문서종류}})를 송부드립니다. 계약 금액은 {{총액}}입니다.\n\n첨부된 계약서를 검토하신 후 이상이 없으시면 서명하여 회신 부탁드립니다. 수정이 필요한 부분이 있으면 편하게 말씀해 주세요.\n\n감사합니다.",
+      },
+      {
+        orgId: org.id,
+        ownerId: null,
+        name: "NDA 체결 요청",
+        subject: "[{{문서종류}}] {{거래처}}와의 비밀유지계약 체결 요청",
+        body: "안녕하세요, {{거래처}} 담당자님.\n\n본격적인 논의에 앞서 양사 간 정보 보호를 위한 {{문서제목}}({{문서종류}})를 전달드립니다.\n\n내용 검토 후 서명본을 회신 주시면, 이어서 상세 자료를 공유드리겠습니다. 문의사항은 언제든 연락 주세요.\n\n감사합니다.",
+      },
+      {
+        orgId: org.id,
+        ownerId: null,
+        name: "제안서 발송",
+        subject: "[{{문서종류}}] {{거래처}}님을 위한 {{문서제목}}",
+        body: "안녕하세요, {{거래처}} 담당자님.\n\n지난 미팅에서 논의한 내용을 바탕으로 {{문서제목}}({{문서종류}})를 준비했습니다. 제안 규모는 {{총액}}입니다.\n\n첨부 자료를 검토하신 후 편하신 시간에 짧게 논의 자리를 가지면 좋겠습니다. 가능하신 일정을 알려주시면 맞춰 준비하겠습니다.\n\n감사합니다.",
+      },
+      // ── 개인 (홍길동) ──
+      {
+        orgId: org.id,
+        ownerId: rep.id,
+        name: "빠른 팔로업",
+        subject: "Re: {{문서제목}} 관련 진행 상황 문의",
+        body: "안녕하세요, {{거래처}}님.\n\n앞서 전달드린 {{문서제목}} 관련하여 검토는 잘 진행되고 계신지 확인차 연락드립니다. 추가로 필요하신 자료가 있으면 편하게 말씀해 주세요.\n\n감사합니다.",
+      },
+      {
+        orgId: org.id,
+        ownerId: rep.id,
+        name: "미팅 후 감사",
+        subject: "{{거래처}}님, 오늘 미팅 감사했습니다",
+        // 기본 담당자명({{담당자}}) 데모 — 불러오면 발송 폼 담당자명이 자동으로 채워진다
+        recipientName: "이서준",
+        body: "안녕하세요, {{담당자}}님.\n\n오늘 귀한 시간 내어 미팅에 참여해 주셔서 감사합니다. 논의된 {{문서제목}} 관련 내용은 정리하여 별도로 전달드리겠습니다.\n\n추가 문의사항이 있으시면 언제든 연락 주세요. 감사합니다.",
+      },
+      {
+        orgId: org.id,
+        ownerId: rep.id,
+        name: "미회신 리마인드",
+        subject: "[리마인드] {{문서제목}} 회신 부탁드립니다",
+        body: "안녕하세요, {{거래처}} 담당자님.\n\n지난번 보내드린 {{문서제목}}({{문서종류}}, 총액 {{총액}}) 관련하여 회신을 기다리고 있습니다. 검토에 참고가 필요하신 부분이 있으면 편하게 말씀해 주세요.\n\n확인 부탁드립니다. 감사합니다.",
+      },
+    ],
   });
 
   // 8) 문서 — 최근 7개월(2026-01 ~ 2026-07)에 걸쳐 우상향 실적 스토리로 분포
@@ -469,6 +551,8 @@ async function main() {
     문서항목: await prisma.documentItem.count(),
     카탈로그: await prisma.catalogItem.count(),
     메일계정: await prisma.emailAccount.count(),
+    메일도메인: await prisma.teamMailDomain.count(),
+    메일템플릿: await prisma.emailTemplate.count(),
     발송이력: await prisma.emailLog.count(),
     크레딧거래: await prisma.creditTransaction.count(),
     초대: await prisma.invite.count(),

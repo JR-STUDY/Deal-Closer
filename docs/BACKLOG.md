@@ -20,6 +20,8 @@
 | 발송 수신자 검증 | ✅ 완료 | 이메일 형식·다중 파싱(VAL_*) |
 | 상태 화면 | ✅ 완료 | 404·에러 바운더리·그룹 로딩(STATE_*) |
 | 에디터 이탈 경고 | ✅ 완료 | 미저장 시 beforeunload 가드·표시(STATE_*) |
+| 메일 템플릿 | ✅ 실제 DB (MVP 추가) | `EmailTemplate` CRUD(`/api/email-templates`) + 발송폼 불러오기·치환 변수 |
+| 메일 서명 | ✅ 실제 DB (MVP 추가) | `User.signature`(텍스트·HTML) + `/settings/email` 편집·미리보기, 발송폼 하단 추가(sandbox iframe 렌더) |
 
 ---
 

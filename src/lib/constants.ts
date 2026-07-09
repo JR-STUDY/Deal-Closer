@@ -61,6 +61,15 @@ export const EMAIL_PROVIDER_LABELS: Record<EmailProvider, string> = {
   OUTLOOK: "Outlook",
 };
 
+// ── 팀 발신 메일 도메인 인증 상태 ──
+export const MAIL_DOMAIN_STATUSES = ["PENDING", "VERIFIED"] as const;
+export type MailDomainStatus = (typeof MAIL_DOMAIN_STATUSES)[number];
+
+export const MAIL_DOMAIN_STATUS_LABELS: Record<MailDomainStatus, string> = {
+  PENDING: "인증 대기",
+  VERIFIED: "인증됨",
+};
+
 // ── 크레딧 거래 유형 ──
 export const CREDIT_TX_TYPES = ["CHARGE", "USAGE"] as const;
 export type CreditTxType = (typeof CREDIT_TX_TYPES)[number];
@@ -71,6 +80,11 @@ export type GenerationStatus = (typeof GENERATION_STATUSES)[number];
 
 // ── AI 문서 1건 생성에 필요한 크레딧 ──
 export const CREDITS_PER_GENERATION = 10;
+
+// ── 메일 서명 최대 길이 (HTML 서명 수용을 위해 넉넉히) ──
+export const MAX_SIGNATURE_LENGTH = 20000;
+/** 업로드 가능한 서명 HTML 파일 최대 크기 (읽기 전 사전 차단용) */
+export const MAX_SIGNATURE_FILE_BYTES = 256 * 1024;
 
 // ── AI 문서 생성 첨부 파일 (정책 VAL_*) ──
 /** 요청당 첨부 가능한 최대 파일 개수 */

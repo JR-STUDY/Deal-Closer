@@ -25,13 +25,15 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users        User[]
-  invites      Invite[]
-  documents    Document[]
-  catalogItems CatalogItem[]
-  branding     Branding?
-  creditWallet CreditWallet?
-  creditTxns   CreditTransaction[]
+  users           User[]
+  invites         Invite[]
+  documents       Document[]
+  catalogItems    CatalogItem[]
+  branding        Branding?
+  creditWallet    CreditWallet?
+  creditTxns      CreditTransaction[]
+  emailTemplates  EmailTemplate[]
+  teamMailDomains TeamMailDomain[]
 
   @@map("organizations")
 }
@@ -43,8 +45,12 @@ model User {
   name      String
   role      String   @default("SALES_REP") // SALES_REP | LEADER | ADMIN
   avatarUrl String?
+  signature String?  // 메일 서명 (발송 시 본문 하단에 추가)
   orgId     String
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  // 선택한 팀 발신 도메인 (null = 개인 계정으로 발송). 도메인 삭제 시 개인 계정으로 자동 복귀.
+  mailDomainId String?
+  mailDomain   TeamMailDomain? @relation(fields: [mailDomainId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -52,8 +58,10 @@ model User {
   emailAccounts EmailAccount[]
   emailLogs     EmailLog[]
   generations   GenerationRequest[]
+  emailTemplates EmailTemplate[] // 본인이 소유한 개인 메일 템플릿
 
   @@index([orgId])
+  @@index([mailDomainId])
   @@map("users")
 }
 
@@ -156,6 +164,30 @@ model EmailAccount {
   @@map("email_accounts")
 }
 
+/// 팀(조직) 단위 발신 메일 도메인 — 관리자 콘솔(/settings/mail-domain)에서 등록·인증한다.
+/// 담당자는 개인 연동 계정 대신 이 도메인 기반 주소(<핸들>@<domain>)로 발신하도록 선택할 수 있다.
+/// - status: PENDING(인증 대기) → VERIFIED(인증됨, 데모는 관리자 수동 확인). VERIFIED 만 담당자가 선택 가능.
+/// - isDefault: 팀 권장 발신 도메인(조직당 1개). 담당자 온보딩 시 안내에 사용.
+model TeamMailDomain {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  domain    String   // 호스트명만 저장 (예: "specflow.ai", @ 제외)
+  label     String?  // 표시용 별칭 (예: "회사 공식 도메인")
+  status    String   @default("PENDING") // PENDING | VERIFIED
+  isDefault Boolean  @default(false)
+  // 팀 도메인 발송 시 참조(CC) 기본 목록 (세미콜론 구분). 등록 시 영업팀 전원으로 자동 채움, 관리자 편집.
+  defaultCc String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]   // 이 도메인을 발신 도메인으로 선택한 담당자들
+
+  @@unique([orgId, domain])
+  @@index([orgId])
+  @@map("team_mail_domains")
+}
+
 /// 이메일 발송 이력 (/sender/:documentId)
 model EmailLog {
   id             String   @id @default(cuid())
@@ -172,6 +204,27 @@ model EmailLog {
 
   @@index([documentId])
   @@map("email_logs")
+}
+
+/// 메일 발송 템플릿 (제목·본문 저장 → 발송 화면·관리 페이지에서 불러오기)
+/// - ownerId 가 null 이면 팀 공용(조직 전체 공유), 값이 있으면 개인 전용이다.
+/// - subject·body 의 {{거래처}}·{{담당자}}·{{문서제목}}·{{문서종류}}·{{총액}} 은 발송 시 현재 문서·담당자 값으로 치환한다.
+model EmailTemplate {
+  id        String       @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  ownerId   String? // null = 팀 공용, 값 있으면 개인 소유자
+  owner     User?        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String
+  subject   String
+  body      String
+  recipientName String? // 기본 담당자명 — 불러오면 발송 폼 담당자명에 자동 입력 + {{담당자}} 치환
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([orgId])
+  @@index([ownerId])
+  @@map("email_templates")
 }
 
 // ======================= 크레딧 & 과금 =======================

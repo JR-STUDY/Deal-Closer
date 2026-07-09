@@ -45,10 +45,14 @@ erDiagram
   Organization ||--|| Branding : has
   Organization ||--|| CreditWallet : has
   Organization ||--o{ CreditTransaction : logs
+  Organization ||--o{ EmailTemplate : has
+  Organization ||--o{ TeamMailDomain : has
   User ||--o{ Document : authors
   User ||--o{ EmailAccount : connects
   User ||--o{ EmailLog : sends
+  User ||--o{ EmailTemplate : owns
   User ||--o{ GenerationRequest : requests
+  TeamMailDomain ||--o{ User : sends_as
   Document ||--o{ DocumentItem : contains
   Document ||--o{ EmailLog : sent_via
   Document ||--o| GenerationRequest : produced_by
@@ -57,13 +61,15 @@ erDiagram
 | 모델 | 역할 |
 |---|---|
 | `Organization` | 팀/회사. 모든 데이터의 최상위 소유자 |
-| `User` | 사용자. `role` = SALES_REP · LEADER · ADMIN |
+| `User` | 사용자. `role` = SALES_REP · LEADER · ADMIN · `signature`(메일 서명) · `mailDomainId`(선택한 팀 발신 도메인, null=개인 계정) |
 | `Invite` | 팀원 초대 (PENDING/ACCEPTED/EXPIRED) |
 | `Document` | 영업 문서. `type`(QUOTE/CONTRACT/NDA/PROPOSAL) · `status`(DRAFT/SENT/COMPLETED/VOID) · `amount`(KRW 정수) |
 | `DocumentItem` | 문서 라인 아이템 (수량·단가·금액) |
 | `CatalogItem` | 마스터 데이터(상품/서비스 카탈로그) |
 | `EmailAccount` | Gmail/Outlook 연동 계정 |
 | `EmailLog` | 이메일 발송 이력 |
+| `EmailTemplate` | 메일 발송 템플릿(제목·본문·`recipientName` 기본 담당자명). `ownerId=null`=팀 공용, 값 있으면 개인 |
+| `TeamMailDomain` | 팀(조직) 발신 메일 도메인. 관리자가 등록·인증(`status`)·기본 참조(`defaultCc`) 지정, 담당자가 발신 주소로 선택 |
 | `CreditWallet` / `CreditTransaction` | 조직 크레딧 잔액 / 충전·사용 내역 |
 | `GenerationRequest` | AI 문서 생성 요청 이력 |
 | `Branding` | 조직 브랜딩(회사명·로고·색상) |

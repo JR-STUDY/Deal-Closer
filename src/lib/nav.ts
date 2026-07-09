@@ -4,11 +4,13 @@ import {
   Sparkles,
   FolderClosed,
   Mail,
+  MailPlus,
   BarChart3,
   Users,
   Package,
   CreditCard,
   Palette,
+  AtSign,
   UserCog,
 } from "lucide-react";
 
@@ -24,6 +26,7 @@ export const userNav: NavItem[] = [
   { href: "/generator", label: "새 문서 생성", icon: Sparkles },
   { href: "/library", label: "문서 보관함", icon: FolderClosed },
   { href: "/settings/email", label: "메일 연동", icon: Mail },
+  { href: "/settings/templates", label: "메일 템플릿", icon: MailPlus },
 ];
 
 /** 관리자 콘솔 (admin-web) 네비게이션 */
@@ -33,5 +36,6 @@ export const adminNav: NavItem[] = [
   { href: "/catalog", label: "마스터 데이터", icon: Package },
   { href: "/billing", label: "요금·크레딧", icon: CreditCard },
   { href: "/settings/branding", label: "브랜딩 설정", icon: Palette },
+  { href: "/settings/mail-domain", label: "메일 도메인", icon: AtSign },
   { href: "/account/profile", label: "프로필 설정", icon: UserCog },
 ];

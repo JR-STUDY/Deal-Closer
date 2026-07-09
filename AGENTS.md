@@ -75,6 +75,7 @@ src/
   components/
     ui/                # shadcn/ui (직접 수정 지양, CLI 로 관리)
     account/           # 프로필/계정 공용 폼 (profile-form·password-form, user·admin 공유)
+    email-template/    # 메일 템플릿 공용 폼 다이얼로그 (관리 페이지·발송폼 재사용)
     app-sidebar.tsx    # 공용 사이드바
     page-header.tsx    # 공용 페이지 헤더
     status-badge.tsx   # 문서 상태/종류 배지
@@ -84,6 +85,9 @@ src/
     constants.ts       # enum 대체 상수 + 라벨
     format.ts          # 통화/날짜 포맷
     api.ts             # API 응답 헬퍼(ok/fail)
+    email-template.ts  # 메일 템플릿 치환 변수·검증·DTO
+    signature.ts       # 메일 서명 HTML 판별·미리보기 문서·검증
+    mail-domain.ts     # 팀 발신 도메인 검증·팀 주소 조합·발신 신원 해석
   generated/prisma/    # Prisma Client (자동 생성, 커밋 안 함)
 ```
 
