@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreVertical, FolderInput, Users, UserMinus } from "lucide-react";
+import { MoreVertical, FolderInput, Users, UserMinus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -49,6 +49,7 @@ export function DocumentCardActions({
 }: Props) {
   const router = useRouter();
   const [moveOpen, setMoveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [target, setTarget] = useState<string>(currentFolderId ?? UNFILED);
   const [busy, setBusy] = useState(false);
 
@@ -70,6 +71,24 @@ export function DocumentCardActions({
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "이동에 실패했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/documents/${documentId}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "삭제에 실패했습니다.");
+      toast.success("문서를 삭제했습니다.");
+      setDeleteOpen(false);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "삭제에 실패했습니다.");
     } finally {
       setBusy(false);
     }
@@ -129,6 +148,13 @@ export function DocumentCardActions({
               </>
             )}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="size-4" />
+            삭제
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -169,6 +195,30 @@ export function DocumentCardActions({
             </Button>
             <Button onClick={move} disabled={busy}>
               이동
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>문서 삭제</DialogTitle>
+            <DialogDescription className="line-clamp-2">
+              &lsquo;{documentTitle}&rsquo; 문서를 삭제할까요? 삭제한 문서는 복구할
+              수 없습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={busy}
+            >
+              취소
+            </Button>
+            <Button variant="destructive" onClick={remove} disabled={busy}>
+              삭제
             </Button>
           </DialogFooter>
         </DialogContent>

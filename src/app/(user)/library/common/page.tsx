@@ -1,13 +1,10 @@
 import Link from "next/link";
-import { Sparkles, Mail, Pencil, Users } from "lucide-react";
+import { Sparkles, Users } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
-import { formatKRW, formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge, DocTypeBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { DocumentCardActions } from "../_components/document-card-actions";
+import { DocumentList } from "../_components/document-list";
 
 export default async function CommonDocumentsPage() {
   const org = await getCurrentOrg();
@@ -16,7 +13,6 @@ export default async function CommonDocumentsPage() {
     prisma.document.findMany({
       where: { orgId: org.id, isCommon: true, status: { not: "VOID" } },
       orderBy: { createdAt: "desc" },
-      include: { author: true },
     }),
     prisma.folder.findMany({
       where: { orgId: org.id },
@@ -52,59 +48,7 @@ export default async function CommonDocumentsPage() {
             </Button>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {documents.map((doc) => (
-              <Card key={doc.id} className="flex flex-col">
-                <CardContent className="flex-1 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <StatusBadge status={doc.status} />
-                    <div className="flex items-center gap-1">
-                      <DocTypeBadge type={doc.type} />
-                      <DocumentCardActions
-                        documentId={doc.id}
-                        documentTitle={doc.title}
-                        currentFolderId={doc.folderId}
-                        isCommon={doc.isCommon}
-                        folders={folders}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="line-clamp-2 font-semibold leading-snug">
-                      {doc.title}
-                    </h3>
-                    {doc.clientName ? (
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {doc.clientName}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex items-baseline justify-between pt-1">
-                    <span className="text-lg font-semibold tabular-nums">
-                      {formatKRW(doc.amount)}
-                    </span>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {formatDateTime(doc.createdAt)}
-                    </span>
-                  </div>
-                </CardContent>
-                <CardFooter className="gap-2 border-t">
-                  <Button asChild variant="outline" size="sm" className="flex-1">
-                    <Link href={`/editor/${doc.id}`}>
-                      <Pencil className="size-3.5" />
-                      편집
-                    </Link>
-                  </Button>
-                  <Button asChild variant="outline" size="sm" className="flex-1">
-                    <Link href={`/sender/${doc.id}`}>
-                      <Mail className="size-3.5" />
-                      발송
-                    </Link>
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
+          <DocumentList documents={documents} folders={folders} />
         )}
       </div>
     </>
