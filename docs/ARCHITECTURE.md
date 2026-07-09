@@ -32,7 +32,7 @@ Next.js App Router (src/app)
 | `(admin)` | 사이드바(관리자 콘솔) | 관리자 화면 |
 | `(auth)` | 중앙 정렬(사이드바 없음) | 로그인 등 |
 
-라우트 그룹 `()` 은 URL 에 노출되지 않으므로, `/settings/email`(user)과 `/settings/branding`(admin)처럼 최종 경로만 겹치지 않으면 서로 다른 레이아웃을 가질 수 있다.
+라우트 그룹 `()` 은 URL 에 노출되지 않으므로, `/settings/email`(user)과 `/settings/branding`(admin)처럼 최종 경로만 겹치지 않으면 서로 다른 레이아웃을 가질 수 있다. 반대로 최종 경로가 같으면 그룹이 달라도 충돌한다 — 그래서 프로필 설정은 영업 포털 `/settings/profile`, 관리자 콘솔 `/account/profile` 로 경로를 분리했다.
 
 ## 도메인 모델
 

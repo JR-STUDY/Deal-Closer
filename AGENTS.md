@@ -74,6 +74,7 @@ src/
     page.tsx           # 랜딩 (콘솔 진입)
   components/
     ui/                # shadcn/ui (직접 수정 지양, CLI 로 관리)
+    account/           # 프로필/계정 공용 폼 (profile-form·password-form, user·admin 공유)
     app-sidebar.tsx    # 공용 사이드바
     page-header.tsx    # 공용 페이지 헤더
     status-badge.tsx   # 문서 상태/종류 배지
