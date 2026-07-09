@@ -1,8 +1,16 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Pencil, Mail } from "lucide-react";
+import {
+  Pencil,
+  Mail,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUpDown,
+} from "lucide-react";
 import { formatKRW, formatDateTime } from "@/lib/format";
+import { DOCUMENT_TYPES, DOCUMENT_STATUSES } from "@/lib/constants";
 import { StatusBadge, DocTypeBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -14,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { DocumentCardActions } from "./document-card-actions";
 
 export type DocRow = {
@@ -32,6 +41,51 @@ type FolderOption = { id: string; name: string };
 
 type View = "card" | "list";
 
+type SortKey = "title" | "type" | "status" | "amount" | "createdAt";
+type Sort = { key: SortKey; dir: "asc" | "desc" };
+
+/** 정렬 가능한 목록 헤더 — 클릭할 때마다 오름차순 ↔ 내림차순 토글 */
+function SortHeader({
+  label,
+  sortKey,
+  sort,
+  onToggle,
+  align,
+}: {
+  label: string;
+  sortKey: SortKey;
+  sort: Sort | null;
+  onToggle: (key: SortKey) => void;
+  align?: "right";
+}) {
+  const active = sort?.key === sortKey;
+  return (
+    <TableHead className={align === "right" ? "text-right" : undefined}>
+      <button
+        type="button"
+        onClick={() => onToggle(sortKey)}
+        aria-label={`${label} 기준 정렬`}
+        className={cn(
+          "inline-flex items-center gap-1 transition-colors hover:text-foreground",
+          align === "right" && "flex-row-reverse",
+          active ? "font-medium text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {label}
+        {active ? (
+          sort!.dir === "asc" ? (
+            <ArrowUp className="size-3.5" />
+          ) : (
+            <ArrowDown className="size-3.5" />
+          )
+        ) : (
+          <ChevronsUpDown className="size-3.5 opacity-40" />
+        )}
+      </button>
+    </TableHead>
+  );
+}
+
 export function DocumentList({
   documents,
   folders,
@@ -41,6 +95,39 @@ export function DocumentList({
   folders: FolderOption[];
   view?: View;
 }) {
+  const [sort, setSort] = useState<Sort | null>(null);
+
+  function toggleSort(key: SortKey) {
+    setSort((prev) =>
+      !prev || prev.key !== key
+        ? { key, dir: "asc" }
+        : { key, dir: prev.dir === "asc" ? "desc" : "asc" },
+    );
+  }
+
+  // 목록 보기 정렬 (카드 보기는 서버 기본 정렬 유지)
+  const rows = useMemo(() => {
+    if (!sort) return documents;
+    const dir = sort.dir === "asc" ? 1 : -1;
+    const types = DOCUMENT_TYPES as readonly string[];
+    const statuses = DOCUMENT_STATUSES as readonly string[];
+    const cmp = (a: DocRow, b: DocRow): number => {
+      switch (sort.key) {
+        case "title":
+          return a.title.localeCompare(b.title, "ko");
+        case "type":
+          return types.indexOf(a.type) - types.indexOf(b.type);
+        case "status":
+          return statuses.indexOf(a.status) - statuses.indexOf(b.status);
+        case "amount":
+          return a.amount - b.amount;
+        case "createdAt":
+          return a.createdAt.getTime() - b.createdAt.getTime();
+      }
+    };
+    return [...documents].sort((a, b) => dir * cmp(a, b));
+  }, [documents, sort]);
+
   return (
     <div className="space-y-4">
       {view === "card" ? (
@@ -104,16 +191,16 @@ export function DocumentList({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>제목</TableHead>
-                <TableHead>종류</TableHead>
-                <TableHead>상태</TableHead>
-                <TableHead className="text-right">금액</TableHead>
-                <TableHead className="text-right">작성일</TableHead>
+                <SortHeader label="제목" sortKey="title" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="종류" sortKey="type" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="상태" sortKey="status" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="금액" sortKey="amount" sort={sort} onToggle={toggleSort} align="right" />
+                <SortHeader label="작성일" sortKey="createdAt" sort={sort} onToggle={toggleSort} align="right" />
                 <TableHead className="w-20 text-right">관리</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {documents.map((doc) => (
+              {rows.map((doc) => (
                 <TableRow key={doc.id}>
                   <TableCell className="max-w-xs">
                     <Link
