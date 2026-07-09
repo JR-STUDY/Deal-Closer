@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type {
@@ -37,16 +37,19 @@ import { EditorSidebar } from "./editor-sidebar";
 import { EditorToolbar } from "./editor-toolbar";
 import { EditorPreview } from "./editor-preview";
 import { BlockInspector } from "./block-inspector";
+import { DocumentStatusControl } from "./document-status-control";
 
 type Props = {
   documentId: string;
   initialTitle: string;
+  initialStatus: string;
   initialDoc: EditorDoc;
 };
 
 export function DocumentEditor({
   documentId,
   initialTitle,
+  initialStatus,
   initialDoc,
 }: Props) {
   const [doc, setDoc] = useState<EditorDoc>(initialDoc);
@@ -66,6 +69,8 @@ export function DocumentEditor({
   } | null>(null);
   const [nameValue, setNameValue] = useState("");
   const [catalog, setCatalog] = useState<CatalogOption[]>([]);
+  // 팔레트로 블록 추가 시 놓을 y (현재 보이는 화면 기준) — editor-canvas 스크롤에서 갱신
+  const addYRef = useRef(40);
   // 에디터는 ssr:false(클라이언트 전용)라 초기화 시 localStorage 를 안전하게 읽는다 (#3)
   const [customBlocks, setCustomBlocks] = useState<CustomBlock[]>(() =>
     getCustomBlocks(),
@@ -102,7 +107,8 @@ export function DocumentEditor({
 
   const handleAdd = useCallback(
     (type: BlockType, pos?: { x: number; y: number }) => {
-      const block = createBlock(type, pos);
+      // 팔레트 클릭 추가는 현재 보이는 화면 기준 위치에 놓는다
+      const block = createBlock(type, pos ?? { x: 40, y: addYRef.current });
       setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
       setSelectedId(block.id);
       setSidebarTab("inspector");
@@ -424,13 +430,19 @@ export function DocumentEditor({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex flex-col gap-2 border-b bg-background px-4 py-2">
-          <Input
-            value={docTitle}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            aria-label="문서 제목"
-            placeholder="문서 제목"
-            className="w-full max-w-md font-medium"
-          />
+          <div className="flex items-center gap-3">
+            <Input
+              value={docTitle}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              aria-label="문서 제목"
+              placeholder="문서 제목"
+              className="h-auto min-w-0 flex-1 border-transparent bg-transparent px-2 py-1 text-xl font-semibold tracking-tight shadow-none hover:border-input focus-visible:border-input"
+            />
+            <DocumentStatusControl
+              documentId={documentId}
+              status={initialStatus}
+            />
+          </div>
           <EditorToolbar
             documentId={documentId}
             dirty={dirty}
@@ -451,6 +463,9 @@ export function DocumentEditor({
           onRemove={handleRemove}
           onZOrder={handleZOrder}
           onEdit={handleEditBlock}
+          onViewTop={(y) => {
+            addYRef.current = y;
+          }}
         />
       </div>
       <EditorSidebar

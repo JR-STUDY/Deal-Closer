@@ -16,6 +16,7 @@ type Props = {
   onRemove: (id: string) => void;
   onZOrder: (id: string, action: ZOrderAction) => void;
   onEdit: (id: string) => void;
+  onViewTop: (y: number) => void;
 };
 
 const SNAP_GAP = 6; // 정렬 가이드/스냅 허용 오차(px)
@@ -29,9 +30,16 @@ export function EditorCanvas({
   onRemove,
   onZOrder,
   onEdit,
+  onViewTop,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const onScroll = useAutoHideScroll();
+  const autoHide = useAutoHideScroll();
+
+  function handleScroll(e: React.UIEvent<HTMLDivElement>) {
+    autoHide(e);
+    // p-8(32px) 만큼 캔버스가 안쪽에 있으므로 보정해 현재 뷰 상단 + 여백 위치를 보고
+    onViewTop(Math.max(0, e.currentTarget.scrollTop - 32 + 40));
+  }
   const pages = pageCount(doc);
   const pageH = doc.canvas.h;
   const totalH = pageH * pages;
@@ -92,7 +100,7 @@ export function EditorCanvas({
   return (
     <div
       className="overlay-scroll flex min-h-0 flex-1 justify-center overflow-auto bg-muted/40 p-8"
-      onScroll={onScroll}
+      onScroll={handleScroll}
     >
       <div
         ref={ref}

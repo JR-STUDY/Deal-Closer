@@ -1,10 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
-import { PageHeader } from "@/components/page-header";
 import { parseContentJson, seedTemplate } from "@/lib/editor-schema";
 import { DocumentEditorLoader } from "./_components/document-editor-loader";
-import { DocumentStatusControl } from "./_components/document-status-control";
 
 export default async function EditorPage({
   params,
@@ -36,21 +34,11 @@ export default async function EditorPage({
     });
 
   return (
-    <>
-      <PageHeader
-        title={document.title}
-        actions={
-          <DocumentStatusControl
-            documentId={document.id}
-            status={document.status}
-          />
-        }
-      />
-      <DocumentEditorLoader
-        documentId={document.id}
-        initialTitle={document.title}
-        initialDoc={initialDoc}
-      />
-    </>
+    <DocumentEditorLoader
+      documentId={document.id}
+      initialTitle={document.title}
+      initialStatus={document.status}
+      initialDoc={initialDoc}
+    />
   );
 }

@@ -20,6 +20,7 @@ const DocumentEditor = dynamic(
 export function DocumentEditorLoader(props: {
   documentId: string;
   initialTitle: string;
+  initialStatus: string;
   initialDoc: EditorDoc;
 }) {
   return <DocumentEditor {...props} />;
