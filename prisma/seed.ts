@@ -1,0 +1,502 @@
+import "dotenv/config";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaClient } from "../src/generated/prisma/client";
+
+const adapter = new PrismaBetterSqlite3({
+  url: process.env.DATABASE_URL ?? "file:./dev.db",
+});
+const prisma = new PrismaClient({ adapter });
+
+/** 기획서 정책 라이브러리 24개 (코드 기준, description 은 정책 취지 반영) */
+const POLICIES: { code: string; description: string }[] = [
+  {
+    code: "STATE_BACK_NAV_CONFIRM",
+    description:
+      "문서 편집 중 저장하지 않고 뒤로 가기나 이탈을 시도할 경우, 변경 사항 유실에 대한 경고 컨펌창을 반드시 노출합니다. 모달이나 미리보기 창의 경우 배경 클릭 시 닫기 처리를 원칙으로 합니다.",
+  },
+  {
+    code: "ACC_CONTRAST_RATIO",
+    description:
+      "모든 텍스트와 배경은 WCAG AA 기준(일반 텍스트 4.5:1, 큰 텍스트 3:1) 이상의 명도 대비를 확보합니다.",
+  },
+  {
+    code: "legal-marketing",
+    description:
+      "마케팅 정보 수신은 명시적 옵트인을 받으며, 수신 동의·철회 이력을 보관합니다.",
+  },
+  {
+    code: "AUTH_LEADER_ACCESS",
+    description:
+      "팀 리더는 소속 팀원의 문서와 실적을 조회할 수 있으나 조직 전체 설정은 변경할 수 없습니다.",
+  },
+  {
+    code: "VAL_DOC_CALCULATION",
+    description:
+      "문서 내 금액은 수량 × 단가 합계와 부가세를 서버에서 재계산해 검증하며, 클라이언트 계산값을 신뢰하지 않습니다.",
+  },
+  {
+    code: "AUTH_OAUTH_INTEGRATION",
+    description:
+      "Gmail·Outlook 연동은 OAuth 2.0 을 사용하며, 토큰은 암호화 저장하고 최소 권한 스코프만 요청합니다.",
+  },
+  {
+    code: "VAL_CATALOG_EXCEL_UPLOAD",
+    description:
+      "카탈로그 엑셀 업로드는 지정 템플릿 형식만 허용하며, 행 단위 검증 후 오류 행을 리포트합니다.",
+  },
+  {
+    code: "legal-terms",
+    description:
+      "서비스 이용약관 동의는 회원가입 시 필수이며, 개정 시 사전 고지 후 재동의를 받습니다.",
+  },
+  {
+    code: "AUTH_SALES_REP_ACCESS",
+    description: "영업 담당자는 본인이 생성한 문서에만 접근·수정할 수 있습니다.",
+  },
+  {
+    code: "legal-refund",
+    description:
+      "유료 크레딧 환불은 관련 법령과 환불 정책에 따라 미사용분을 기준으로 처리합니다.",
+  },
+  {
+    code: "STATE_EMPTY_DASHBOARD",
+    description:
+      "대시보드에 표시할 데이터가 없을 경우, 첫 문서 생성으로 유도하는 빈 상태 화면을 노출합니다.",
+  },
+  {
+    code: "FORM_PERCENTAGE",
+    description:
+      "할인율·부가세율 등 백분율 입력은 0~100 범위로 제한하고 소수점 둘째 자리까지 허용합니다.",
+  },
+  {
+    code: "legal-accessibility",
+    description:
+      "서비스는 웹 접근성 지침(KWCAG·WCAG)을 준수하며 접근성 안내 페이지를 제공합니다.",
+  },
+  {
+    code: "STATE_SESSION_RECOVERY",
+    description:
+      "세션 만료·비정상 종료 시 작성 중이던 내용을 임시 저장본으로 복구할 수 있도록 안내합니다.",
+  },
+  {
+    code: "FORM_DATE_TIME",
+    description:
+      "날짜·시간은 사용자 로컬 타임존 기준으로 표시하고 저장은 UTC(ISO 8601)로 통일합니다.",
+  },
+  {
+    code: "VAL_EMAIL_RECIPIENT",
+    description:
+      "수신자 이메일은 형식 검증을 거치며, 세미콜론(;)으로 다중 입력을 지원합니다.",
+  },
+  {
+    code: "FORM_CURRENCY_KRW",
+    description:
+      "금액은 원(KRW) 단위 정수로 저장하고, 천 단위 구분 기호와 '₩' 기호로 표시합니다.",
+  },
+  {
+    code: "COPY-TONE",
+    description:
+      "UI 문구는 정중하고 간결한 존댓말을 사용하며 전문 용어는 최소화합니다.",
+  },
+  {
+    code: "ACC_TOUCH_TARGET",
+    description:
+      "터치 대상은 최소 44×44px 이상을 확보하여 모바일 조작성을 보장합니다.",
+  },
+  {
+    code: "legal-privacy",
+    description:
+      "개인정보는 개인정보처리방침에 따라 수집·이용하며 목적 달성 후 지체 없이 파기합니다.",
+  },
+  {
+    code: "STATE_OFFLINE_GUIDANCE",
+    description:
+      "네트워크 오프라인 상태에서는 전용 안내 화면과 재시도 동작을 제공합니다.",
+  },
+  {
+    code: "AUTH_ADMIN_ACCESS",
+    description:
+      "관리자는 조직 설정·팀원·카탈로그·과금 등 관리 기능 전체에 접근할 수 있습니다.",
+  },
+  {
+    code: "legal-deletion-kr",
+    description:
+      "이용자는 계정·데이터 삭제를 요청할 수 있으며, 국내 법령에 따라 처리 후 결과를 통지합니다.",
+  },
+  {
+    code: "AUTH_SHARED_ROLE_ROUTING",
+    description:
+      "로그인 후 역할(영업·리더·관리자)에 따라 진입 화면과 접근 가능한 라우트를 분기합니다.",
+  },
+];
+
+async function main() {
+  console.log("🌱 seeding 시작...");
+
+  // 1) 초기화 (FK 역순 삭제)
+  await prisma.emailLog.deleteMany();
+  await prisma.generationRequest.deleteMany();
+  await prisma.documentItem.deleteMany();
+  await prisma.document.deleteMany();
+  await prisma.emailAccount.deleteMany();
+  await prisma.catalogItem.deleteMany();
+  await prisma.creditTransaction.deleteMany();
+  await prisma.creditWallet.deleteMany();
+  await prisma.invite.deleteMany();
+  await prisma.branding.deleteMany();
+  await prisma.user.deleteMany();
+  await prisma.organization.deleteMany();
+  await prisma.policy.deleteMany();
+
+  // 2) 조직
+  const org = await prisma.organization.create({
+    data: { name: "SpecFlow Demo", slug: "specflow-demo" },
+  });
+
+  // 3) 브랜딩
+  await prisma.branding.create({
+    data: {
+      orgId: org.id,
+      companyName: "SpecFlow AI",
+      primaryColor: "#4F46E5",
+    },
+  });
+
+  // 4) 사용자
+  await prisma.user.create({
+    data: {
+      orgId: org.id,
+      email: "admin@specflow.ai",
+      name: "김관리",
+      role: "ADMIN",
+    },
+  });
+  const leader = await prisma.user.create({
+    data: {
+      orgId: org.id,
+      email: "leader@specflow.ai",
+      name: "박리더",
+      role: "LEADER",
+    },
+  });
+  const rep = await prisma.user.create({
+    data: {
+      orgId: org.id,
+      email: "kildong.hong@specflow.ai",
+      name: "홍길동",
+      role: "SALES_REP",
+    },
+  });
+
+  // 5) 크레딧 지갑 + 거래 내역 (기획서: 150 Credits)
+  await prisma.creditWallet.create({
+    data: { orgId: org.id, balance: 150 },
+  });
+  await prisma.creditTransaction.createMany({
+    data: [
+      {
+        orgId: org.id,
+        amount: 200,
+        type: "CHARGE",
+        reason: "초기 프로모션 크레딧 지급",
+      },
+      {
+        orgId: org.id,
+        amount: -10,
+        type: "USAGE",
+        reason: "AI 견적서 생성 (에이비씨 테크놀로지)",
+      },
+      {
+        orgId: org.id,
+        amount: -10,
+        type: "USAGE",
+        reason: "AI 계약서 생성 (글로벌 커머스)",
+      },
+      {
+        orgId: org.id,
+        amount: -30,
+        type: "USAGE",
+        reason: "AI 문서 생성 5건",
+      },
+    ],
+  });
+
+  // 6) 카탈로그(마스터 데이터)
+  await prisma.catalogItem.createMany({
+    data: [
+      {
+        orgId: org.id,
+        category: "인프라",
+        name: "클라우드 서버 인스턴스 (Standard)",
+        sku: "INF-STD",
+        unit: "대/월",
+        unitPrice: 150_000,
+        description: "vCPU 2 / RAM 4GB 표준 인스턴스",
+      },
+      {
+        orgId: org.id,
+        category: "인프라",
+        name: "클라우드 서버 인스턴스 (High-CPU)",
+        sku: "INF-HCPU",
+        unit: "대/월",
+        unitPrice: 300_000,
+        description: "vCPU 8 / RAM 16GB 고성능 인스턴스",
+      },
+      {
+        orgId: org.id,
+        category: "인프라",
+        name: "블록 스토리지 100GB",
+        sku: "INF-STG",
+        unit: "GB/월",
+        unitPrice: 200,
+      },
+      {
+        orgId: org.id,
+        category: "서비스",
+        name: "시스템 구축 및 셋업",
+        sku: "SVC-SETUP",
+        unit: "식",
+        unitPrice: 15_000_000,
+      },
+      {
+        orgId: org.id,
+        category: "서비스",
+        name: "아키텍처 컨설팅",
+        sku: "SVC-CONSULT",
+        unit: "인/일",
+        unitPrice: 800_000,
+      },
+      {
+        orgId: org.id,
+        category: "서비스",
+        name: "연간 유지보수",
+        sku: "SVC-MAINT",
+        unit: "년",
+        unitPrice: 7_000_000,
+      },
+      {
+        orgId: org.id,
+        category: "라이선스",
+        name: "모니터링 SW 라이선스",
+        sku: "LIC-MON",
+        unit: "연",
+        unitPrice: 2_400_000,
+      },
+    ],
+  });
+
+  // 7) 메일 연동 계정 (기획서: sales-pro@gmail.com 연결됨·기본)
+  await prisma.emailAccount.create({
+    data: {
+      userId: rep.id,
+      provider: "GMAIL",
+      email: "sales-pro@gmail.com",
+      isDefault: true,
+      status: "CONNECTED",
+    },
+  });
+
+  // 8) 문서 (기획서 라이브러리 예시 반영)
+  // 8-1) 대표 견적서 — 라인 아이템 포함, 합계 24,500,000
+  const abcQuote = await prisma.document.create({
+    data: {
+      orgId: org.id,
+      authorId: rep.id,
+      title: "(주)에이비씨 테크놀로지 시스템 구축 견적서",
+      type: "QUOTE",
+      status: "DRAFT",
+      clientName: "(주)에이비씨 테크놀로지",
+      amount: 24_500_000,
+      createdAt: new Date("2024-05-23T14:30:00+09:00"),
+      items: {
+        create: [
+          {
+            name: "시스템 구축 및 셋업",
+            description: "요건 분석·설계·구축 일괄",
+            quantity: 1,
+            unitPrice: 15_000_000,
+            amount: 15_000_000,
+            sortOrder: 0,
+          },
+          {
+            name: "클라우드 서버 인스턴스 (High-CPU)",
+            description: "고성능 인스턴스 5대",
+            quantity: 5,
+            unitPrice: 500_000,
+            amount: 2_500_000,
+            sortOrder: 1,
+          },
+          {
+            name: "연간 유지보수",
+            description: "1년 유지보수 계약",
+            quantity: 1,
+            unitPrice: 7_000_000,
+            amount: 7_000_000,
+            sortOrder: 2,
+          },
+        ],
+      },
+    },
+  });
+
+  const globalContract = await prisma.document.create({
+    data: {
+      orgId: org.id,
+      authorId: rep.id,
+      title: "글로벌 커머스 플랫폼 고도화 계약서",
+      type: "CONTRACT",
+      status: "SENT",
+      clientName: "글로벌커머스(주)",
+      amount: 112_000_000,
+      createdAt: new Date("2024-05-21T09:15:00+09:00"),
+    },
+  });
+
+  await prisma.document.create({
+    data: {
+      orgId: org.id,
+      authorId: leader.id,
+      title: "스타트업 클라우드 아키텍처 컨설팅 문서",
+      type: "PROPOSAL",
+      status: "COMPLETED",
+      clientName: "스타트업클라우드",
+      amount: 8_800_000,
+      createdAt: new Date("2024-05-18T16:45:00+09:00"),
+    },
+  });
+
+  await prisma.document.create({
+    data: {
+      orgId: org.id,
+      authorId: rep.id,
+      title: "삭제 예정 문서 테스트 케이스 01",
+      type: "QUOTE",
+      status: "DRAFT",
+      amount: 0,
+      createdAt: new Date("2024-05-23T10:00:00+09:00"),
+    },
+  });
+
+  await prisma.document.createMany({
+    data: [
+      {
+        orgId: org.id,
+        authorId: rep.id,
+        title: "비케이테크 표준 비밀유지계약서(NDA)",
+        type: "NDA",
+        status: "SENT",
+        clientName: "비케이테크",
+        amount: 0,
+        createdAt: new Date("2024-05-20T11:00:00+09:00"),
+      },
+      {
+        orgId: org.id,
+        authorId: rep.id,
+        title: "데이터코리아 유지보수 수량 증설 변경합의서",
+        type: "CONTRACT",
+        status: "DRAFT",
+        clientName: "데이터코리아",
+        amount: 3_600_000,
+        createdAt: new Date("2024-05-22T15:20:00+09:00"),
+      },
+      {
+        orgId: org.id,
+        authorId: leader.id,
+        title: "메가시스템 통합 구축 견적서",
+        type: "QUOTE",
+        status: "COMPLETED",
+        clientName: "메가시스템",
+        amount: 45_000_000,
+        createdAt: new Date("2024-05-15T13:10:00+09:00"),
+      },
+      {
+        orgId: org.id,
+        authorId: rep.id,
+        title: "핀테크랩 결제 시스템 구축 제안서",
+        type: "PROPOSAL",
+        status: "SENT",
+        clientName: "핀테크랩",
+        amount: 30_000_000,
+        createdAt: new Date("2024-05-19T10:40:00+09:00"),
+      },
+    ],
+  });
+
+  // 9) 발송 이력 (SENT 문서)
+  await prisma.emailLog.create({
+    data: {
+      documentId: globalContract.id,
+      senderId: rep.id,
+      recipients: "purchasing@globalcommerce.co.kr; cto@globalcommerce.co.kr",
+      subject: "[계약서] 글로벌 커머스 플랫폼 고도화 계약서 송부",
+      body: "안녕하세요, SpecFlow AI를 통해 생성된 계약서를 전달드립니다. 검토 후 회신 부탁드립니다.",
+      attachmentName: "2024_글로벌커머스_고도화계약서.pdf",
+      status: "SENT",
+      sentAt: new Date("2024-05-21T09:20:00+09:00"),
+    },
+  });
+
+  // 10) AI 생성 요청 이력 (대표 견적서와 연결)
+  await prisma.generationRequest.create({
+    data: {
+      userId: rep.id,
+      prompt:
+        "A사에 서버 인스턴스 5대와 유지보수 1년 포함한 견적서 작성해줘",
+      status: "DONE",
+      creditsUsed: 10,
+      documentId: abcQuote.id,
+      createdAt: new Date("2024-05-23T14:28:00+09:00"),
+    },
+  });
+
+  // 11) 팀원 초대 (대기 중)
+  await prisma.invite.createMany({
+    data: [
+      {
+        orgId: org.id,
+        email: "newbie@specflow.ai",
+        role: "SALES_REP",
+        status: "PENDING",
+      },
+      {
+        orgId: org.id,
+        email: "manager@specflow.ai",
+        role: "LEADER",
+        status: "PENDING",
+      },
+    ],
+  });
+
+  // 12) 정책 라이브러리 24개
+  await prisma.policy.createMany({
+    data: POLICIES.map((p) => ({
+      code: p.code,
+      scope: "project",
+      description: p.description,
+    })),
+  });
+
+  // 요약 출력
+  const counts = {
+    조직: await prisma.organization.count(),
+    사용자: await prisma.user.count(),
+    문서: await prisma.document.count(),
+    문서항목: await prisma.documentItem.count(),
+    카탈로그: await prisma.catalogItem.count(),
+    메일계정: await prisma.emailAccount.count(),
+    발송이력: await prisma.emailLog.count(),
+    크레딧거래: await prisma.creditTransaction.count(),
+    초대: await prisma.invite.count(),
+    정책: await prisma.policy.count(),
+  };
+  console.log("✅ seeding 완료:", counts);
+}
+
+main()
+  .catch((e) => {
+    console.error("❌ seeding 실패:", e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
