@@ -119,8 +119,8 @@ export default async function LibraryPage({
   return (
     <>
       <PageHeader
-        title="문서 보관함"
-        description="폴더로 문서를 분류하고, 자주 쓰는 문서는 베이스 템플릿으로 관리하세요."
+        title="내 문서함"
+        description="폴더로 문서를 분류하고 검색·필터로 빠르게 찾아보세요."
         actions={
           <Button asChild>
             <Link href="/generator">

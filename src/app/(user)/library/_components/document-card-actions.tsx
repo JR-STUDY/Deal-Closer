@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreVertical, FolderInput, Users, UserMinus, Trash2 } from "lucide-react";
+import { MoreVertical, FolderInput, Users, User, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -104,7 +104,9 @@ export function DocumentCardActions({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "요청에 실패했습니다.");
       toast.success(
-        isCommon ? "공통 문서에서 제외했습니다." : "공통 문서로 지정했습니다.",
+        isCommon
+          ? "내 문서함으로 옮겼습니다."
+          : "공용문서함으로 옮겼습니다.",
       );
       router.refresh();
     } catch (e) {
@@ -138,13 +140,13 @@ export function DocumentCardActions({
           <DropdownMenuItem onClick={toggleCommon}>
             {isCommon ? (
               <>
-                <UserMinus className="size-4" />
-                공통 문서에서 제외
+                <User className="size-4" />
+                내 문서함으로 이동
               </>
             ) : (
               <>
                 <Users className="size-4" />
-                공통 문서로 지정
+                공용문서함으로 이동
               </>
             )}
           </DropdownMenuItem>

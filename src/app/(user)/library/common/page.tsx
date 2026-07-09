@@ -24,8 +24,8 @@ export default async function CommonDocumentsPage() {
   return (
     <>
       <PageHeader
-        title="공통 문서"
-        description="팀이 함께 쓰는 기준 문서입니다. 카드 메뉴의 ‘공통 문서에서 제외’로 일반 문서로 되돌릴 수 있습니다."
+        title="공용문서함"
+        description="팀이 함께 쓰는 기준 문서함입니다. 카드 메뉴의 ‘내 문서함으로 이동’으로 되돌릴 수 있습니다."
         actions={
           <Button asChild>
             <Link href="/generator">
@@ -40,11 +40,11 @@ export default async function CommonDocumentsPage() {
           <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-20 text-center">
             <Users className="size-10 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              아직 공통 문서가 없습니다. 일반 문서의 카드 메뉴에서 ‘공통 문서로
-              지정’해 팀 공용 기준 문서를 모아 보세요.
+              아직 공용문서함에 문서가 없습니다. 내 문서함의 카드 메뉴에서
+              ‘공용문서함으로 이동’해 팀 공용 기준 문서를 모아 보세요.
             </p>
             <Button asChild variant="outline">
-              <Link href="/library">일반 문서로 이동</Link>
+              <Link href="/library">내 문서함으로 이동</Link>
             </Button>
           </div>
         ) : (

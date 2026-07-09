@@ -88,7 +88,7 @@ export function FolderTree({
   }
 
   return (
-    <aside className="w-full space-y-1">
+    <aside className="w-full space-y-1 rounded-lg bg-muted/60 p-2 lg:max-h-[calc(100vh-11rem)] lg:overflow-y-auto">
       <div className="mb-2 flex items-center justify-between px-1">
         <span className="text-xs font-medium text-muted-foreground">폴더</span>
         <Button
@@ -173,8 +173,8 @@ function FixedRow({
       className={cn(
         "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
         active
-          ? "bg-accent font-medium text-accent-foreground"
-          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+          ? "bg-background font-medium text-foreground shadow-sm"
+          : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
       )}
     >
       {icon}
@@ -210,8 +210,8 @@ function FolderRow({
         className={cn(
           "group flex items-center gap-1 rounded-md pr-1 transition-colors",
           active
-            ? "bg-accent text-accent-foreground"
-            : "hover:bg-accent/60",
+            ? "bg-background text-foreground shadow-sm"
+            : "hover:bg-background/70",
         )}
         style={{ paddingLeft: `${depth * 14}px` }}
       >
