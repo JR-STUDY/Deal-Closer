@@ -17,10 +17,30 @@ import {
 } from "@/components/ui/card";
 import { DocumentMetaFields } from "./document-meta-fields";
 import { LineItemsEditor, type EditableItem } from "./line-items-editor";
+import { useUnsavedGuard } from "./use-unsaved-guard";
 
 type EditorClientProps = {
   document: Document & { items: DocumentItem[] };
 };
+
+type ItemLike = {
+  name: string;
+  description: string | null;
+  quantity: number;
+  unitPrice: number;
+};
+
+/** dirty 비교용 라인 항목 직렬화 (key·id 등 표시 전용 필드는 제외) */
+function serializeItems(items: ItemLike[]): string {
+  return JSON.stringify(
+    items.map(({ name, description, quantity, unitPrice }) => ({
+      name,
+      description: description ?? "",
+      quantity,
+      unitPrice,
+    })),
+  );
+}
 
 /**
  * 문서 제목·거래처·종류·라인아이템(또는 총액)을 편집하고 저장하는 웹 에디터.
@@ -53,6 +73,15 @@ export function EditorClient({ document }: EditorClientProps) {
     })),
   );
 
+  // 마지막으로 저장된(=서버 반영된) 스냅샷. 현재 입력값과 비교해 dirty 여부를 판단한다.
+  const [saved, setSaved] = useState(() => ({
+    title: document.title,
+    clientName: document.clientName ?? "",
+    type: document.type,
+    amount: document.amount,
+    items: serializeItems(document.items),
+  }));
+
   // 새 행에 부여할 로컬 키 카운터 (사용자 액션 시점에만 증가)
   const newKeyRef = useRef(0);
 
@@ -64,6 +93,16 @@ export function EditorClient({ document }: EditorClientProps) {
   // 라인 항목이 없고 원래도 없던 문서 → 총액 직접 입력 모드
   const lumpSum = items.length === 0 && !hadItems;
   const total = lumpSum ? amount : itemsTotal;
+
+  // 저장 이후 바뀐 값이 있는지 — 미저장 이탈 경고·표시의 기준
+  const isDirty =
+    title !== saved.title ||
+    clientName !== saved.clientName ||
+    type !== saved.type ||
+    amount !== saved.amount ||
+    serializeItems(items) !== saved.items;
+
+  useUnsavedGuard(isDirty);
 
   const updateItem = <K extends keyof EditableItem>(
     key: string,
@@ -96,7 +135,8 @@ export function EditorClient({ document }: EditorClientProps) {
   };
 
   const handleSave = () => {
-    if (!title.trim()) {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
       toast.error("문서 제목을 입력해주세요.");
       return;
     }
@@ -104,7 +144,7 @@ export function EditorClient({ document }: EditorClientProps) {
     startSaving(async () => {
       try {
         const payload: Record<string, unknown> = {
-          title: title.trim(),
+          title: trimmedTitle,
           clientName,
           type,
         };
@@ -133,6 +173,15 @@ export function EditorClient({ document }: EditorClientProps) {
         });
         if (!res.ok) throw new Error();
 
+        // 저장 성공 → 스냅샷 갱신(제목은 트림값으로 정규화)해 dirty 해제
+        setTitle(trimmedTitle);
+        setSaved({
+          title: trimmedTitle,
+          clientName,
+          type,
+          amount,
+          items: serializeItems(items),
+        });
         toast.success("저장되었습니다.");
         router.refresh();
       } catch {
@@ -196,8 +245,13 @@ export function EditorClient({ document }: EditorClientProps) {
             />
           )}
         </CardContent>
-        <CardFooter className="justify-end">
-          <Button onClick={handleSave} disabled={isSaving}>
+        <CardFooter className="items-center justify-end gap-3">
+          {isDirty ? (
+            <span className="text-xs text-muted-foreground" role="status">
+              저장되지 않은 변경사항이 있습니다
+            </span>
+          ) : null}
+          <Button onClick={handleSave} disabled={isSaving || !isDirty}>
             {isSaving ? "저장 중…" : "저장"}
           </Button>
         </CardFooter>
