@@ -29,9 +29,17 @@ export type DocRow = {
   isCommon: boolean;
 };
 
+type FolderOption = { id: string; name: string };
+
 type View = "card" | "list";
 
-export function DocumentList({ documents }: { documents: DocRow[] }) {
+export function DocumentList({
+  documents,
+  folders,
+}: {
+  documents: DocRow[];
+  folders: FolderOption[];
+}) {
   const [view, setView] = useState<View>("card");
 
   return (
@@ -75,6 +83,8 @@ export function DocumentList({ documents }: { documents: DocRow[] }) {
                       documentId={doc.id}
                       documentTitle={doc.title}
                       isCommon={doc.isCommon}
+                      currentFolderId={doc.folderId}
+                      folders={folders}
                     />
                   </div>
                 </div>
@@ -176,6 +186,8 @@ export function DocumentList({ documents }: { documents: DocRow[] }) {
                         documentId={doc.id}
                         documentTitle={doc.title}
                         isCommon={doc.isCommon}
+                        currentFolderId={doc.folderId}
+                        folders={folders}
                       />
                     </div>
                   </TableCell>

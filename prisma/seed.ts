@@ -408,74 +408,7 @@ async function main() {
     })),
   });
 
-  // 8-4) 문서 분류 폴더 (다단계 트리) — 주요 거래처 / 문서 종류별 / 내부 표준
-  const clientRoot = await prisma.folder.create({
-    data: { orgId: org.id, name: "주요 거래처", sortOrder: 0 },
-  });
-  const folderGlobal = await prisma.folder.create({
-    data: {
-      orgId: org.id,
-      name: "글로벌커머스(주)",
-      parentId: clientRoot.id,
-      sortOrder: 0,
-    },
-  });
-  const folderAbc = await prisma.folder.create({
-    data: {
-      orgId: org.id,
-      name: "(주)에이비씨 테크놀로지",
-      parentId: clientRoot.id,
-      sortOrder: 1,
-    },
-  });
-
-  const typeRoot = await prisma.folder.create({
-    data: { orgId: org.id, name: "문서 종류별", sortOrder: 1 },
-  });
-  const folderProposal = await prisma.folder.create({
-    data: {
-      orgId: org.id,
-      name: "제안서",
-      parentId: typeRoot.id,
-      sortOrder: 0,
-    },
-  });
-  const folderNda = await prisma.folder.create({
-    data: {
-      orgId: org.id,
-      name: "비밀유지계약서(NDA)",
-      parentId: typeRoot.id,
-      sortOrder: 1,
-    },
-  });
-
-  // 빈 폴더 — 새로 만들어 쓰는 용도 데모
-  await prisma.folder.create({
-    data: { orgId: org.id, name: "내부 표준", sortOrder: 2 },
-  });
-
-  // 대표 문서 2건은 거래처 폴더에 배치
-  await prisma.document.update({
-    where: { id: globalContract.id },
-    data: { folderId: folderGlobal.id },
-  });
-  await prisma.document.update({
-    where: { id: abcQuote.id },
-    data: { folderId: folderAbc.id },
-  });
-
-  // 남은 제안서·NDA 문서는 종류별 폴더로 (거래처 폴더에 이미 든 문서·폐기 문서는 제외)
-  await prisma.document.updateMany({
-    where: { orgId: org.id, type: "PROPOSAL", folderId: null },
-    data: { folderId: folderProposal.id },
-  });
-  await prisma.document.updateMany({
-    where: { orgId: org.id, type: "NDA", folderId: null },
-    data: { folderId: folderNda.id },
-  });
-
-  // 팀 공통(공유) 베이스 문서 지정 — 표준 양식·공용 기준 문서 몇 건
-  // (문서는 공통/일반 중 하나에만 속한다 → 공통 지정 문서는 일반 문서 목록에서 제외됨)
+  // 8-4) 공용문서함(공유) 문서 지정 — 표준 양식·공용 기준 문서 (문서는 내/공용 중 하나에만 속함)
   await prisma.document.updateMany({
     where: {
       orgId: org.id,
@@ -488,6 +421,40 @@ async function main() {
       },
     },
     data: { isCommon: true },
+  });
+
+  // 8-5) 문서함별 폴더 (평면) — 내 문서함(isCommon=false) / 공용문서함(isCommon=true)
+  const folderClients = await prisma.folder.create({
+    data: { orgId: org.id, name: "주요 거래처", isCommon: false, sortOrder: 0 },
+  });
+  const folderProposals = await prisma.folder.create({
+    data: { orgId: org.id, name: "제안서", isCommon: false, sortOrder: 1 },
+  });
+  await prisma.folder.create({
+    data: { orgId: org.id, name: "진행 중", isCommon: false, sortOrder: 2 },
+  });
+  const folderStandard = await prisma.folder.create({
+    data: { orgId: org.id, name: "표준 양식", isCommon: true, sortOrder: 0 },
+  });
+
+  // 내 문서함 폴더 배치 (isCommon=false 문서만)
+  await prisma.document.update({
+    where: { id: globalContract.id },
+    data: { folderId: folderClients.id },
+  });
+  await prisma.document.update({
+    where: { id: abcQuote.id },
+    data: { folderId: folderClients.id },
+  });
+  await prisma.document.updateMany({
+    where: { orgId: org.id, type: "PROPOSAL", isCommon: false, folderId: null },
+    data: { folderId: folderProposals.id },
+  });
+
+  // 공용문서함 폴더 배치 (isCommon=true 문서)
+  await prisma.document.updateMany({
+    where: { orgId: org.id, isCommon: true },
+    data: { folderId: folderStandard.id },
   });
 
   // 9) 발송 이력 (SENT 문서)

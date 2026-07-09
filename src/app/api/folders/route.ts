@@ -3,21 +3,21 @@ import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 
-/** GET /api/folders — 조직의 폴더 전체 (문서 수·하위 폴더 수 포함, 플랫 목록) */
+/** GET /api/folders — 조직의 폴더 전체 (문서 수 포함, 문서함별·정렬 순) */
 export async function GET() {
   const org = await getCurrentOrg();
   const folders = await prisma.folder.findMany({
     where: { orgId: org.id },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    include: { _count: { select: { documents: true, children: true } } },
+    orderBy: [{ isCommon: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+    include: { _count: { select: { documents: true } } },
   });
   return ok(folders);
 }
 
-/** POST /api/folders — 폴더 생성 { name, parentId? } */
+/** POST /api/folders — 폴더 생성 { name, isCommon? } (해당 문서함 맨 뒤에 추가) */
 export async function POST(req: NextRequest) {
   const org = await getCurrentOrg();
-  let body: { name?: unknown; parentId?: unknown };
+  let body: { name?: unknown; isCommon?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -26,20 +26,18 @@ export async function POST(req: NextRequest) {
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
   if (!name) return fail("폴더 이름은 필수입니다.");
+  const isCommon = body.isCommon === true;
 
-  // parentId 가 오면 같은 조직의 실제 폴더인지 검증한다.
-  let parentId: string | null = null;
-  if (typeof body.parentId === "string" && body.parentId) {
-    const parent = await prisma.folder.findFirst({
-      where: { id: body.parentId, orgId: org.id },
-      select: { id: true },
-    });
-    if (!parent) return fail("상위 폴더를 찾을 수 없습니다.", 404);
-    parentId = parent.id;
-  }
+  // 같은 문서함(isCommon) 안에서 맨 뒤 순서로 추가
+  const last = await prisma.folder.findFirst({
+    where: { orgId: org.id, isCommon },
+    orderBy: { sortOrder: "desc" },
+    select: { sortOrder: true },
+  });
+  const sortOrder = (last?.sortOrder ?? -1) + 1;
 
   const folder = await prisma.folder.create({
-    data: { orgId: org.id, name, parentId },
+    data: { orgId: org.id, name, isCommon, sortOrder },
   });
   return ok(folder, { status: 201 });
 }

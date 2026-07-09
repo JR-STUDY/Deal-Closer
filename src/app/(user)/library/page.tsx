@@ -22,10 +22,15 @@ const STATUS_TABS = [
 export default async function LibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; type?: string; q?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    type?: string;
+    q?: string;
+    folder?: string;
+  }>;
 }) {
   // searchParams 와 org 조회는 서로 독립 → 병렬 처리
-  const [{ status, type, q }, org] = await Promise.all([
+  const [{ status, type, q, folder }, org] = await Promise.all([
     searchParams,
     getCurrentOrg(),
   ]);
@@ -35,10 +40,12 @@ export default async function LibraryPage({
     ? type!
     : null;
   const query = q?.trim() ?? "";
+  const activeFolder = folder || null;
 
   const statusWhere =
     activeStatus === "ALL" ? { status: { not: "VOID" } } : { status: activeStatus };
   const typeWhere = activeType ? { type: activeType } : {};
+  const folderWhere = activeFolder ? { folderId: activeFolder } : {};
   const queryWhere = query
     ? {
         OR: [
@@ -51,22 +58,35 @@ export default async function LibraryPage({
   // 이 화면은 "내 문서함"(공통 아님)만 다룬다. 공용 문서는 /library/common 에서 관리.
   const baseWhere = { orgId: org.id, isCommon: false };
 
-  const documents = await prisma.document.findMany({
-    where: {
-      ...baseWhere,
-      ...statusWhere,
-      ...typeWhere,
-      ...queryWhere,
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const [documents, folders] = await Promise.all([
+    prisma.document.findMany({
+      where: {
+        ...baseWhere,
+        ...statusWhere,
+        ...typeWhere,
+        ...folderWhere,
+        ...queryWhere,
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    // 내 문서함 폴더 (카드 '폴더 이동' 선택지)
+    prisma.folder.findMany({
+      where: { orgId: org.id, isCommon: false },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true },
+    }),
+  ]);
 
-  /** 상태 탭 링크 — 종류·검색 필터를 유지한다 */
+  const activeFolderName =
+    folders.find((f) => f.id === activeFolder)?.name ?? null;
+
+  /** 상태 탭 링크 — 종류·검색·폴더 필터를 유지한다 */
   function statusHref(key: string): string {
     const sp = new URLSearchParams();
     if (key !== "ALL") sp.set("status", key);
     if (activeType) sp.set("type", activeType);
     if (query) sp.set("q", query);
+    if (activeFolder) sp.set("folder", activeFolder);
     const qs = sp.toString();
     return qs ? `/library?${qs}` : "/library";
   }
@@ -74,7 +94,7 @@ export default async function LibraryPage({
   return (
     <>
       <PageHeader
-        title="내 문서함"
+        title={activeFolderName ? `내 문서함 · ${activeFolderName}` : "내 문서함"}
         description="상태·종류로 걸러보고 제목·거래처로 검색하세요."
         actions={
           <Button asChild>
@@ -120,7 +140,7 @@ export default async function LibraryPage({
             </Button>
           </div>
         ) : (
-          <DocumentList documents={documents} />
+          <DocumentList documents={documents} folders={folders} />
         )}
       </div>
     </>

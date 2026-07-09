@@ -131,6 +131,8 @@ model Folder {
   name      String
   orgId     String
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  // 소속 문서함: false=내 문서함, true=공용문서함 (Document.isCommon 과 짝을 이룬다)
+  isCommon  Boolean  @default(false)
   parentId  String?
   parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
   children  Folder[] @relation("FolderTree")

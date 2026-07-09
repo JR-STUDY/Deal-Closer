@@ -1,19 +1,23 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { userNav, adminNav } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { SidebarFolders, type SidebarFolder } from "@/components/sidebar-folders";
 
 type AppSidebarProps = {
   /** 콘솔 종류 — nav/라벨은 클라이언트에서 직접 선택한다 (함수 prop 전달 방지) */
   variant: "user" | "admin";
   user: { name: string; roleLabel: string };
+  /** 영업 포털 사이드바의 문서함별 폴더 (user 전용) */
+  folders?: SidebarFolder[];
 };
 
-export function AppSidebar({ variant, user }: AppSidebarProps) {
+export function AppSidebar({ variant, user, folders = [] }: AppSidebarProps) {
   const pathname = usePathname();
   const nav = variant === "admin" ? adminNav : userNav;
   const kicker = variant === "admin" ? "관리자 콘솔" : "영업 담당자 포털";
@@ -76,19 +80,36 @@ export function AppSidebar({ variant, user }: AppSidebarProps) {
                 <div className="mt-1 ml-4 space-y-1 border-l pl-3">
                   {item.children!.map((child) => {
                     const childActive = pathname === child.href;
+                    const isCommonBox = child.href === "/library/common";
+                    const isLibraryBox =
+                      child.href === "/library" || isCommonBox;
+                    const boxFolders = folders.filter((f) =>
+                      isCommonBox ? f.isCommon : !f.isCommon,
+                    );
                     return (
-                      <Link
-                        key={child.label}
-                        href={child.href}
-                        className={cn(
-                          "flex items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors",
-                          childActive
-                            ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                            : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-                        )}
-                      >
-                        {child.label}
-                      </Link>
+                      <div key={child.label}>
+                        <Link
+                          href={child.href}
+                          className={cn(
+                            "flex items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors",
+                            childActive
+                              ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                              : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                          )}
+                        >
+                          {child.label}
+                        </Link>
+                        {isLibraryBox ? (
+                          <Suspense fallback={null}>
+                            <SidebarFolders
+                              key={boxFolders.map((f) => f.id).join("|")}
+                              folders={boxFolders}
+                              isCommon={isCommonBox}
+                              basePath={child.href}
+                            />
+                          </Suspense>
+                        ) : null}
+                      </div>
                     );
                   })}
                 </div>

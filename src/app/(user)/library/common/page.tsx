@@ -6,18 +6,39 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { DocumentList } from "../_components/document-list";
 
-export default async function CommonDocumentsPage() {
-  const org = await getCurrentOrg();
+export default async function CommonDocumentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ folder?: string }>;
+}) {
+  const [{ folder }, org] = await Promise.all([searchParams, getCurrentOrg()]);
+  const activeFolder = folder || null;
 
-  const documents = await prisma.document.findMany({
-    where: { orgId: org.id, isCommon: true, status: { not: "VOID" } },
-    orderBy: { createdAt: "desc" },
-  });
+  const [documents, folders] = await Promise.all([
+    prisma.document.findMany({
+      where: {
+        orgId: org.id,
+        isCommon: true,
+        status: { not: "VOID" },
+        ...(activeFolder ? { folderId: activeFolder } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    // 공용문서함 폴더 (카드 '폴더 이동' 선택지)
+    prisma.folder.findMany({
+      where: { orgId: org.id, isCommon: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  const activeFolderName =
+    folders.find((f) => f.id === activeFolder)?.name ?? null;
 
   return (
     <>
       <PageHeader
-        title="공용문서함"
+        title={activeFolderName ? `공용문서함 · ${activeFolderName}` : "공용문서함"}
         description="팀이 함께 쓰는 기준 문서함입니다. 카드 메뉴의 ‘내 문서함으로 이동’으로 되돌릴 수 있습니다."
         actions={
           <Button asChild>
@@ -41,7 +62,7 @@ export default async function CommonDocumentsPage() {
             </Button>
           </div>
         ) : (
-          <DocumentList documents={documents} />
+          <DocumentList documents={documents} folders={folders} />
         )}
       </div>
     </>
