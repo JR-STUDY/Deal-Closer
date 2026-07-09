@@ -44,30 +44,27 @@ type View = "card" | "list";
 type SortKey = "title" | "type" | "status" | "amount" | "createdAt";
 type Sort = { key: SortKey; dir: "asc" | "desc" };
 
-/** 정렬 가능한 목록 헤더 — 클릭할 때마다 오름차순 ↔ 내림차순 토글 */
+/** 정렬 가능한 목록 헤더 — 클릭할 때마다 오름차순 ↔ 내림차순 토글 (가운데 정렬, 아이콘 오른쪽) */
 function SortHeader({
   label,
   sortKey,
   sort,
   onToggle,
-  align,
 }: {
   label: string;
   sortKey: SortKey;
   sort: Sort | null;
   onToggle: (key: SortKey) => void;
-  align?: "right";
 }) {
   const active = sort?.key === sortKey;
   return (
-    <TableHead className={align === "right" ? "text-right" : undefined}>
+    <TableHead className="text-center">
       <button
         type="button"
         onClick={() => onToggle(sortKey)}
         aria-label={`${label} 기준 정렬`}
         className={cn(
           "inline-flex items-center gap-1 transition-colors hover:text-foreground",
-          align === "right" && "flex-row-reverse",
           active ? "font-medium text-foreground" : "text-muted-foreground",
         )}
       >
@@ -194,15 +191,15 @@ export function DocumentList({
                 <SortHeader label="제목" sortKey="title" sort={sort} onToggle={toggleSort} />
                 <SortHeader label="종류" sortKey="type" sort={sort} onToggle={toggleSort} />
                 <SortHeader label="상태" sortKey="status" sort={sort} onToggle={toggleSort} />
-                <SortHeader label="금액" sortKey="amount" sort={sort} onToggle={toggleSort} align="right" />
-                <SortHeader label="작성일" sortKey="createdAt" sort={sort} onToggle={toggleSort} align="right" />
-                <TableHead className="w-20 text-right">관리</TableHead>
+                <SortHeader label="금액" sortKey="amount" sort={sort} onToggle={toggleSort} />
+                <SortHeader label="작성일" sortKey="createdAt" sort={sort} onToggle={toggleSort} />
+                <TableHead className="w-20 text-center">관리</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((doc) => (
                 <TableRow key={doc.id}>
-                  <TableCell className="max-w-xs">
+                  <TableCell className="max-w-xs text-center">
                     <Link
                       href={`/editor/${doc.id}`}
                       className="font-medium hover:underline"
@@ -215,20 +212,20 @@ export function DocumentList({
                       </div>
                     ) : null}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-center">
                     <DocTypeBadge type={doc.type} />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-center">
                     <StatusBadge status={doc.status} />
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="text-center tabular-nums">
                     {formatKRW(doc.amount)}
                   </TableCell>
-                  <TableCell className="text-right text-sm text-muted-foreground tabular-nums">
+                  <TableCell className="text-center text-sm text-muted-foreground tabular-nums">
                     {formatDateTime(doc.createdAt)}
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center gap-1">
                       {doc.status !== "VOID" ? (
                         <Button
                           asChild
