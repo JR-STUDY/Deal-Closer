@@ -117,6 +117,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   // 삭제한 도메인이 기본이었다면, 남은 인증 도메인 중 가장 먼저 등록된 것을
   // 기본으로 승계한다 (조직당 기본 도메인 1개 유지 — schema 주석 정합).
+  // 승계된 도메인 id 를 응답에 담아 클라이언트가 배지를 갱신하도록 한다.
+  let promotedDefaultId: string | null = null;
   if (domain.isDefault) {
     const next = await prisma.teamMailDomain.findFirst({
       where: { orgId: org.id, status: "VERIFIED" },
@@ -127,8 +129,9 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
         where: { id: next.id },
         data: { isDefault: true },
       });
+      promotedDefaultId = next.id;
     }
   }
 
-  return ok({ id });
+  return ok({ id, promotedDefaultId });
 }

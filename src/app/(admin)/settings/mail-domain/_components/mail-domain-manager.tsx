@@ -124,8 +124,21 @@ export function MailDomainManager({
   const handleDelete = async (id: string, domain: string) => {
     setBusyId(id);
     try {
-      await callApi(`/api/mail-domains/${id}`, "DELETE");
-      setDomains((prev) => prev.filter((d) => d.id !== id));
+      const { promotedDefaultId } = await callApi<{
+        id: string;
+        promotedDefaultId: string | null;
+      }>(`/api/mail-domains/${id}`, "DELETE");
+      // 기본 도메인을 지우면 서버가 다른 인증 도메인을 기본으로 승계한다 → 배지 갱신.
+      // 삭제 대상 제외 + 승계 도메인 배지 갱신을 한 번의 순회로 처리한다.
+      setDomains((prev) =>
+        prev.reduce<TeamMailDomainDTO[]>((acc, d) => {
+          if (d.id === id) return acc;
+          acc.push(
+            d.id === promotedDefaultId ? { ...d, isDefault: true } : d,
+          );
+          return acc;
+        }, []),
+      );
       toast.success(`${domain} 도메인을 삭제했습니다.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "삭제에 실패했습니다.");
