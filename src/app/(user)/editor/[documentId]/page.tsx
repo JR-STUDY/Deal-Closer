@@ -173,7 +173,7 @@ export default async function EditorPage({
           </div>
         )}
 
-        <EditorClient document={document} />
+        <EditorClient key={document.id} document={document} />
       </div>
     </>
   );

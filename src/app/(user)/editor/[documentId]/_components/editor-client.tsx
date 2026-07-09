@@ -3,24 +3,11 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { Document, DocumentItem } from "@/generated/prisma/client";
-import { formatKRW } from "@/lib/format";
-import {
-  DOCUMENT_TYPES,
-  DOCUMENT_TYPE_LABELS,
-  type DocumentType,
-} from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem as SelectOption,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -28,24 +15,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-
-/** 편집용 라인아이템 — key 는 DB id 가 아닌 로컬 렌더용 식별자 */
-type EditableItem = {
-  key: string;
-  name: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-};
+import { DocumentMetaFields } from "./document-meta-fields";
+import { LineItemsEditor, type EditableItem } from "./line-items-editor";
 
 type EditorClientProps = {
   document: Document & { items: DocumentItem[] };
@@ -56,6 +27,9 @@ type EditorClientProps = {
  * - 라인 항목이 있는 문서: 총액을 항목 합계로 서버에서 재계산한다.
  * - 라인 항목이 없는 문서: 총액을 직접 입력한다 (계약서·NDA 등 정액 문서).
  *   → 항목 없는 문서를 저장할 때 총액이 0 으로 덮어써지지 않도록 분기한다.
+ *
+ * 편집 상태는 로컬 state 로 관리하므로, 다른 문서로 이동하면 상위에서
+ * `key={document.id}` 로 remount 하여 새 문서 값으로 초기화한다.
  */
 export function EditorClient({ document }: EditorClientProps) {
   const router = useRouter();
@@ -64,11 +38,12 @@ export function EditorClient({ document }: EditorClientProps) {
   // 원래 라인 항목이 있었는지 — 저장 시 "항목 비우기"와 "정액 문서"를 구분하는 기준
   const hadItems = document.items.length > 0;
 
-  const [title, setTitle] = useState(document.title);
-  const [clientName, setClientName] = useState(document.clientName ?? "");
-  const [type, setType] = useState(document.type);
-  const [amount, setAmount] = useState(document.amount);
-  const [items, setItems] = useState<EditableItem[]>(
+  // prop 에서 파생한 초기값은 지연 초기화로 1회만 계산한다.
+  const [title, setTitle] = useState(() => document.title);
+  const [clientName, setClientName] = useState(() => document.clientName ?? "");
+  const [type, setType] = useState(() => document.type);
+  const [amount, setAmount] = useState(() => document.amount);
+  const [items, setItems] = useState<EditableItem[]>(() =>
     document.items.map((item) => ({
       key: item.id,
       name: item.name,
@@ -168,65 +143,16 @@ export function EditorClient({ document }: EditorClientProps) {
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      {/* 문서 메타 정보 (편집 가능) */}
-      <Card>
-        <CardContent className="grid gap-6 sm:grid-cols-3">
-          <div>
-            <Label
-              htmlFor="doc-client"
-              className="text-xs text-muted-foreground"
-            >
-              거래처
-            </Label>
-            <Input
-              id="doc-client"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="거래처명"
-              className="mt-1.5"
-            />
-          </div>
-          <div>
-            <Label htmlFor="doc-type" className="text-xs text-muted-foreground">
-              종류
-            </Label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger id="doc-type" className="mt-1.5 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DOCUMENT_TYPES.map((t) => (
-                  <SelectOption key={t} value={t}>
-                    {DOCUMENT_TYPE_LABELS[t as DocumentType]}
-                  </SelectOption>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label
-              htmlFor={lumpSum ? "doc-amount" : undefined}
-              className="text-xs text-muted-foreground"
-            >
-              총액{lumpSum ? " (직접 입력)" : ""}
-            </Label>
-            {lumpSum ? (
-              <Input
-                id="doc-amount"
-                type="number"
-                min={0}
-                value={amount}
-                onChange={(e) => setAmount(Number(e.target.value) || 0)}
-                className="mt-1.5 tabular-nums"
-              />
-            ) : (
-              <p className="mt-2.5 text-lg font-semibold tabular-nums">
-                {formatKRW(total)}
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <DocumentMetaFields
+        clientName={clientName}
+        onClientNameChange={setClientName}
+        type={type}
+        onTypeChange={setType}
+        amount={amount}
+        onAmountChange={setAmount}
+        total={total}
+        lumpSum={lumpSum}
+      />
 
       {/* 제목 편집 */}
       <Card>
@@ -262,109 +188,12 @@ export function EditorClient({ document }: EditorClientProps) {
               자동 계산됩니다.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>품목명 / 설명</TableHead>
-                  <TableHead className="text-right">수량</TableHead>
-                  <TableHead className="text-right">단가</TableHead>
-                  <TableHead className="text-right">금액</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="py-8 text-center text-sm text-muted-foreground"
-                    >
-                      항목이 없습니다. &ldquo;항목 추가&rdquo;로 견적 항목을
-                      추가해주세요.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  items.map((item) => (
-                    <TableRow key={item.key}>
-                      <TableCell className="min-w-56">
-                        <Input
-                          value={item.name}
-                          onChange={(e) =>
-                            updateItem(item.key, "name", e.target.value)
-                          }
-                          placeholder="품목명"
-                          className="mb-1.5 font-medium"
-                        />
-                        <Input
-                          value={item.description}
-                          onChange={(e) =>
-                            updateItem(item.key, "description", e.target.value)
-                          }
-                          placeholder="설명(선택)"
-                          className="text-xs text-muted-foreground"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          min={0}
-                          value={item.quantity}
-                          onChange={(e) =>
-                            updateItem(
-                              item.key,
-                              "quantity",
-                              Number(e.target.value) || 0,
-                            )
-                          }
-                          className="ml-auto w-20 text-right tabular-nums"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          min={0}
-                          value={item.unitPrice}
-                          onChange={(e) =>
-                            updateItem(
-                              item.key,
-                              "unitPrice",
-                              Number(e.target.value) || 0,
-                            )
-                          }
-                          className="ml-auto w-28 text-right tabular-nums"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">
-                        {formatKRW(item.quantity * item.unitPrice)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-9 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeItem(item.key)}
-                          aria-label="항목 삭제"
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-              <TableFooter>
-                <TableRow>
-                  <TableCell colSpan={3} className="text-right font-semibold">
-                    합계
-                  </TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums">
-                    {formatKRW(itemsTotal)}
-                  </TableCell>
-                  <TableCell />
-                </TableRow>
-              </TableFooter>
-            </Table>
+            <LineItemsEditor
+              items={items}
+              total={itemsTotal}
+              onUpdate={updateItem}
+              onRemove={removeItem}
+            />
           )}
         </CardContent>
         <CardFooter className="justify-end">
