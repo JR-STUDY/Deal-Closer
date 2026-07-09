@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import type { DragEvent } from "react";
 import type { EditorDoc, BlockType, ZOrderAction } from "@/lib/editor-schema";
-import { BLOCK_TYPES } from "@/lib/editor-schema";
+import { BLOCK_TYPES, pageCount } from "@/lib/editor-schema";
 import { CanvasBlock, type Geometry } from "./canvas-block";
 
 type Props = {
@@ -26,6 +26,8 @@ export function EditorCanvas({
   onZOrder,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const pages = pageCount(doc);
+  const pageH = doc.canvas.h;
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -52,8 +54,23 @@ export function EditorCanvas({
           }
         }}
         className="relative shrink-0 bg-white shadow-sm ring-1 ring-border"
-        style={{ width: doc.canvas.w, height: doc.canvas.h }}
+        style={{ width: doc.canvas.w, height: pageH * pages }}
       >
+        {/* 페이지 구분선 + 페이지 번호 (#8) */}
+        {Array.from({ length: pages }).map((_, i) => (
+          <div
+            key={i}
+            className="pointer-events-none absolute inset-x-0"
+            style={{ top: i * pageH, height: pageH }}
+          >
+            <span className="absolute right-1 top-1 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              {i + 1} / {pages}
+            </span>
+            {i > 0 ? (
+              <div className="absolute inset-x-0 top-0 border-t-2 border-dashed border-muted-foreground/40" />
+            ) : null}
+          </div>
+        ))}
         {doc.blocks.map((b) => (
           <CanvasBlock
             key={b.id}

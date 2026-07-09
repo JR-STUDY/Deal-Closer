@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Send, Save } from "lucide-react";
+import { Send, Save, Eye, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type Props = {
@@ -9,11 +9,55 @@ type Props = {
   dirty: boolean;
   saving: boolean;
   onSave: () => void;
+  pages: number;
+  onAddPage: () => void;
+  onRemovePage: () => void;
+  onPreview: () => void;
 };
 
-export function EditorToolbar({ documentId, dirty, saving, onSave }: Props) {
+export function EditorToolbar({
+  documentId,
+  dirty,
+  saving,
+  onSave,
+  pages,
+  onAddPage,
+  onRemovePage,
+  onPreview,
+}: Props) {
   return (
     <div className="flex items-center gap-2">
+      {/* 페이지 컨트롤 (#8) */}
+      <div className="flex items-center gap-0.5 rounded-md border px-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          aria-label="페이지 삭제"
+          onClick={onRemovePage}
+          disabled={pages <= 1}
+        >
+          <Minus className="size-4" />
+        </Button>
+        <span className="min-w-14 text-center text-xs tabular-nums">
+          {pages}페이지
+        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          aria-label="페이지 추가"
+          onClick={onAddPage}
+        >
+          <Plus className="size-4" />
+        </Button>
+      </div>
+
+      <Button variant="outline" onClick={onPreview}>
+        <Eye className="size-4" />
+        미리보기
+      </Button>
+
       {dirty ? (
         <span className="text-xs text-muted-foreground">
           저장되지 않은 변경사항

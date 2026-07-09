@@ -35,6 +35,7 @@ import { EditorCanvas } from "./editor-canvas";
 import type { Geometry } from "./canvas-block";
 import { EditorSidebar } from "./editor-sidebar";
 import { EditorToolbar } from "./editor-toolbar";
+import { EditorPreview } from "./editor-preview";
 
 type Props = {
   documentId: string;
@@ -56,6 +57,7 @@ export function DocumentEditor({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [navTarget, setNavTarget] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [catalog, setCatalog] = useState<CatalogOption[]>([]);
   // 에디터는 ssr:false(클라이언트 전용)라 초기화 시 localStorage 를 안전하게 읽는다 (#3)
   const [customBlocks, setCustomBlocks] = useState<CustomBlock[]>(() =>
@@ -256,6 +258,23 @@ export function DocumentEditor({
     setDirty(true);
   }, []);
 
+  // ── 페이지 (#8) ──
+  const handleAddPage = useCallback(() => {
+    setDoc((d) => ({
+      ...d,
+      canvas: { ...d.canvas, pages: (d.canvas.pages ?? 1) + 1 },
+    }));
+    setDirty(true);
+  }, []);
+
+  const handleRemovePage = useCallback(() => {
+    setDoc((d) => ({
+      ...d,
+      canvas: { ...d.canvas, pages: Math.max(1, (d.canvas.pages ?? 1) - 1) },
+    }));
+    setDirty(true);
+  }, []);
+
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
@@ -393,6 +412,10 @@ export function DocumentEditor({
             dirty={dirty}
             saving={saving}
             onSave={handleSave}
+            pages={doc.canvas.pages ?? 1}
+            onAddPage={handleAddPage}
+            onRemovePage={handleRemovePage}
+            onPreview={() => setPreviewOpen(true)}
           />
         </div>
         <EditorCanvas
@@ -452,6 +475,13 @@ export function DocumentEditor({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EditorPreview
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        doc={doc}
+        title={docTitle}
+      />
     </>
   );
 }

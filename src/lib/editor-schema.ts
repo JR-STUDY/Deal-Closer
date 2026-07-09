@@ -134,9 +134,15 @@ export type Block = {
 
 export type EditorDoc = {
   version: 1;
-  canvas: { w: number; h: number };
+  /** w·h = 한 페이지(A4) 크기, pages = 페이지 수 (#8) */
+  canvas: { w: number; h: number; pages: number };
   blocks: Block[];
 };
+
+/** 문서 페이지 수 (최소 1) */
+export function pageCount(doc: EditorDoc): number {
+  return Math.max(1, doc.canvas.pages ?? 1);
+}
 
 export function uid(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -397,10 +403,11 @@ export function parseContentJson(
     }));
     return {
       version: 1,
-      canvas:
-        doc.canvas && typeof doc.canvas.w === "number"
-          ? doc.canvas
-          : { w: A4.w, h: A4.h },
+      canvas: {
+        w: doc.canvas?.w ?? A4.w,
+        h: doc.canvas?.h ?? A4.h,
+        pages: Math.max(1, doc.canvas?.pages ?? 1),
+      },
       blocks,
     };
   } catch {
@@ -480,7 +487,7 @@ export function seedTemplate(input: {
 
   return {
     version: 1,
-    canvas: { w: A4.w, h: A4.h },
+    canvas: { w: A4.w, h: A4.h, pages: 1 },
     blocks: [logo, title, supplier, clientMeta, itemTable, notice],
   };
 }
