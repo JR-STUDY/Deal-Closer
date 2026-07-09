@@ -1,14 +1,13 @@
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HeroAnimation } from "./_components/hero-animation";
 
 export default function Home() {
   return (
     <main className="flex flex-1 items-center justify-center p-6">
       <div className="w-full max-w-2xl space-y-8 text-center">
-        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-          <Sparkles className="size-7" />
-        </div>
+        <HeroAnimation />
 
         <div className="space-y-4">
           <h1 className="text-4xl font-bold tracking-tight text-balance">
