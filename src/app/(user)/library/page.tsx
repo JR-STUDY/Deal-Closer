@@ -3,21 +3,11 @@ import Link from "next/link";
 import { Sparkles, FolderOpen } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
-import {
-  DOCUMENT_STATUSES,
-  DOCUMENT_STATUS_LABELS,
-  DOCUMENT_TYPES,
-} from "@/lib/constants";
+import { DOCUMENT_STATUSES, DOCUMENT_TYPES } from "@/lib/constants";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { LibraryToolbar } from "./_components/library-toolbar";
 import { DocumentList } from "./_components/document-list";
-
-const STATUS_TABS = [
-  { key: "ALL", label: "전체" },
-  ...DOCUMENT_STATUSES.map((s) => ({ key: s, label: DOCUMENT_STATUS_LABELS[s] })),
-];
 
 export default async function LibraryPage({
   searchParams,
@@ -35,7 +25,10 @@ export default async function LibraryPage({
     getCurrentOrg(),
   ]);
 
-  const activeStatus = STATUS_TABS.some((t) => t.key === status) ? status! : "ALL";
+  const activeStatus =
+    status && (DOCUMENT_STATUSES as readonly string[]).includes(status)
+      ? status
+      : "ALL";
   const activeType = (DOCUMENT_TYPES as readonly string[]).includes(type ?? "")
     ? type!
     : null;
@@ -93,17 +86,6 @@ export default async function LibraryPage({
     ];
   }
 
-  /** 상태 탭 링크 — 종류·검색·폴더 필터를 유지한다 */
-  function statusHref(key: string): string {
-    const sp = new URLSearchParams();
-    if (key !== "ALL") sp.set("status", key);
-    if (activeType) sp.set("type", activeType);
-    if (query) sp.set("q", query);
-    if (activeFolder) sp.set("folder", activeFolder);
-    const qs = sp.toString();
-    return qs ? `/library?${qs}` : "/library";
-  }
-
   return (
     <>
       <PageHeader
@@ -120,28 +102,10 @@ export default async function LibraryPage({
       />
 
       <div className="flex-1 space-y-4 overflow-auto p-8">
-        {/* 검색 · 종류 필터 */}
+        {/* 검색 + 계약 단계 + 종류 필터 (한 줄에서 동시 적용) */}
         <Suspense fallback={<div className="h-9" />}>
           <LibraryToolbar />
         </Suspense>
-
-        {/* 상태 필터 */}
-        <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
-          {STATUS_TABS.map((tab) => (
-            <Link
-              key={tab.key}
-              href={statusHref(tab.key)}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                activeStatus === tab.key
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </div>
 
         {documents.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-20 text-center">
