@@ -17,6 +17,11 @@ export function AppSidebar({ variant, user }: AppSidebarProps) {
   const pathname = usePathname();
   const nav = variant === "admin" ? adminNav : userNav;
   const kicker = variant === "admin" ? "관리자 콘솔" : "영업 담당자 포털";
+  // 프로필 설정 경로는 콘솔별로 다르다 (user-web 은 /account/profile 이 admin 과 충돌)
+  const profileHref =
+    variant === "admin" ? "/account/profile" : "/settings/profile";
+  const profileActive =
+    pathname === profileHref || pathname.startsWith(profileHref + "/");
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
@@ -57,18 +62,29 @@ export function AppSidebar({ variant, user }: AppSidebarProps) {
         })}
       </nav>
 
-      <div className="flex items-center gap-3 border-t p-4">
-        <Avatar className="size-9">
-          <AvatarFallback className="bg-primary/10 text-xs text-primary">
-            {user.name.slice(0, 2)}
-          </AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 leading-tight">
-          <div className="truncate text-sm font-medium">{user.name}</div>
-          <div className="truncate text-xs text-muted-foreground">
-            {user.roleLabel}
+      <div className="border-t p-3">
+        <Link
+          href={profileHref}
+          aria-label="프로필 설정 열기"
+          className={cn(
+            "flex items-center gap-3 rounded-md p-2 transition-colors",
+            profileActive
+              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+              : "hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+          )}
+        >
+          <Avatar className="size-9">
+            <AvatarFallback className="bg-primary/10 text-xs text-primary">
+              {user.name.slice(0, 2)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-sm font-medium">{user.name}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {user.roleLabel}
+            </div>
           </div>
-        </div>
+        </Link>
       </div>
     </aside>
   );

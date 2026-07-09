@@ -32,7 +32,7 @@ Next.js App Router (src/app)
 | `(admin)` | 사이드바(관리자 콘솔) | 관리자 화면 |
 | `(auth)` | 중앙 정렬(사이드바 없음) | 로그인 등 |
 
-라우트 그룹 `()` 은 URL 에 노출되지 않으므로, `/settings/email`(user)과 `/settings/branding`(admin)처럼 최종 경로만 겹치지 않으면 서로 다른 레이아웃을 가질 수 있다.
+라우트 그룹 `()` 은 URL 에 노출되지 않으므로, `/settings/email`(user)과 `/settings/branding`(admin)처럼 최종 경로만 겹치지 않으면 서로 다른 레이아웃을 가질 수 있다. 반대로 최종 경로가 같으면 그룹이 달라도 충돌한다 — 그래서 프로필 설정은 영업 포털 `/settings/profile`, 관리자 콘솔 `/account/profile` 로 경로를 분리했다.
 
 ## 도메인 모델
 
@@ -59,7 +59,7 @@ erDiagram
 | `Organization` | 팀/회사. 모든 데이터의 최상위 소유자 |
 | `User` | 사용자. `role` = SALES_REP · LEADER · ADMIN |
 | `Invite` | 팀원 초대 (PENDING/ACCEPTED/EXPIRED) |
-| `Document` | 영업 문서. `type`(QUOTE/CONTRACT/NDA/PROPOSAL) · `status`(DRAFT/SENT/COMPLETED) · `amount`(KRW 정수) |
+| `Document` | 영업 문서. `type`(QUOTE/CONTRACT/NDA/PROPOSAL) · `status`(DRAFT/SENT/COMPLETED/VOID) · `amount`(KRW 정수) |
 | `DocumentItem` | 문서 라인 아이템 (수량·단가·금액) |
 | `CatalogItem` | 마스터 데이터(상품/서비스 카탈로그) |
 | `EmailAccount` | Gmail/Outlook 연동 계정 |
@@ -76,8 +76,8 @@ erDiagram
 SQLite 는 enum 을 지원하지 않으므로, 열거형은 `String` 컬럼 + `src/lib/constants.ts` 의 상수/라벨로 관리한다. 예:
 
 ```ts
-DOCUMENT_STATUSES = ["DRAFT", "SENT", "COMPLETED"]
-DOCUMENT_STATUS_LABELS = { DRAFT: "초안", SENT: "발송완료", COMPLETED: "계약완료" }
+DOCUMENT_STATUSES = ["DRAFT", "SENT", "COMPLETED", "VOID"]
+DOCUMENT_STATUS_LABELS = { DRAFT: "초안", SENT: "발송완료", COMPLETED: "계약완료", VOID: "폐기" }
 ```
 
 DB 에는 영문 코드가 저장되고, UI 에는 한국어 라벨을 표시한다.

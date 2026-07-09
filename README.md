@@ -54,6 +54,7 @@ pnpm dev                # http://localhost:3000
 | 이메일 발송 | `/sender/[documentId]` |
 | 문서 보관함 | `/library` |
 | 메일 연동 관리 | `/settings/email` |
+| 프로필 설정 | `/settings/profile` |
 
 **관리자 콘솔 (admin-web)**
 
