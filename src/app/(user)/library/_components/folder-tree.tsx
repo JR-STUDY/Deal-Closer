@@ -90,7 +90,7 @@ export function FolderTree({
   }
 
   return (
-    <aside className="w-full shrink-0 space-y-1 lg:w-60">
+    <aside className="w-full space-y-1">
       <div className="mb-2 flex items-center justify-between px-1">
         <span className="text-xs font-medium text-muted-foreground">폴더</span>
         <Button

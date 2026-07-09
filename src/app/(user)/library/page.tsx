@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { FolderTree } from "./_components/folder-tree";
+import { LibraryBrowser } from "./_components/library-browser";
 import { DocumentCardActions } from "./_components/document-card-actions";
 
 const STATUS_TABS = [
@@ -108,19 +109,20 @@ export default async function LibraryPage({
       />
 
       <div className="flex-1 overflow-auto p-8">
-        <div className="flex flex-col gap-6 lg:flex-row">
-          <Suspense fallback={<div className="w-full shrink-0 lg:w-60" />}>
-            <FolderTree
-              folders={folderNodes}
-              selected={activeFolder}
-              totalCount={totalActive}
-              unfiledCount={unfiledCount}
-            />
-          </Suspense>
-
-          <div className="min-w-0 flex-1 space-y-4">
-            {/* 상태 필터 */}
-            <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+        <LibraryBrowser
+          sidebar={
+            <Suspense fallback={<div className="w-full" />}>
+              <FolderTree
+                folders={folderNodes}
+                selected={activeFolder}
+                totalCount={totalActive}
+                unfiledCount={unfiledCount}
+              />
+            </Suspense>
+          }
+        >
+          {/* 상태 필터 */}
+          <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
               {STATUS_TABS.map((tab) => (
                 <Link
                   key={tab.key}
@@ -208,8 +210,7 @@ export default async function LibraryPage({
                 ))}
               </div>
             )}
-          </div>
-        </div>
+        </LibraryBrowser>
       </div>
     </>
   );
