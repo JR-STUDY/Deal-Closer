@@ -1,6 +1,11 @@
 import "dotenv/config";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaClient } from "../src/generated/prisma/client";
+import {
+  seedTemplate,
+  calcItemTableTotal,
+  type BlockPropsMap,
+} from "../src/lib/editor-schema";
 
 const adapter = new PrismaBetterSqlite3({
   url: process.env.DATABASE_URL ?? "file:./dev.db",
@@ -130,6 +135,260 @@ const POLICIES: { code: string; description: string }[] = [
   },
 ];
 
+/**
+ * 데모 영업 담당자(홍길동)의 기본 메일 서명 (HTML).
+ * 지란지교 표준 서명 마크업을 기반으로 하며, 이름만 데모 담당자로 바꿨다.
+ * 저장 위치: User.signature — 발송 화면에서 iframe 미리보기로 렌더된다.
+ */
+const REP_SIGNATURE_HTML = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:100%; mso-table-lspace:0pt; mso-table-rspace:0pt;">
+  <tr>
+    <td style="padding:0; margin:0;">
+      <!-- Wrapper (고정 폭: 650px / 가운데 정렬) -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="left" style="border-collapse:collapse; width:650px; max-width:650px; mso-table-lspace:0pt; mso-table-rspace:0pt;">
+        <!-- Body -->
+        <tr>
+          <td
+          bgcolor="#F5F5F5"
+          style="background-color:#F5F5F5; padding:30px 20px 30px 20px; letter-spacing:-0.2px;">
+            <!-- Main 2-column table -->
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" bgcolor="#F5F5F5" style="background-color:#F5F5F5; border-collapse:collapse; width:610px; mso-table-lspace:0pt; mso-table-rspace:0pt;">
+              <tr>
+                <!-- Left: Name / Team -->
+                <td valign="top" bgcolor="#F5F5F5" style="padding:0 5px 0 0; width:210px; background-color:#F5F5F5;" >
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;">
+                    <tr>
+                      <td bgcolor="#F5F5F5" style="background-color:#F5F5F5; padding:0; margin:0; font-family:Malgun Gothic, Apple SD Gothic Neo, 'Noto Sans KR', Arial, sans-serif; color:#111111;">
+                        <div style="font-size:22px; line-height:30px; font-weight:700; letter-spacing:-0.5px;">
+                          홍길동 <span style="font-weight:400; color:#555555; font-size:16px;">Gildong Hong</span>
+                        </div>
+                        <div style="margin-top:6px; font-size:14px; letter-spacing:-0.7px; line-height:20px; color:#555555; font-weight:700;">
+                          브랜드경영실 전략홍보팀 <span style="color:#999999; font-weight:400;">|</span> 과장
+                        </div>
+                      </td>
+                    </tr>
+
+                    <!-- Spacer -->
+                    <tr>
+                      <td bgcolor="#F5F5F5" style="background-color:#F5F5F5; height:75px; line-height:75px; font-size:0;">&nbsp;</td>
+                    </tr>
+
+                    <!-- Company logo + social icons -->
+                    <tr>
+                      <td bgcolor="#F5F5F5" style="background-color:#F5F5F5; padding:0; margin:0;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                          <tr>
+                            <td bgcolor="#F5F5F5"  valign="middle" style="padding:0 20px 0 0; background-color: #F5F5F5;">
+                              <a href="https://www.jiransoft.co.kr/" target="_blank" style="text-decoration:none; border:0;">
+                                <img
+                                  src="https://design.jirandata.co.kr/mail/2026/ci.png"
+                                  width="110"
+                                  height="16"
+                                  alt="지란지교소프트"
+                                  style="display:block; width:110px; height:16px; border:0; outline:none; -ms-interpolation-mode:bicubic;"
+                                />
+                              </a>
+                            </td>
+
+                            <!-- Social icons (각각 24x24 권장) -->
+                            <td bgcolor="#F5F5F5" valign="middle" style="padding:0 6px 0 0; background-color:#F5F5F5;">
+                              <a href="https://www.facebook.com/jiransoft/" target="_blank" style="text-decoration:none; border:0;">
+                                <img src="https://design.jirandata.co.kr/mail/2026/sns-facebook.png" width="24" height="24" alt="Facebook" style="display:block; border:0; outline:none; -ms-interpolation-mode:bicubic;" />
+                              </a>
+                            </td>
+                            <td bgcolor="#F5F5F5" valign="middle" style="padding:0 6px 0 0; background-color:#F5F5F5;">
+                              <a href="https://www.instagram.com/jiransoft/" target="_blank" style="text-decoration:none; border:0;">
+                                <img src="https://design.jirandata.co.kr/mail/2026/sns-insta.png" width="24" height="24" alt="Instagram" style="display:block; border:0; outline:none; -ms-interpolation-mode:bicubic;" />
+                              </a>
+                            </td>
+                            <td bgcolor="#F5F5F5" valign="middle" style="padding:0; background-color:#F5F5F5;">
+                              <a href="https://blog.jiran.com/" target="_blank" style="text-decoration:none; border:0;">
+                                <img src="https://design.jirandata.co.kr/mail/2026/sns-blog.png" width="24" height="24" alt="Blog" style="display:block; border:0; outline:none; -ms-interpolation-mode:bicubic;" />
+                              </a>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+
+                <!-- Right: Contact -->
+                <td valign="top" bgcolor="#F5F5F5" style="padding:0 0 0 10px; width:320px; border-left:1px solid #E6E6E6; background-color:#F5F5F5;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; width:100%; mso-table-lspace:0pt; mso-table-rspace:0pt;">
+                    <!-- Phone (mobile) -->
+                    <tr>
+                      <td bgcolor="#F5F5F5" valign="top" style="padding:2px 0; background-color:#F5F5F5;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                          <tr>
+                            <td bgcolor="#F5F5F5" valign="middle" style="padding:0 10px 0 0; background-color:#F5F5F5;">
+                              <img src="https://design.jirandata.co.kr/mail/2026/icon-mobile.png" width="15" height="15" alt="" style="display:block; border:0; outline:none; -ms-interpolation-mode:bicubic;" />
+                            </td>
+                            <td bgcolor="#F5F5F5" valign="middle" style="background-color:#F5F5F5; font-family:Arial, Helvetica sans-serif; font-size:14px; line-height:25px; color:#111111; font-weight:400; letter-spacing: 0;">
+                              010-1234-5678
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <!-- Phone (office) -->
+                    <tr>
+                      <td bgcolor="#F5F5F5" valign="top" style="padding:2px 0; background-color:#F5F5F5;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                          <tr>
+                            <td bgcolor="#F5F5F5" valign="middle" style="padding:0 10px 0 0; background-color:#F5F5F5;">
+                              <img src="https://design.jirandata.co.kr/mail/2026/icon-tel.png" width="15" height="15" alt="" style="display:block; border:0; outline:none; -ms-interpolation-mode:bicubic;" />
+                            </td>
+                            <td bgcolor="#F5F5F5" valign="middle" style="background-color:#F5F5F5; font-family:Arial, Helvetica sans-serif; font-size:14px; line-height:25px; color:#111111; font-weight:400; letter-spacing: 0;">
+                              010-1234-5678
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <!-- Email -->
+                    <tr>
+                      <td bgcolor="#F5F5F5" valign="top" style="padding:2px 0; background-color:#F5F5F5;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                          <tr>
+                            <td bgcolor="#F5F5F5" valign="middle" style="padding:0 10px 0 0; background-color:#F5F5F5;">
+                              <img src="https://design.jirandata.co.kr/mail/2026/icon-email.png" width="15" height="15" alt="" style="display:block; border:0; outline:none; -ms-interpolation-mode:bicubic;" />
+                            </td>
+                            <td bgcolor="#F5F5F5" valign="middle" style="background-color:#F5F5F5; font-family:Arial, Helvetica sans-serif; font-size:14px; line-height:25px; color:#111111; font-weight:400; letter-spacing: 0;">
+                              kildong.hong@specflow.ai
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <!-- Fax -->
+                    <tr>
+                      <td bgcolor="#F5F5F5" valign="top" style="padding:2px 0; background-color:#F5F5F5;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                          <tr>
+                            <td bgcolor="#F5F5F5" valign="middle" style="padding:0 10px 0 0; background-color:#F5F5F5;">
+                              <img src="https://design.jirandata.co.kr/mail/2026/icon-fax.png" width="15" height="15" alt="" style="display:block; border:0; outline:none; -ms-interpolation-mode:bicubic;" />
+                            </td>
+                            <td bgcolor="#F5F5F5" valign="middle" style="background-color:#F5F5F5; font-family:Arial, Helvetica sans-serif; font-size:14px; line-height:25px; color:#111111; font-weight:400; letter-spacing: 0;">
+                              070-4709-9185
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <!-- Addresses -->
+                    <tr>
+                      <td bgcolor="#F5F5F5" style="padding:10px 0 0 0; font-family:Malgun Gothic, Apple SD Gothic Neo, 'Noto Sans KR', Arial, sans-serif; font-size:10px; letter-spacing:-0.5px; line-height:18px; color:#777777; background-color:#F5F5F5;">
+                        34016 대전광역시 유성구 테크노3로 65 (관평동) 한신S메카 603호<br />
+                        13453 경기도 성남시 수정구 금토로 80번길 37 (금토동) 인피니티타워 W동 10,11F
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Bottom spacing -->
+        <tr>
+          <td style="padding:0; margin:0; height:8px; line-height:8px; font-size:0;">
+            &nbsp;
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>`;
+
+/**
+ * 공용 표준 양식(견적서/계약서)의 공급자(우리 회사) 정보.
+ * 상호·대표·등록번호·주소는 조직 공통이라 표준 양식에 그대로 채우고,
+ * 전화·이메일은 발신 담당자별로 달라지므로 개인 문서 버전에서만 채운다.
+ */
+const SUPPLIER = {
+  상호: "(주)지란지교소프트",
+  대표자: "박승애",
+  등록번호: "111-11-11111",
+  주소: "대전광역시 유성구 테크노중앙로 74, 201호 (관평동, 신영빌딩)",
+} as const;
+
+/** 지란지교 BI(로고) 이미지 — 표준 양식 상단 로고 블록에 사용 */
+const SUPPLIER_LOGO = "https://design.jirandata.co.kr/mail/2026/ci.png";
+
+/**
+ * 블록 캔버스 표준 양식 문서(contentJson) 생성.
+ * - seedTemplate 로 기본 레이아웃(로고·제목·공급자·거래처·품목표·안내)을 만들고,
+ * - 공급자 블록에 회사 정보를 채운다. contact 가 주어지면 전화·이메일도 채운다
+ *   (개인 문서: 발신 담당자 정보 반영 / 공용 표준 양식: 비워 둠).
+ */
+function buildStandardForm(input: {
+  type: "QUOTE" | "CONTRACT";
+  clientName: string | null;
+  items: {
+    name: string;
+    description: string | null;
+    quantity: number;
+    unitPrice: number;
+  }[];
+  contact?: { phone: string; email: string };
+}): string {
+  const doc = seedTemplate({
+    type: input.type,
+    clientName: input.clientName,
+    supplierName: SUPPLIER.상호,
+    logoUrl: SUPPLIER_LOGO,
+    items: input.items,
+  });
+
+  const supplier = doc.blocks.find((b) => b.type === "supplier");
+  if (supplier) {
+    const props = supplier.props as BlockPropsMap["supplier"];
+    const values: Record<string, string> = {
+      상호: SUPPLIER.상호,
+      대표자: SUPPLIER.대표자,
+      등록번호: SUPPLIER.등록번호,
+      주소: SUPPLIER.주소,
+      전화: input.contact?.phone ?? "",
+      이메일: input.contact?.email ?? "",
+    };
+    props.fields = props.fields.map((f) => ({
+      ...f,
+      value: values[f.label] ?? f.value,
+    }));
+  }
+
+  // 계약서는 견적 안내 문구 대신 계약 표준 양식 안내로 교체한다.
+  if (input.type === "CONTRACT") {
+    const notice = doc.blocks.find((b) => b.type === "text");
+    if (notice) {
+      (notice.props as BlockPropsMap["text"]).text =
+        "※ 본 문서는 표준 계약서 양식입니다. 세부 조항은 협의에 따라 조정됩니다.";
+    }
+  }
+
+  return JSON.stringify(doc);
+}
+
+/** 표준 양식 품목 합계(수량×단가) — Document.amount 컬럼 동기화용 */
+function itemsTotal(
+  items: { quantity: number; unitPrice: number }[],
+): number {
+  return calcItemTableTotal(
+    items.map((it) => ({
+      id: "",
+      name: "",
+      description: "",
+      quantity: it.quantity,
+      unitPrice: it.unitPrice,
+    })),
+  );
+}
+
 async function main() {
   console.log("🌱 seeding 시작...");
 
@@ -156,12 +415,15 @@ async function main() {
     data: { name: "SpecFlow Demo", slug: "specflow-demo" },
   });
 
-  // 3) 브랜딩
+  // 3) 브랜딩 — 데모 테넌트(우리 회사)는 지란지교소프트.
+  //    companyName·logoUrl 은 contentJson 이 없는 문서(예: AI 생성 초안)의
+  //    공급자 기본값으로도 쓰이므로, 표준 양식과 동일한 회사 정보로 통일한다.
+  //    (사이드바의 "SpecFlow AI" 는 제품 브랜드로 별도 하드코딩되어 영향 없음)
   await prisma.branding.create({
     data: {
       orgId: org.id,
-      companyName: "SpecFlow AI",
-      logoUrl: "/brand-logo.png",
+      companyName: SUPPLIER.상호,
+      logoUrl: SUPPLIER_LOGO,
       primaryColor: "#4F46E5",
     },
   });
@@ -189,8 +451,7 @@ async function main() {
       email: "kildong.hong@specflow.ai",
       name: "홍길동",
       role: "SALES_REP",
-      signature:
-        "홍길동 | 영업팀\nSpecFlow AI\nkildong.hong@specflow.ai · 02-1234-5678",
+      signature: REP_SIGNATURE_HTML,
     },
   });
 
@@ -328,6 +589,16 @@ async function main() {
       {
         orgId: org.id,
         ownerId: null,
+        // 담당자명({{담당자}}) 활용 데모 — 불러오면 발송 폼 담당자명이 자동으로 채워지고
+        // 제목·본문의 {{담당자}} 가 그 값으로 실시간 치환된다.
+        name: "담당자 맞춤 안내 (표준)",
+        subject: "[{{문서종류}}] {{담당자}}님, {{문서제목}} 전달드립니다",
+        recipientName: "김민수",
+        body: "{{담당자}}님, 안녕하세요.\n\n요청주신 {{문서제목}} 건에 대한 {{문서종류}}를 첨부와 같이 전달드립니다. 총액은 {{총액}}(부가세 포함)입니다.\n\n{{담당자}}님께서 검토하시기 편하도록 핵심 내역을 문서 상단에 정리해두었습니다. 추가로 필요하신 자료가 있으시면 언제든 말씀해 주세요.\n\n감사합니다.",
+      },
+      {
+        orgId: org.id,
+        ownerId: null,
         name: "견적서 안내 (표준)",
         subject: "[{{문서종류}}] {{거래처}}님께 드리는 {{문서제목}}",
         body: "안녕하세요, {{거래처}} 담당자님.\n\n요청주신 {{문서제목}} 건에 대한 {{문서종류}}를 첨부와 같이 보내드립니다. 총액은 {{총액}}(부가세 포함)이며, 상세 내역은 첨부 문서를 확인 부탁드립니다.\n\n견적 유효기간은 발행일로부터 30일입니다. 궁금하신 점이 있으시면 언제든 회신 주세요.\n\n감사합니다.",
@@ -443,6 +714,17 @@ async function main() {
   type DocSeed = [string, string, string, string | null, number, string, string];
   const docSeeds: DocSeed[] = [
     // [title, type, status, clientName, amount, date(KST), authorId]
+    // 2025-10 (도입기 — 실적 규모가 작다)
+    ["세종테크 그룹웨어 구축 견적서", "QUOTE", "COMPLETED", "세종테크", 16_000_000, "2025-10-10T10:00:00+09:00", A],
+    ["한라정보 보안 컨설팅 제안서", "PROPOSAL", "SENT", "한라정보", 12_000_000, "2025-10-22T14:00:00+09:00", A],
+    // 2025-11
+    ["동방물류 WMS 도입 견적서", "QUOTE", "COMPLETED", "동방물류", 21_000_000, "2025-11-06T11:00:00+09:00", L],
+    ["우리제약 문서보안 계약서", "CONTRACT", "COMPLETED", "우리제약", 28_000_000, "2025-11-18T13:00:00+09:00", A],
+    ["대성엔지니어링 표준 비밀유지계약서(NDA)", "NDA", "SENT", "대성엔지니어링", 0, "2025-11-27T09:30:00+09:00", A],
+    // 2025-12
+    ["금호에너지 통합 모니터링 구축 견적서", "QUOTE", "COMPLETED", "금호에너지", 33_000_000, "2025-12-04T10:20:00+09:00", A],
+    ["서한테크 클라우드 백업 계약서", "CONTRACT", "COMPLETED", "서한테크", 24_000_000, "2025-12-15T14:10:00+09:00", L],
+    ["뉴런소프트 AI 문서화 제안서", "PROPOSAL", "SENT", "뉴런소프트", 26_000_000, "2025-12-23T16:00:00+09:00", A],
     // 2026-01
     ["한빛소프트 사내 시스템 구축 견적서", "QUOTE", "COMPLETED", "한빛소프트", 38_000_000, "2026-01-12T10:00:00+09:00", A],
     ["누리테크 표준 비밀유지계약서(NDA)", "NDA", "SENT", "누리테크", 0, "2026-01-20T11:00:00+09:00", A],
@@ -491,22 +773,7 @@ async function main() {
     })),
   });
 
-  // 8-4) 공용문서함(공유) 문서 지정 — 표준 양식·공용 기준 문서 (문서는 내/공용 중 하나에만 속함)
-  await prisma.document.updateMany({
-    where: {
-      orgId: org.id,
-      title: {
-        in: [
-          "누리테크 표준 비밀유지계약서(NDA)",
-          "블루오션 표준 비밀유지계약서(NDA)",
-          "성진산업 유지보수 변경합의서",
-        ],
-      },
-    },
-    data: { isCommon: true },
-  });
-
-  // 8-5) 문서함별 폴더 (다단계) — 내 문서함(isCommon=false) / 공용문서함(isCommon=true)
+  // 8-4) 문서함별 폴더 (다단계) — 내 문서함(isCommon=false) / 공용문서함(isCommon=true)
   const folderClients = await prisma.folder.create({
     data: { orgId: org.id, name: "주요 거래처", isCommon: false, sortOrder: 0 },
   });
@@ -526,11 +793,156 @@ async function main() {
   await prisma.folder.create({
     data: { orgId: org.id, name: "진행 중", isCommon: false, sortOrder: 2 },
   });
+  // 내 문서함에도 "표준 양식" 폴더 — 내 발신 정보(전화·이메일)가 채워진 개인 사본을 모아 둔다
+  const folderMyStandard = await prisma.folder.create({
+    data: { orgId: org.id, name: "표준 양식", isCommon: false, sortOrder: 3 },
+  });
+  // 공용문서함: 표준 양식(계약서·견적서 초안) + 공통 계약 문서(NDA·합의서)
   const folderStandard = await prisma.folder.create({
     data: { orgId: org.id, name: "표준 양식", isCommon: true, sortOrder: 0 },
   });
+  const folderCommonContracts = await prisma.folder.create({
+    data: { orgId: org.id, name: "공통 계약 문서", isCommon: true, sortOrder: 1 },
+  });
 
-  // 내 문서함 폴더 배치 (isCommon=false 문서만) — 대표 계약서는 하위 폴더에 배치
+  // 8-5) 공용문서함(공유) 문서 지정 — 기존 NDA·합의서를 "공통 계약 문서"로 승격 (문서는 내/공용 중 하나)
+  await prisma.document.updateMany({
+    where: {
+      orgId: org.id,
+      title: {
+        in: [
+          "누리테크 표준 비밀유지계약서(NDA)",
+          "블루오션 표준 비밀유지계약서(NDA)",
+          "성진산업 유지보수 변경합의서",
+        ],
+      },
+    },
+    data: { isCommon: true, folderId: folderCommonContracts.id },
+  });
+
+  // 8-6) 표준 양식(계약서·견적서 초안) — 공급자(우리 회사) 정보를 채운 블록 캔버스 문서
+  //  · 공용 버전: 상호·대표·등록번호·주소만 채우고 전화·이메일은 담당자별로 비워 둔다
+  //  · 개인 버전: 발신 담당자(홍길동)의 전화·이메일까지 채워 "이미 템플릿화된" 상태로 시딩
+  const repContact = { phone: "010-1234-5678", email: rep.email };
+  const quoteItems = [
+    {
+      name: "메일보안 솔루션(스팸·스미싱 차단) 구축",
+      description: "요건 분석·설치·정책 설정 일괄",
+      quantity: 1,
+      unitPrice: 18_000_000,
+    },
+    {
+      name: "문서중앙화 라이선스",
+      description: "사용자 50인 기준",
+      quantity: 50,
+      unitPrice: 120_000,
+    },
+    {
+      name: "연간 기술지원",
+      description: "1년 정기 점검·업데이트",
+      quantity: 1,
+      unitPrice: 4_800_000,
+    },
+  ];
+  const contractItems = [
+    {
+      name: "정보보안 솔루션 공급 및 구축",
+      description: "계약 범위 내 일괄 공급·구축",
+      quantity: 1,
+      unitPrice: 45_000_000,
+    },
+    {
+      name: "연간 유지보수 (SLA 포함)",
+      description: "1년, 장애 대응 포함",
+      quantity: 1,
+      unitPrice: 9_000_000,
+    },
+  ];
+
+  // 공용 표준 양식 (전화·이메일 비움)
+  await prisma.document.create({
+    data: {
+      orgId: org.id,
+      authorId: rep.id,
+      title: "표준 견적서 양식",
+      type: "QUOTE",
+      status: "DRAFT",
+      clientName: null,
+      amount: itemsTotal(quoteItems),
+      // 표준 양식은 상시 비치 문서 → 오래된 날짜로 두어 대시보드 "최근 문서"를 실제 딜이 차지하게 한다
+      createdAt: new Date("2026-01-02T09:00:00+09:00"),
+      isCommon: true,
+      folderId: folderStandard.id,
+      contentJson: buildStandardForm({
+        type: "QUOTE",
+        clientName: null,
+        items: quoteItems,
+      }),
+    },
+  });
+  await prisma.document.create({
+    data: {
+      orgId: org.id,
+      authorId: rep.id,
+      title: "표준 계약서 양식",
+      type: "CONTRACT",
+      status: "DRAFT",
+      clientName: null,
+      amount: itemsTotal(contractItems),
+      createdAt: new Date("2026-01-02T09:10:00+09:00"),
+      isCommon: true,
+      folderId: folderStandard.id,
+      contentJson: buildStandardForm({
+        type: "CONTRACT",
+        clientName: null,
+        items: contractItems,
+      }),
+    },
+  });
+
+  // 개인 표준 양식 (내 발신 정보 반영 — 전화·이메일 채움)
+  await prisma.document.create({
+    data: {
+      orgId: org.id,
+      authorId: rep.id,
+      title: "견적서 양식 (내 발신정보 반영)",
+      type: "QUOTE",
+      status: "DRAFT",
+      clientName: null,
+      amount: itemsTotal(quoteItems),
+      createdAt: new Date("2026-01-02T09:20:00+09:00"),
+      isCommon: false,
+      folderId: folderMyStandard.id,
+      contentJson: buildStandardForm({
+        type: "QUOTE",
+        clientName: null,
+        items: quoteItems,
+        contact: repContact,
+      }),
+    },
+  });
+  await prisma.document.create({
+    data: {
+      orgId: org.id,
+      authorId: rep.id,
+      title: "계약서 양식 (내 발신정보 반영)",
+      type: "CONTRACT",
+      status: "DRAFT",
+      clientName: null,
+      amount: itemsTotal(contractItems),
+      createdAt: new Date("2026-01-02T09:30:00+09:00"),
+      isCommon: false,
+      folderId: folderMyStandard.id,
+      contentJson: buildStandardForm({
+        type: "CONTRACT",
+        clientName: null,
+        items: contractItems,
+        contact: repContact,
+      }),
+    },
+  });
+
+  // 8-7) 내 문서함 폴더 배치 (isCommon=false 문서만) — 대표 계약서는 하위 폴더에 배치
   await prisma.document.update({
     where: { id: globalContract.id },
     data: { folderId: folderClientsGlobal.id },
@@ -542,12 +954,6 @@ async function main() {
   await prisma.document.updateMany({
     where: { orgId: org.id, type: "PROPOSAL", isCommon: false, folderId: null },
     data: { folderId: folderProposals.id },
-  });
-
-  // 공용문서함 폴더 배치 (isCommon=true 문서)
-  await prisma.document.updateMany({
-    where: { orgId: org.id, isCommon: true },
-    data: { folderId: folderStandard.id },
   });
 
   // 9) 발송 이력 (SENT 문서)
