@@ -60,7 +60,7 @@ export function emailLocalPart(email: string): string {
   return at > 0 ? email.slice(0, at) : email;
 }
 
-/** 담당자 이메일 핸들 + 팀 도메인 → 팀 발신 주소 (예: kildong.hong@rainmaker.ai) */
+/** 담당자 이메일 핸들 + 팀 도메인 → 팀 발신 주소 (예: rain.kim@rainmaker.ai) */
 export function teamAddress(userEmail: string, domain: string): string {
   return `${emailLocalPart(userEmail)}@${domain}`;
 }

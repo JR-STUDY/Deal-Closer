@@ -136,7 +136,7 @@ const POLICIES: { code: string; description: string }[] = [
 ];
 
 /**
- * 데모 영업 담당자(홍길동)의 기본 메일 서명 (HTML).
+ * 데모 영업 담당자(김레인)의 기본 메일 서명 (HTML).
  * 지란지교 표준 서명 마크업을 기반으로 하며, 이름만 데모 담당자로 바꿨다.
  * 저장 위치: User.signature — 발송 화면에서 iframe 미리보기로 렌더된다.
  */
@@ -159,7 +159,7 @@ const REP_SIGNATURE_HTML = `<table role="presentation" cellpadding="0" cellspaci
                     <tr>
                       <td bgcolor="#F5F5F5" style="background-color:#F5F5F5; padding:0; margin:0; font-family:Malgun Gothic, Apple SD Gothic Neo, 'Noto Sans KR', Arial, sans-serif; color:#111111;">
                         <div style="font-size:22px; line-height:30px; font-weight:700; letter-spacing:-0.5px;">
-                          홍길동 <span style="font-weight:400; color:#555555; font-size:16px;">Gildong Hong</span>
+                          김레인 <span style="font-weight:400; color:#555555; font-size:16px;">Rain Kim</span>
                         </div>
                         <div style="margin-top:6px; font-size:14px; letter-spacing:-0.7px; line-height:20px; color:#555555; font-weight:700;">
                           브랜드경영실 전략홍보팀 <span style="color:#999999; font-weight:400;">|</span> 과장
@@ -169,7 +169,7 @@ const REP_SIGNATURE_HTML = `<table role="presentation" cellpadding="0" cellspaci
 
                     <!-- Spacer -->
                     <tr>
-                      <td bgcolor="#F5F5F5" style="background-color:#F5F5F5; height:75px; line-height:75px; font-size:0;">&nbsp;</td>
+                      <td bgcolor="#F5F5F5" style="background-color:#F5F5F5; height:10px; line-height:10px; font-size:0;">&nbsp;</td>
                     </tr>
 
                     <!-- Company logo + social icons -->
@@ -231,22 +231,6 @@ const REP_SIGNATURE_HTML = `<table role="presentation" cellpadding="0" cellspaci
                       </td>
                     </tr>
 
-                    <!-- Phone (office) -->
-                    <tr>
-                      <td bgcolor="#F5F5F5" valign="top" style="padding:2px 0; background-color:#F5F5F5;">
-                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
-                          <tr>
-                            <td bgcolor="#F5F5F5" valign="middle" style="padding:0 10px 0 0; background-color:#F5F5F5;">
-                              <img src="https://design.jirandata.co.kr/mail/2026/icon-tel.png" width="15" height="15" alt="" style="display:block; border:0; outline:none; -ms-interpolation-mode:bicubic;" />
-                            </td>
-                            <td bgcolor="#F5F5F5" valign="middle" style="background-color:#F5F5F5; font-family:Arial, Helvetica sans-serif; font-size:14px; line-height:25px; color:#111111; font-weight:400; letter-spacing: 0;">
-                              010-1234-5678
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-
                     <!-- Email -->
                     <tr>
                       <td bgcolor="#F5F5F5" valign="top" style="padding:2px 0; background-color:#F5F5F5;">
@@ -256,34 +240,17 @@ const REP_SIGNATURE_HTML = `<table role="presentation" cellpadding="0" cellspaci
                               <img src="https://design.jirandata.co.kr/mail/2026/icon-email.png" width="15" height="15" alt="" style="display:block; border:0; outline:none; -ms-interpolation-mode:bicubic;" />
                             </td>
                             <td bgcolor="#F5F5F5" valign="middle" style="background-color:#F5F5F5; font-family:Arial, Helvetica sans-serif; font-size:14px; line-height:25px; color:#111111; font-weight:400; letter-spacing: 0;">
-                              kildong.hong@rainmaker.ai
+                              rain.kim@rainmaker.ai
                             </td>
                           </tr>
                         </table>
                       </td>
                     </tr>
 
-                    <!-- Fax -->
+                    <!-- Address -->
                     <tr>
-                      <td bgcolor="#F5F5F5" valign="top" style="padding:2px 0; background-color:#F5F5F5;">
-                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
-                          <tr>
-                            <td bgcolor="#F5F5F5" valign="middle" style="padding:0 10px 0 0; background-color:#F5F5F5;">
-                              <img src="https://design.jirandata.co.kr/mail/2026/icon-fax.png" width="15" height="15" alt="" style="display:block; border:0; outline:none; -ms-interpolation-mode:bicubic;" />
-                            </td>
-                            <td bgcolor="#F5F5F5" valign="middle" style="background-color:#F5F5F5; font-family:Arial, Helvetica sans-serif; font-size:14px; line-height:25px; color:#111111; font-weight:400; letter-spacing: 0;">
-                              070-4709-9185
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-
-                    <!-- Addresses -->
-                    <tr>
-                      <td bgcolor="#F5F5F5" style="padding:10px 0 0 0; font-family:Malgun Gothic, Apple SD Gothic Neo, 'Noto Sans KR', Arial, sans-serif; font-size:10px; letter-spacing:-0.5px; line-height:18px; color:#777777; background-color:#F5F5F5;">
-                        34016 대전광역시 유성구 테크노3로 65 (관평동) 한신S메카 603호<br />
-                        13453 경기도 성남시 수정구 금토로 80번길 37 (금토동) 인피니티타워 W동 10,11F
+                      <td bgcolor="#F5F5F5" style="padding:8px 0 0 0; font-family:Malgun Gothic, Apple SD Gothic Neo, 'Noto Sans KR', Arial, sans-serif; font-size:10px; letter-spacing:-0.5px; line-height:16px; color:#777777; background-color:#F5F5F5;">
+                        34016 대전광역시 유성구 테크노3로 65 (관평동) 한신S메카 603호
                       </td>
                     </tr>
                   </table>
@@ -321,6 +288,35 @@ const SUPPLIER = {
 const SUPPLIER_LOGO = "https://design.jirandata.co.kr/mail/2026/ci.png";
 
 /**
+ * 견적서 표준 양식 하단 약관/안내 (일반화한 데모 문구).
+ * 제품명·실제 연락처·특정 OS 버전 등 특화·민감 정보는 데모용으로 다듬었다.
+ */
+const QUOTE_NOTES: { heading: string; lines: string[] }[] = [
+  {
+    heading: "기타사항",
+    lines: [
+      "- 추가 구매는 1라이선스 단위로 가능합니다.",
+      "- 도입 시 통합 관리 콘솔(자산·정책 관리) 기능이 함께 제공됩니다.",
+      "- 무상 제공 항목은 고객 요청 시 별도 안내드립니다.",
+      "- 관리자 교육은 2시간 내외로 진행됩니다.",
+      "- 지원 운영체제: Windows 10/11, macOS 최신 2개 버전",
+    ],
+  },
+  {
+    heading: "기술지원 안내",
+    lines: [
+      "- 1차: 기본 문의는 고객지원팀에서 유선·이메일로 지원합니다. (평일 09:00~18:00)",
+      "- 2차: 미해결 사안은 기술지원팀으로 이관, 원격지원으로 원인 파악·해결 (고객사 협조 필요)",
+      "- 3차: 원격지원으로 해결이 어려운 경우 엔지니어 현장 지원",
+    ],
+  },
+  {
+    heading: "특이사항",
+    lines: ["- 프로젝트별 협의 사항을 이곳에 기재합니다."],
+  },
+];
+
+/**
  * 블록 캔버스 표준 양식 문서(contentJson) 생성.
  * - seedTemplate 로 기본 레이아웃(로고·제목·공급자·거래처·품목표·안내)을 만들고,
  * - 공급자 블록에 회사 정보를 채운다. contact 가 주어지면 전화·이메일도 채운다
@@ -343,6 +339,8 @@ function buildStandardForm(input: {
     supplierName: SUPPLIER.상호,
     logoUrl: SUPPLIER_LOGO,
     items: input.items,
+    // 견적서 양식에만 하단 약관/안내 섹션을 붙인다 (계약서는 계약 문구 유지)
+    notes: input.type === "QUOTE" ? QUOTE_NOTES : undefined,
   });
 
   const supplier = doc.blocks.find((b) => b.type === "supplier");
@@ -448,8 +446,8 @@ async function main() {
   const rep = await prisma.user.create({
     data: {
       orgId: org.id,
-      email: "kildong.hong@rainmaker.ai",
-      name: "홍길동",
+      email: "rain.kim@rainmaker.ai",
+      name: "김레인",
       role: "SALES_REP",
       signature: REP_SIGNATURE_HTML,
     },
@@ -565,10 +563,10 @@ async function main() {
 
   // 7-0) 팀 발신 메일 도메인 (관리자 콘솔에서 관리)
   //  · rainmaker.ai 를 인증·기본 도메인으로 등록 → 담당자가 발신 주소로 선택 가능
-  //  · rep 은 기본적으로 개인 계정(sales-pro@gmail.com) 발신 상태로 두어
-  //    "팀 도메인 선택" 흐름을 데모에서 직접 확인할 수 있게 한다
+  //  · 데모 담당자(김레인)의 발신 신원을 이 팀 도메인으로 지정해, 발송 화면 진입 시
+  //    관리자가 정한 기본 참조(CC)가 자동으로 채워진 상태를 바로 보여준다
   //  · defaultCc: 팀 도메인 발송 시 기본 참조(CC) — 영업팀(리더·담당자) 전원
-  await prisma.teamMailDomain.create({
+  const teamDomain = await prisma.teamMailDomain.create({
     data: {
       orgId: org.id,
       domain: "rainmaker.ai",
@@ -577,6 +575,11 @@ async function main() {
       isDefault: true,
       defaultCc: `${leader.email}; ${rep.email}`,
     },
+  });
+  // 담당자 발신 신원 = 팀 도메인 (발송 화면 진입 시 CC 가 자동으로 채워지도록)
+  await prisma.user.update({
+    where: { id: rep.id },
+    data: { mailDomainId: teamDomain.id },
   });
 
   // 7-1) 메일 발송 템플릿 — 발송 화면에서 불러와 사용
@@ -624,7 +627,7 @@ async function main() {
         subject: "[{{문서종류}}] {{거래처}}님을 위한 {{문서제목}}",
         body: "안녕하세요, {{거래처}} 담당자님.\n\n지난 미팅에서 논의한 내용을 바탕으로 {{문서제목}}({{문서종류}})를 준비했습니다. 제안 규모는 {{총액}}입니다.\n\n첨부 자료를 검토하신 후 편하신 시간에 짧게 논의 자리를 가지면 좋겠습니다. 가능하신 일정을 알려주시면 맞춰 준비하겠습니다.\n\n감사합니다.",
       },
-      // ── 개인 (홍길동) ──
+      // ── 개인 (김레인) ──
       {
         orgId: org.id,
         ownerId: rep.id,
@@ -822,7 +825,7 @@ async function main() {
 
   // 8-6) 표준 양식(계약서·견적서 초안) — 공급자(우리 회사) 정보를 채운 블록 캔버스 문서
   //  · 공용 버전: 상호·대표·등록번호·주소만 채우고 전화·이메일은 담당자별로 비워 둔다
-  //  · 개인 버전: 발신 담당자(홍길동)의 전화·이메일까지 채워 "이미 템플릿화된" 상태로 시딩
+  //  · 개인 버전: 발신 담당자(김레인)의 전화·이메일까지 채워 "이미 템플릿화된" 상태로 시딩
   const repContact = { phone: "010-1234-5678", email: rep.email };
   const quoteItems = [
     {
@@ -859,46 +862,121 @@ async function main() {
     },
   ];
 
-  // 공용 표준 양식 (전화·이메일 비움)
-  await prisma.document.create({
-    data: {
-      orgId: org.id,
-      authorId: rep.id,
-      title: "표준 견적서 양식",
-      type: "QUOTE",
-      status: "DRAFT",
-      clientName: null,
-      amount: itemsTotal(quoteItems),
-      // 표준 양식은 상시 비치 문서 → 오래된 날짜로 두어 대시보드 "최근 문서"를 실제 딜이 차지하게 한다
-      createdAt: new Date("2026-01-02T09:00:00+09:00"),
-      isCommon: true,
-      folderId: folderStandard.id,
-      contentJson: buildStandardForm({
-        type: "QUOTE",
-        clientName: null,
-        items: quoteItems,
-      }),
+  // 클라우드 장기 이용 품목
+  const cloudItems = [
+    {
+      name: "클라우드 인프라 이용료",
+      description: "월 정액 · 12개월",
+      quantity: 12,
+      unitPrice: 3_200_000,
     },
-  });
-  await prisma.document.create({
-    data: {
-      orgId: org.id,
-      authorId: rep.id,
-      title: "표준 계약서 양식",
-      type: "CONTRACT",
-      status: "DRAFT",
-      clientName: null,
-      amount: itemsTotal(contractItems),
-      createdAt: new Date("2026-01-02T09:10:00+09:00"),
-      isCommon: true,
-      folderId: folderStandard.id,
-      contentJson: buildStandardForm({
-        type: "CONTRACT",
-        clientName: null,
-        items: contractItems,
-      }),
+    {
+      name: "매니지드 운영 서비스",
+      description: "연간 · 24/7 모니터링",
+      quantity: 1,
+      unitPrice: 18_000_000,
     },
-  });
+    {
+      name: "초기 마이그레이션",
+      description: "데이터 이관·검증 일괄",
+      quantity: 1,
+      unitPrice: 8_000_000,
+    },
+  ];
+  // 구축형 프로젝트 품목
+  const buildItems = [
+    {
+      name: "구축형 솔루션 라이선스",
+      description: "영구 라이선스 (사이트)",
+      quantity: 1,
+      unitPrice: 60_000_000,
+    },
+    {
+      name: "설치·커스터마이징",
+      description: "요건 분석·개발·검수 일괄",
+      quantity: 1,
+      unitPrice: 25_000_000,
+    },
+    {
+      name: "사용자 교육·인수인계",
+      description: "관리자·실무자 과정",
+      quantity: 1,
+      unitPrice: 3_000_000,
+    },
+  ];
+  // 구축형 유지보수 품목
+  const maintenanceItems = [
+    {
+      name: "연간 유지보수 (SLA)",
+      description: "1년 · 장애 대응 포함",
+      quantity: 1,
+      unitPrice: 9_000_000,
+    },
+    {
+      name: "정기 점검",
+      description: "분기 1회 · 연 4회",
+      quantity: 4,
+      unitPrice: 1_200_000,
+    },
+    {
+      name: "긴급 장애 대응",
+      description: "연간 · 우선 대응",
+      quantity: 1,
+      unitPrice: 3_600_000,
+    },
+  ];
+
+  // 공용 표준 양식 4종 (전화·이메일 비움 — 조직 공통 정보만) — 공용문서함 › 표준 양식
+  //  데모 시나리오 1("양식화")의 산출물로 보여지는 표준 양식 세트.
+  //  "기본 견적서"는 생성 데모에서 열리고, 두 번째 생성의 참고 양식으로도 쓰인다.
+  const standardForms = [
+    {
+      title: "기본 견적서",
+      type: "QUOTE" as const,
+      items: quoteItems,
+      createdAt: "2026-01-02T09:00:00+09:00",
+    },
+    {
+      title: "클라우드 장기 견적·계약서",
+      type: "QUOTE" as const,
+      items: cloudItems,
+      createdAt: "2026-01-02T09:05:00+09:00",
+    },
+    {
+      title: "구축형 견적·계약서",
+      type: "QUOTE" as const,
+      items: buildItems,
+      createdAt: "2026-01-02T09:10:00+09:00",
+    },
+    {
+      title: "구축형 유지보수 견적·계약서",
+      type: "CONTRACT" as const,
+      items: maintenanceItems,
+      createdAt: "2026-01-02T09:15:00+09:00",
+    },
+  ];
+  for (const f of standardForms) {
+    await prisma.document.create({
+      data: {
+        orgId: org.id,
+        authorId: rep.id,
+        title: f.title,
+        type: f.type,
+        status: "DRAFT",
+        clientName: null,
+        amount: itemsTotal(f.items),
+        // 표준 양식은 상시 비치 문서 → 오래된 날짜로 대시보드 "최근 문서" 왜곡 방지
+        createdAt: new Date(f.createdAt),
+        isCommon: true,
+        folderId: folderStandard.id,
+        contentJson: buildStandardForm({
+          type: f.type,
+          clientName: null,
+          items: f.items,
+        }),
+      },
+    });
+  }
 
   // 개인 표준 양식 (내 발신 정보 반영 — 전화·이메일 채움)
   await prisma.document.create({

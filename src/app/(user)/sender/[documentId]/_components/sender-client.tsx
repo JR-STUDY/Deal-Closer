@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Send, FileText, PenLine } from "lucide-react";
+import { Send, FileText, PenLine, Eye } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants";
 import { formatKRW } from "@/lib/format";
 import { parseRecipients } from "@/lib/validation";
@@ -132,6 +139,7 @@ export function SenderClient({
   const [includeSignature, setIncludeSignature] = useState(
     () => signature.length > 0,
   );
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // 템플릿 {{변수}} 치환에 쓸 현재 문서·담당자 값
   const templateContext = useMemo<TemplateContext>(
@@ -183,10 +191,16 @@ export function SenderClient({
         description={`"${document.title}" 문서를 이메일로 발송합니다.`}
         backHref="/library"
         actions={
-          <Button onClick={handleSend}>
-            <Send className="size-4" />
-            발송하기
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setPreviewOpen(true)}>
+              <Eye className="size-4" />
+              미리보기
+            </Button>
+            <Button onClick={handleSend}>
+              <Send className="size-4" />
+              발송하기
+            </Button>
+          </div>
         }
       />
 
@@ -310,7 +324,7 @@ export function SenderClient({
               </Label>
               <Input
                 id="subject"
-                value={subject}
+                value={composedSubject}
                 onChange={(e) => setSubject(e.target.value)}
               />
             </CardContent>
@@ -326,7 +340,7 @@ export function SenderClient({
               </Label>
               <Textarea
                 id="body"
-                value={body}
+                value={composedBody}
                 onChange={(e) => setBody(e.target.value)}
                 className="min-h-32"
               />
@@ -377,19 +391,6 @@ export function SenderClient({
             </CardContent>
           </Card>
 
-          {/* 실제 발송 미리보기 — 헤더 + 본문 + 서명 */}
-          <SendPreview
-            senderEmail={sender?.email ?? null}
-            senderName={senderName}
-            recipients={recipients}
-            recipientName={recipientName}
-            cc={cc}
-            subject={composedSubject}
-            body={composedBody}
-            includeSignature={includeSignature}
-            signature={signature}
-          />
-
           <Card>
             <CardHeader>
               <CardTitle className="text-base">첨부 파일</CardTitle>
@@ -408,6 +409,31 @@ export function SenderClient({
           </Card>
         </div>
       </div>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="size-4 text-muted-foreground" />
+              메일 미리보기
+            </DialogTitle>
+            <DialogDescription>
+              실제 발송될 메일 모습입니다. 본문과 서명이 함께 표시됩니다.
+            </DialogDescription>
+          </DialogHeader>
+          <SendPreview
+            senderEmail={sender?.email ?? null}
+            senderName={senderName}
+            recipients={recipients}
+            recipientName={recipientName}
+            cc={cc}
+            subject={composedSubject}
+            body={composedBody}
+            includeSignature={includeSignature}
+            signature={signature}
+          />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

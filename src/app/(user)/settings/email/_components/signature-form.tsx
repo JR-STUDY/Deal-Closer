@@ -188,7 +188,7 @@ export function SignatureForm({
             maxLength={MAX_SIGNATURE_LENGTH}
             aria-label="메일 서명"
             className="min-h-32 font-mono text-xs"
-            placeholder="일반 텍스트 또는 HTML 서명을 입력·붙여넣으세요.&#10;예) 홍길동 | 영업팀&#10;(주)지란지교소프트&#10;010-1234-5678"
+            placeholder="일반 텍스트 또는 HTML 서명을 입력·붙여넣으세요.&#10;예) 김레인 | 영업팀&#10;(주)지란지교소프트&#10;010-1234-5678"
             onChange={(e) => setSignature(e.target.value)}
           />
           <p className="text-xs text-muted-foreground">

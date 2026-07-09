@@ -1,5 +1,3 @@
-import { Eye } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SignaturePreview } from "@/components/signature-preview";
 
 type SendPreviewProps = {
@@ -19,6 +17,7 @@ type SendPreviewProps = {
 /**
  * 실제 발송 미리보기 — 보낸사람·받는사람·참조·제목 헤더 + 본문 + 서명을 함께 보여준다.
  * 발송 폼(SenderClient)에서 조합한 최종 값을 받아 렌더만 한다.
+ * (미리보기 버튼으로 여는 모달 안에 들어가므로 바깥 카드/헤더는 두지 않는다.)
  */
 export function SendPreview({
   senderEmail,
@@ -32,59 +31,52 @@ export function SendPreview({
   signature,
 }: SendPreviewProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Eye className="size-4 text-muted-foreground" />
-          미리보기
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">
-          실제 발송될 메일 모습입니다. 본문과 서명이 함께 표시됩니다.
+    // 실제 메일 클라이언트처럼 흰 바탕의 한 장짜리 문서로 보여준다.
+    <div className="overflow-hidden rounded-lg border bg-white text-neutral-900 shadow-sm">
+      {/* 제목 (메일 상단 헤드라인) */}
+      <div className="border-b px-5 py-4">
+        <p className="text-base font-semibold text-neutral-900">
+          {subject || "(제목 없음)"}
         </p>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-hidden rounded-lg border">
-          <div className="space-y-1 border-b bg-muted/30 p-4 text-sm">
-            <PreviewRow label="보낸사람">
-              {senderEmail ? (
+        <div className="mt-3 space-y-1 text-[13px] text-neutral-500">
+          <PreviewRow label="보낸사람">
+            {senderEmail ? (
+              <>
+                <span className="text-neutral-700">{senderName}</span> &lt;
+                {senderEmail}&gt;
+              </>
+            ) : (
+              <span>발신 계정 없음</span>
+            )}
+          </PreviewRow>
+          <PreviewRow label="받는사람">
+            {recipients.trim() ? (
+              recipientName.trim() ? (
                 <>
-                  {senderName} &lt;{senderEmail}&gt;
+                  <span className="text-neutral-700">{recipientName}</span> &lt;
+                  {recipients}&gt;
                 </>
               ) : (
-                <span className="text-muted-foreground">발신 계정 없음</span>
-              )}
-            </PreviewRow>
-            <PreviewRow label="받는사람">
-              {recipients.trim() ? (
-                recipientName.trim() ? (
-                  <>
-                    {recipientName} &lt;{recipients}&gt;
-                  </>
-                ) : (
-                  recipients
-                )
-              ) : (
-                <span className="text-muted-foreground">(수신자 미입력)</span>
-              )}
-            </PreviewRow>
-            {cc.trim() ? <PreviewRow label="참조">{cc}</PreviewRow> : null}
-            <PreviewRow label="제목">
-              <span className="font-medium text-foreground">
-                {subject || "(제목 없음)"}
-              </span>
-            </PreviewRow>
-          </div>
-          <div className="space-y-4 p-4">
-            <p className="whitespace-pre-line text-sm leading-relaxed">{body}</p>
-            {includeSignature && signature ? (
-              <div className="border-t pt-4">
-                <SignaturePreview signature={signature} />
-              </div>
-            ) : null}
-          </div>
+                recipients
+              )
+            ) : (
+              <span>(수신자 미입력)</span>
+            )}
+          </PreviewRow>
+          {cc.trim() ? <PreviewRow label="참조">{cc}</PreviewRow> : null}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      {/* 본문 + 서명 — 한 흐름으로 이어진다 (구분선·박스 없이 실제 메일처럼) */}
+      <div className="px-5 py-5 text-sm leading-relaxed text-neutral-800">
+        <p className="whitespace-pre-line">{body}</p>
+        {includeSignature && signature ? (
+          <div className="mt-8">
+            <SignaturePreview signature={signature} bordered={false} scale={0.8} />
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -98,7 +90,7 @@ function PreviewRow({
 }) {
   return (
     <div className="flex gap-2">
-      <span className="w-16 shrink-0 text-muted-foreground">{label}</span>
+      <span className="w-14 shrink-0 text-neutral-400">{label}</span>
       <span className="min-w-0 break-words">{children}</span>
     </div>
   );

@@ -13,9 +13,15 @@ import { isHtmlSignature, signatureSrcDoc } from "@/lib/signature";
 export function SignaturePreview({
   signature,
   className,
+  bordered = true,
+  scale = 1,
 }: {
   signature: string;
   className?: string;
+  /** 테두리·흰 배경 박스로 감쌀지 여부. 실제 메일처럼 흘려 보이려면 false */
+  bordered?: boolean;
+  /** 원본 비율을 유지한 채 균일 축소(<1). 실제 메일 미리보기에서 살짝 작게 보일 때 */
+  scale?: number;
 }) {
   const [height, setHeight] = useState(160);
 
@@ -39,12 +45,19 @@ export function SignaturePreview({
       title="메일 서명 미리보기"
       // allow-same-origin(스크립트 미허용): 스크립트 실행은 막고 높이만 측정
       sandbox="allow-same-origin"
-      srcDoc={signatureSrcDoc(signature)}
+      // 내부 스크롤바 원천 차단 — 실제 메일처럼 콘텐츠 높이에 맞춰 통짜로 보인다
+      scrolling="no"
+      srcDoc={signatureSrcDoc(signature, scale)}
       onLoad={(e) => {
         try {
           const doc = e.currentTarget.contentWindow?.document;
-          if (doc?.body) {
-            setHeight(Math.min(doc.body.scrollHeight + 4, 640));
+          const h = Math.max(
+            doc?.body?.scrollHeight ?? 0,
+            doc?.documentElement?.scrollHeight ?? 0,
+          );
+          if (h) {
+            // 측정 높이에 여유를 둬 마지막 줄이 잘리거나 스크롤이 남지 않게 한다.
+            setHeight(Math.min(h + 16, 1200));
           }
         } catch {
           // 높이 측정 실패 시 기본 높이 유지
@@ -52,7 +65,8 @@ export function SignaturePreview({
       }}
       style={{ height }}
       className={cn(
-        "block w-full rounded-md border bg-white",
+        "block w-full",
+        bordered && "rounded-md border bg-white",
         className,
       )}
     />

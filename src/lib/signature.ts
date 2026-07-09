@@ -15,11 +15,13 @@ export function isHtmlSignature(value: string): boolean {
 /**
  * HTML 조각을 미리보기·편집용 최소 문서로 감싼다.
  * 앱 CSS 와 격리하고 body 여백을 정리한다. 이미 완전한 문서면 그대로 둔다.
+ * scale(<1)을 주면 원본 비율은 유지한 채 zoom 으로 균일 축소한다(좌상단 기준).
  */
-export function signatureSrcDoc(html: string): string {
+export function signatureSrcDoc(html: string, scale = 1): string {
   const trimmed = html.trimStart();
   if (/^<!doctype|^<html/i.test(trimmed)) return html;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>html,body{margin:0;padding:8px;background:#fff;font-family:'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',Arial,sans-serif;}</style></head><body>${html}</body></html>`;
+  const zoom = scale !== 1 ? `zoom:${scale};` : "";
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>html,body{margin:0;padding:0;${zoom}background:#fff;font-family:'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',Arial,sans-serif;}</style></head><body>${html}</body></html>`;
 }
 
 /**
