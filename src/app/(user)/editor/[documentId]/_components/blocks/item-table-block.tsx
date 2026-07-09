@@ -4,12 +4,18 @@ import { formatKRW } from "@/lib/format";
 
 export function ItemTableBlock({ block }: { block: Block }) {
   const p = block.props as BlockPropsMap["itemTable"];
+  const extraCols = p.extraColumns ?? [];
   const total = calcItemTableTotal(p.rows);
   return (
     <table className="h-full w-full border-collapse text-xs">
       <thead>
         <tr className="bg-muted">
           <th className="border px-2 py-1 text-left">품목 / 설명</th>
+          {extraCols.map((c) => (
+            <th key={c.id} className="border px-2 py-1" style={{ textAlign: c.align }}>
+              {c.label}
+            </th>
+          ))}
           <th className="border px-2 py-1 text-right">수량</th>
           <th className="border px-2 py-1 text-right">단가</th>
           <th className="border px-2 py-1 text-right">금액</th>
@@ -26,6 +32,15 @@ export function ItemTableBlock({ block }: { block: Block }) {
                 </div>
               ) : null}
             </td>
+            {extraCols.map((c) => (
+              <td
+                key={c.id}
+                className="border px-2 py-1"
+                style={{ textAlign: c.align }}
+              >
+                {r.extra?.[c.id] ?? ""}
+              </td>
+            ))}
             <td className="border px-2 py-1 text-right tabular-nums">
               {r.quantity}
             </td>
@@ -43,7 +58,7 @@ export function ItemTableBlock({ block }: { block: Block }) {
           <tr>
             <td
               className="border px-2 py-1 text-right font-semibold"
-              colSpan={3}
+              colSpan={3 + extraCols.length}
             >
               합계
             </td>

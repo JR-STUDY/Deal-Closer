@@ -6,6 +6,7 @@ import type {
   BlockPropsMap,
   ItemRow,
   MetaField,
+  TableColumn,
   Align,
   FontFamily,
   ZOrderAction,
@@ -374,8 +375,19 @@ function ContentForm({
     }
     case "itemTable": {
       const p = block.props as BlockPropsMap["itemTable"];
+      const cols = p.extraColumns ?? [];
       const update = (rows: ItemRow[]) => onChangeProps({ rows });
+      const setCols = (next: TableColumn[]) =>
+        onChangeProps({ extraColumns: next });
       const toInt = (v: string) => Math.trunc(Number(v)) || 0;
+      const setExtra = (rowId: string, colId: string, val: string) =>
+        update(
+          p.rows.map((x) =>
+            x.id === rowId
+              ? { ...x, extra: { ...(x.extra ?? {}), [colId]: val } }
+              : x,
+          ),
+        );
       return (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -388,6 +400,66 @@ function ContentForm({
               onCheckedChange={(v) => onChangeProps({ showTotal: v })}
             />
           </div>
+
+          {/* 추가 열 관리 (#2/#4) */}
+          <div className="space-y-2 rounded border p-2">
+            <Label className="text-xs">추가 열</Label>
+            {cols.map((c) => (
+              <div key={c.id} className="space-y-1">
+                <div className="flex gap-1">
+                  <Input
+                    placeholder="열 이름"
+                    value={c.label}
+                    onChange={(e) =>
+                      setCols(
+                        cols.map((x) =>
+                          x.id === c.id ? { ...x, label: e.target.value } : x,
+                        ),
+                      )
+                    }
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="열 삭제"
+                    onClick={() => setCols(cols.filter((x) => x.id !== c.id))}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+                <div className="flex gap-1">
+                  {(["left", "center", "right"] as const).map((a) => (
+                    <Button
+                      key={a}
+                      type="button"
+                      size="sm"
+                      variant={c.align === a ? "default" : "outline"}
+                      className="flex-1 px-1"
+                      onClick={() =>
+                        setCols(
+                          cols.map((x) =>
+                            x.id === c.id ? { ...x, align: a } : x,
+                          ),
+                        )
+                      }
+                    >
+                      {ALIGN_LABELS[a]}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setCols([...cols, { id: uid(), label: "열", align: "left" }])
+              }
+            >
+              <Plus className="size-4" /> 열 추가
+            </Button>
+          </div>
+
           {p.rows.map((r) => (
             <div key={r.id} className="space-y-1 rounded border p-2">
               <Input
@@ -442,6 +514,14 @@ function ContentForm({
                   }
                 />
               </div>
+              {cols.map((c) => (
+                <Input
+                  key={c.id}
+                  placeholder={c.label || "추가 열"}
+                  value={r.extra?.[c.id] ?? ""}
+                  onChange={(e) => setExtra(r.id, c.id, e.target.value)}
+                />
+              ))}
               <Button
                 variant="ghost"
                 size="sm"
@@ -463,6 +543,7 @@ function ContentForm({
                   description: "",
                   quantity: 1,
                   unitPrice: 0,
+                  extra: {},
                 },
               ])
             }
@@ -530,20 +611,118 @@ function ContentForm({
     }
     case "table": {
       const p = block.props as BlockPropsMap["table"];
+      const cells = p.cells;
+      const aligns = p.colAligns ?? [];
+      const nCols = cells.reduce((m, r) => Math.max(m, r.length), 0);
+      const setCell = (ri: number, ci: number, val: string) =>
+        onChangeProps({
+          cells: cells.map((row, r) =>
+            r === ri ? row.map((c, ci2) => (ci2 === ci ? val : c)) : row,
+          ),
+        });
+      const addRow = () =>
+        onChangeProps({ cells: [...cells, Array(nCols || 1).fill("")] });
+      const addCol = () =>
+        onChangeProps({
+          cells: cells.map((row) => [...row, ""]),
+          colAligns: [...aligns, "left"],
+        });
+      const delRow = (ri: number) =>
+        onChangeProps({ cells: cells.filter((_, r) => r !== ri) });
+      const delCol = (ci: number) =>
+        onChangeProps({
+          cells: cells.map((row) => row.filter((_, c) => c !== ci)),
+          colAligns: aligns.filter((_, c) => c !== ci),
+        });
+      const setAlign = (ci: number, a: Align) => {
+        const next = [...aligns];
+        while (next.length < nCols) next.push("left");
+        next[ci] = a;
+        onChangeProps({ colAligns: next });
+      };
       return (
-        <div className="space-y-2">
-          <Label className="text-xs">셀 내용(행=줄, 열=탭)</Label>
-          <Textarea
-            rows={6}
-            value={p.cells.map((r) => r.join("\t")).join("\n")}
-            onChange={(e) =>
-              onChangeProps({
-                cells: e.target.value
-                  .split("\n")
-                  .map((line) => line.split("\t")),
-              })
-            }
-          />
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="hasHeader" className="text-sm">
+              첫 행 헤더
+            </Label>
+            <Switch
+              id="hasHeader"
+              checked={p.hasHeader}
+              onCheckedChange={(v) => onChangeProps({ hasHeader: v })}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">열 정렬</Label>
+            {Array.from({ length: nCols }).map((_, ci) => (
+              <div key={ci} className="flex items-center gap-1">
+                <span className="w-7 shrink-0 text-[11px] text-muted-foreground">
+                  열{ci + 1}
+                </span>
+                {(["left", "center", "right"] as const).map((a) => (
+                  <Button
+                    key={a}
+                    type="button"
+                    size="sm"
+                    variant={(aligns[ci] ?? "left") === a ? "default" : "outline"}
+                    className="flex-1 px-1"
+                    onClick={() => setAlign(ci, a)}
+                  >
+                    {ALIGN_LABELS[a]}
+                  </Button>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="열 삭제"
+                  onClick={() => delCol(ci)}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">셀 내용</Label>
+            {cells.map((row, ri) => (
+              <div key={ri} className="flex items-center gap-1">
+                {row.map((cell, ci) => (
+                  <Input
+                    key={ci}
+                    value={cell}
+                    className="text-xs"
+                    onChange={(e) => setCell(ri, ci, e.target.value)}
+                  />
+                ))}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="행 삭제"
+                  onClick={() => delRow(ri)}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={addRow}
+            >
+              <Plus className="size-4" /> 행 추가
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={addCol}
+            >
+              <Plus className="size-4" /> 열 추가
+            </Button>
+          </div>
         </div>
       );
     }

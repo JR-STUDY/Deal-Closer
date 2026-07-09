@@ -68,7 +68,12 @@ export type ItemRow = {
   description: string;
   quantity: number;
   unitPrice: number;
+  /** 사용자 추가 열 값 (colId → 값) */
+  extra?: Record<string, string>;
 };
+
+/** 품목표 사용자 추가 열 정의 */
+export type TableColumn = { id: string; label: string; align: Align };
 
 export type MetaField = { id: string; label: string; value: string };
 
@@ -77,8 +82,12 @@ export type BlockPropsMap = {
   text: TextStyle;
   supplier: { fields: MetaField[]; labelWidth: number };
   clientMeta: { fields: MetaField[]; labelWidth: number };
-  itemTable: { rows: ItemRow[]; showTotal: boolean };
-  table: { hasHeader: boolean; cells: string[][] };
+  itemTable: {
+    rows: ItemRow[];
+    showTotal: boolean;
+    extraColumns: TableColumn[];
+  };
+  table: { hasHeader: boolean; cells: string[][]; colAligns: Align[] };
   image: {
     dataUrl: string;
     alt: string;
@@ -174,7 +183,7 @@ export function defaultProps(type: BlockType): AnyBlockProps {
         ],
       };
     case "itemTable":
-      return { rows: [], showTotal: true };
+      return { rows: [], showTotal: true, extraColumns: [] };
     case "table":
       return {
         hasHeader: true,
@@ -182,6 +191,7 @@ export function defaultProps(type: BlockType): AnyBlockProps {
           ["항목", "값"],
           ["", ""],
         ],
+        colAligns: ["left", "left"],
       };
     case "image":
       return {
