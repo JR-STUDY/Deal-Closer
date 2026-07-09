@@ -110,6 +110,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           typeof body.clientName === "string"
             ? body.clientName.trim() || null
             : undefined,
+        // folderId: 문자열이면 해당 폴더로 이동, null/"" 이면 미분류로 해제, 없으면 변경 안 함
+        folderId:
+          body.folderId === null || body.folderId === ""
+            ? null
+            : typeof body.folderId === "string"
+              ? body.folderId
+              : undefined,
+        // isCommon: 팀 공통(공유) 베이스 문서 지정/해제
+        isCommon:
+          typeof body.isCommon === "boolean" ? body.isCommon : undefined,
         // items 가 오면 서버 재계산 총액을 우선한다.
         amount: hasItems
           ? itemsTotal

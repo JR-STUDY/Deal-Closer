@@ -139,6 +139,7 @@ async function main() {
   await prisma.documentItem.deleteMany();
   await prisma.document.deleteMany();
   await prisma.emailTemplate.deleteMany();
+  await prisma.folder.deleteMany();
   await prisma.emailAccount.deleteMany();
   await prisma.teamMailDomain.deleteMany();
   await prisma.catalogItem.deleteMany();
@@ -489,6 +490,65 @@ async function main() {
     })),
   });
 
+  // 8-4) 공용문서함(공유) 문서 지정 — 표준 양식·공용 기준 문서 (문서는 내/공용 중 하나에만 속함)
+  await prisma.document.updateMany({
+    where: {
+      orgId: org.id,
+      title: {
+        in: [
+          "누리테크 표준 비밀유지계약서(NDA)",
+          "블루오션 표준 비밀유지계약서(NDA)",
+          "성진산업 유지보수 변경합의서",
+        ],
+      },
+    },
+    data: { isCommon: true },
+  });
+
+  // 8-5) 문서함별 폴더 (다단계) — 내 문서함(isCommon=false) / 공용문서함(isCommon=true)
+  const folderClients = await prisma.folder.create({
+    data: { orgId: org.id, name: "주요 거래처", isCommon: false, sortOrder: 0 },
+  });
+  // 하위 폴더 예시 (주요 거래처 > 글로벌커머스(주))
+  const folderClientsGlobal = await prisma.folder.create({
+    data: {
+      orgId: org.id,
+      name: "글로벌커머스(주)",
+      isCommon: false,
+      parentId: folderClients.id,
+      sortOrder: 0,
+    },
+  });
+  const folderProposals = await prisma.folder.create({
+    data: { orgId: org.id, name: "제안서", isCommon: false, sortOrder: 1 },
+  });
+  await prisma.folder.create({
+    data: { orgId: org.id, name: "진행 중", isCommon: false, sortOrder: 2 },
+  });
+  const folderStandard = await prisma.folder.create({
+    data: { orgId: org.id, name: "표준 양식", isCommon: true, sortOrder: 0 },
+  });
+
+  // 내 문서함 폴더 배치 (isCommon=false 문서만) — 대표 계약서는 하위 폴더에 배치
+  await prisma.document.update({
+    where: { id: globalContract.id },
+    data: { folderId: folderClientsGlobal.id },
+  });
+  await prisma.document.update({
+    where: { id: abcQuote.id },
+    data: { folderId: folderClients.id },
+  });
+  await prisma.document.updateMany({
+    where: { orgId: org.id, type: "PROPOSAL", isCommon: false, folderId: null },
+    data: { folderId: folderProposals.id },
+  });
+
+  // 공용문서함 폴더 배치 (isCommon=true 문서)
+  await prisma.document.updateMany({
+    where: { orgId: org.id, isCommon: true },
+    data: { folderId: folderStandard.id },
+  });
+
   // 9) 발송 이력 (SENT 문서)
   await prisma.emailLog.create({
     data: {
@@ -549,6 +609,7 @@ async function main() {
     사용자: await prisma.user.count(),
     문서: await prisma.document.count(),
     문서항목: await prisma.documentItem.count(),
+    폴더: await prisma.folder.count(),
     카탈로그: await prisma.catalogItem.count(),
     메일계정: await prisma.emailAccount.count(),
     메일도메인: await prisma.teamMailDomain.count(),

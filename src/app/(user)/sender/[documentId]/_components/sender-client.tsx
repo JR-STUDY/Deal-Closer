@@ -129,6 +129,7 @@ export function SenderClient({
       <PageHeader
         title="이메일 발송"
         description={`"${document.title}" 문서를 이메일로 발송합니다.`}
+        backHref="/library"
         actions={
           <Button onClick={handleSend}>
             <Send className="size-4" />

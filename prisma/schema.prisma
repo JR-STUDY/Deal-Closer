@@ -28,6 +28,7 @@ model Organization {
   users           User[]
   invites         Invite[]
   documents       Document[]
+  folders         Folder[]
   catalogItems    CatalogItem[]
   branding        Branding?
   creditWallet    CreditWallet?
@@ -95,6 +96,11 @@ model Document {
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   authorId    String
   author      User     @relation(fields: [authorId], references: [id])
+  // 문서 분류용 폴더(선택). null 이면 "미분류". 폴더 삭제 시 문서는 미분류로 내려간다.
+  folderId    String?
+  folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  // 팀 공통(공유) 베이스 문서 여부. 폴더 배치와 무관한 교차 분류이며 "공통 문서" 탭에서 모아 본다.
+  isCommon    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -106,6 +112,7 @@ model Document {
   @@index([orgId])
   @@index([authorId])
   @@index([status])
+  @@index([folderId])
   @@map("documents")
 }
 
@@ -123,6 +130,28 @@ model DocumentItem {
 
   @@index([documentId])
   @@map("document_items")
+}
+
+/// 문서 분류용 폴더 (다단계 트리). parentId 로 자기 자신을 참조해 중첩 폴더를 구성한다.
+/// 상위 폴더 삭제 시 하위 폴더도 함께 삭제(Cascade)되고, 각 폴더의 문서는 미분류로 내려간다.
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  // 소속 문서함: false=내 문서함, true=공용문서함 (Document.isCommon 과 짝을 이룬다)
+  isCommon  Boolean  @default(false)
+  parentId  String?
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderTree")
+  documents Document[]
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([parentId])
+  @@map("folders")
 }
 
 // ==================== 카탈로그(마스터 데이터) ====================

@@ -65,6 +65,7 @@ export default async function EditorPage({
     <>
       <PageHeader
         title={document.title}
+        backHref="/library"
         actions={
           <>
             <DocumentStatusControl

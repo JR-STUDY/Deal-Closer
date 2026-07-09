@@ -14,17 +14,32 @@ import {
   UserCog,
 } from "lucide-react";
 
+export type NavChild = {
+  href: string;
+  label: string;
+};
+
 export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** 하위 항목(있으면 사이드바에서 펼쳐 표시) */
+  children?: NavChild[];
 };
 
 /** 영업 담당자 포털 (user-web) 네비게이션 */
 export const userNav: NavItem[] = [
   { href: "/dashboard", label: "대시보드", icon: LayoutDashboard },
   { href: "/generator", label: "새 문서 생성", icon: Sparkles },
-  { href: "/library", label: "문서 보관함", icon: FolderClosed },
+  {
+    href: "/library",
+    label: "문서 보관함",
+    icon: FolderClosed,
+    children: [
+      { href: "/library/common", label: "공용문서함" },
+      { href: "/library", label: "내 문서함" },
+    ],
+  },
   { href: "/settings/email", label: "메일 연동", icon: Mail },
   { href: "/settings/templates", label: "메일 템플릿", icon: MailPlus },
 ];
