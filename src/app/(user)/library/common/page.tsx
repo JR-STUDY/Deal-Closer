@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { Sparkles, Users } from "lucide-react";
 import { prisma } from "@/lib/db";
@@ -5,14 +6,19 @@ import { getCurrentOrg } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { DocumentList } from "../_components/document-list";
+import { ViewToggle } from "../_components/view-toggle";
 
 export default async function CommonDocumentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ folder?: string }>;
+  searchParams: Promise<{ folder?: string; view?: string }>;
 }) {
-  const [{ folder }, org] = await Promise.all([searchParams, getCurrentOrg()]);
+  const [{ folder, view }, org] = await Promise.all([
+    searchParams,
+    getCurrentOrg(),
+  ]);
   const activeFolder = folder || null;
+  const activeView = view === "list" ? "list" : "card";
 
   const [documents, folders] = await Promise.all([
     prisma.document.findMany({
@@ -66,7 +72,7 @@ export default async function CommonDocumentsPage({
         }
       />
 
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 space-y-4 overflow-auto p-8">
         {documents.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-20 text-center">
             <Users className="size-10 text-muted-foreground" />
@@ -79,7 +85,18 @@ export default async function CommonDocumentsPage({
             </Button>
           </div>
         ) : (
-          <DocumentList documents={documents} folders={folders} />
+          <>
+            <div className="flex justify-end">
+              <Suspense fallback={null}>
+                <ViewToggle />
+              </Suspense>
+            </div>
+            <DocumentList
+              documents={documents}
+              folders={folders}
+              view={activeView}
+            />
+          </>
         )}
       </div>
     </>

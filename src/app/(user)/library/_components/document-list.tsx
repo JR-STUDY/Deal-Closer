@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { LayoutGrid, List as ListIcon, Pencil, Mail } from "lucide-react";
+import { Pencil, Mail } from "lucide-react";
 import { formatKRW, formatDateTime } from "@/lib/format";
 import { StatusBadge, DocTypeBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -36,40 +35,14 @@ type View = "card" | "list";
 export function DocumentList({
   documents,
   folders,
+  view = "card",
 }: {
   documents: DocRow[];
   folders: FolderOption[];
+  view?: View;
 }) {
-  const [view, setView] = useState<View>("card");
-
   return (
     <div className="space-y-4">
-      {/* 보기 전환 (카드 / 목록) */}
-      <div className="flex justify-end">
-        <div className="inline-flex rounded-md border p-0.5">
-          <Button
-            variant={view === "card" ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 gap-1.5 px-2"
-            aria-pressed={view === "card"}
-            onClick={() => setView("card")}
-          >
-            <LayoutGrid className="size-4" />
-            카드
-          </Button>
-          <Button
-            variant={view === "list" ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 gap-1.5 px-2"
-            aria-pressed={view === "list"}
-            onClick={() => setView("list")}
-          >
-            <ListIcon className="size-4" />
-            목록
-          </Button>
-        </div>
-      </div>
-
       {view === "card" ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {documents.map((doc) => (

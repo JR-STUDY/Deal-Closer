@@ -17,13 +17,15 @@ export default async function LibraryPage({
     type?: string;
     q?: string;
     folder?: string;
+    view?: string;
   }>;
 }) {
   // searchParams 와 org 조회는 서로 독립 → 병렬 처리
-  const [{ status, type, q, folder }, org] = await Promise.all([
+  const [{ status, type, q, folder, view }, org] = await Promise.all([
     searchParams,
     getCurrentOrg(),
   ]);
+  const activeView = view === "list" ? "list" : "card";
 
   const activeStatus =
     status && (DOCUMENT_STATUSES as readonly string[]).includes(status)
@@ -118,7 +120,11 @@ export default async function LibraryPage({
             </Button>
           </div>
         ) : (
-          <DocumentList documents={documents} folders={folders} />
+          <DocumentList
+            documents={documents}
+            folders={folders}
+            view={activeView}
+          />
         )}
       </div>
     </>

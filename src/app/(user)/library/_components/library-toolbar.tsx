@@ -17,6 +17,7 @@ import {
   DOCUMENT_STATUSES,
   DOCUMENT_STATUS_LABELS,
 } from "@/lib/constants";
+import { ViewToggle } from "./view-toggle";
 
 const ALL = "__all__";
 
@@ -120,6 +121,8 @@ export function LibraryToolbar() {
             ))}
           </SelectContent>
         </Select>
+
+        <ViewToggle />
       </div>
     </div>
   );
