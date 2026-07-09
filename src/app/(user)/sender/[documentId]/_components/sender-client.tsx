@@ -26,6 +26,7 @@ import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants";
 import { formatKRW } from "@/lib/format";
 import type { EmailTemplateDTO, TemplateContext } from "@/lib/email-template";
 import { DocTypeBadge } from "@/components/status-badge";
+import { SignaturePreview } from "@/components/signature-preview";
 import { EmailTemplateToolbar } from "./email-template-toolbar";
 
 const DEFAULT_BODY =
@@ -239,9 +240,7 @@ export function SenderClient({
                       : "rounded-lg border border-dashed p-4 opacity-60"
                   }
                 >
-                  <p className="whitespace-pre-line text-sm text-muted-foreground">
-                    {signature}
-                  </p>
+                  <SignaturePreview signature={signature} />
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
