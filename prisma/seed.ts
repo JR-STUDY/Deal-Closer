@@ -296,8 +296,8 @@ async function main() {
     },
   });
 
-  // 8) 문서 (기획서 라이브러리 예시 반영)
-  // 8-1) 대표 견적서 — 라인 아이템 포함, 합계 24,500,000
+  // 8) 문서 — 최근 7개월(2026-01 ~ 2026-07)에 걸쳐 우상향 실적 스토리로 분포
+  // 8-1) 대표 견적서 — 라인 아이템 포함, 합계 24,500,000 (에디터/생성이력 데모용)
   const abcQuote = await prisma.document.create({
     data: {
       orgId: org.id,
@@ -307,7 +307,7 @@ async function main() {
       status: "DRAFT",
       clientName: "(주)에이비씨 테크놀로지",
       amount: 24_500_000,
-      createdAt: new Date("2024-05-23T14:30:00+09:00"),
+      createdAt: new Date("2026-07-06T14:30:00+09:00"),
       items: {
         create: [
           {
@@ -339,6 +339,7 @@ async function main() {
     },
   });
 
+  // 8-2) 대표 계약서 — 발송 이력 데모용
   const globalContract = await prisma.document.create({
     data: {
       orgId: org.id,
@@ -348,78 +349,60 @@ async function main() {
       status: "SENT",
       clientName: "글로벌커머스(주)",
       amount: 112_000_000,
-      createdAt: new Date("2024-05-21T09:15:00+09:00"),
+      createdAt: new Date("2026-06-20T09:15:00+09:00"),
     },
   });
 
-  await prisma.document.create({
-    data: {
-      orgId: org.id,
-      authorId: leader.id,
-      title: "스타트업 클라우드 아키텍처 컨설팅 문서",
-      type: "PROPOSAL",
-      status: "COMPLETED",
-      clientName: "스타트업클라우드",
-      amount: 8_800_000,
-      createdAt: new Date("2024-05-18T16:45:00+09:00"),
-    },
-  });
-
-  await prisma.document.create({
-    data: {
-      orgId: org.id,
-      authorId: rep.id,
-      title: "삭제 예정 문서 테스트 케이스 01",
-      type: "QUOTE",
-      status: "DRAFT",
-      amount: 0,
-      createdAt: new Date("2024-05-23T10:00:00+09:00"),
-    },
-  });
+  // 8-3) 나머지 문서 — 월별 분포·상태·종류·금액을 다양하게
+  const A = rep.id;
+  const L = leader.id;
+  type DocSeed = [string, string, string, string | null, number, string, string];
+  const docSeeds: DocSeed[] = [
+    // [title, type, status, clientName, amount, date(KST), authorId]
+    // 2026-01
+    ["한빛소프트 사내 시스템 구축 견적서", "QUOTE", "COMPLETED", "한빛소프트", 38_000_000, "2026-01-12T10:00:00+09:00", A],
+    ["누리테크 표준 비밀유지계약서(NDA)", "NDA", "SENT", "누리테크", 0, "2026-01-20T11:00:00+09:00", A],
+    // 2026-02
+    ["그린에너지 데이터 플랫폼 구축 제안서", "PROPOSAL", "COMPLETED", "그린에너지", 52_000_000, "2026-02-05T13:00:00+09:00", L],
+    ["대명물산 ERP 도입 견적서", "QUOTE", "SENT", "대명물산", 27_500_000, "2026-02-14T15:00:00+09:00", A],
+    ["성진산업 유지보수 변경합의서", "CONTRACT", "DRAFT", "성진산업", 9_600_000, "2026-02-22T09:30:00+09:00", A],
+    // 2026-03
+    ["동양네트웍스 통합 구축 계약서", "CONTRACT", "COMPLETED", "동양네트웍스", 88_000_000, "2026-03-04T10:20:00+09:00", A],
+    ["미래바이오 연구 인프라 견적서", "QUOTE", "COMPLETED", "미래바이오", 41_000_000, "2026-03-15T14:10:00+09:00", L],
+    ["코스모스랩 AI 도입 제안서", "PROPOSAL", "SENT", "코스모스랩", 33_000_000, "2026-03-27T16:40:00+09:00", A],
+    // 2026-04
+    ["삼정테크 클라우드 이전 견적서", "QUOTE", "COMPLETED", "삼정테크", 46_500_000, "2026-04-03T11:00:00+09:00", A],
+    ["한결로지스 물류시스템 구축 계약서", "CONTRACT", "COMPLETED", "한결로지스", 120_000_000, "2026-04-12T13:30:00+09:00", L],
+    ["블루오션 표준 비밀유지계약서(NDA)", "NDA", "SENT", "블루오션", 0, "2026-04-19T09:15:00+09:00", A],
+    ["정우엔지니어링 설비 견적서", "QUOTE", "DRAFT", "정우엔지니어링", 18_700_000, "2026-04-28T15:50:00+09:00", A],
+    // 2026-05
+    ["케이팜 스마트팜 구축 제안서", "PROPOSAL", "COMPLETED", "케이팜", 64_000_000, "2026-05-06T10:40:00+09:00", L],
+    ["대한제약 품질관리 시스템 견적서", "QUOTE", "COMPLETED", "대한제약", 55_000_000, "2026-05-13T14:00:00+09:00", A],
+    ["우성모바일 앱 고도화 계약서", "CONTRACT", "SENT", "우성모바일", 72_000_000, "2026-05-20T11:20:00+09:00", A],
+    ["신영정보 보안 솔루션 견적서", "QUOTE", "SENT", "신영정보", 29_900_000, "2026-05-25T16:00:00+09:00", L],
+    ["이룸소프트 비밀유지계약서 초안", "NDA", "DRAFT", "이룸소프트", 0, "2026-05-30T09:00:00+09:00", A],
+    // 2026-06
+    ["제일건설 스마트빌딩 구축 견적서", "QUOTE", "COMPLETED", "제일건설", 97_000_000, "2026-06-03T10:10:00+09:00", L],
+    ["한울전자 부품 공급 계약서", "CONTRACT", "COMPLETED", "한울전자", 134_000_000, "2026-06-10T13:00:00+09:00", A],
+    ["넥스트게임즈 플랫폼 구축 제안서", "PROPOSAL", "COMPLETED", "넥스트게임즈", 58_000_000, "2026-06-16T15:30:00+09:00", A],
+    ["세아상역 물류 자동화 견적서", "QUOTE", "SENT", "세아상역", 42_000_000, "2026-06-24T11:40:00+09:00", L],
+    ["오렌지헬스 헬스케어 제안서 초안", "PROPOSAL", "DRAFT", "오렌지헬스", 31_000_000, "2026-06-28T09:20:00+09:00", A],
+    // 2026-07 (데모 기준일 직전)
+    ["가온소프트 SaaS 전환 계약서", "CONTRACT", "COMPLETED", "가온소프트", 76_000_000, "2026-07-02T10:00:00+09:00", A],
+    ["다올테크 인프라 증설 견적서", "QUOTE", "SENT", "다올테크", 48_000_000, "2026-07-08T14:30:00+09:00", L],
+  ];
 
   await prisma.document.createMany({
-    data: [
-      {
-        orgId: org.id,
-        authorId: rep.id,
-        title: "비케이테크 표준 비밀유지계약서(NDA)",
-        type: "NDA",
-        status: "SENT",
-        clientName: "비케이테크",
-        amount: 0,
-        createdAt: new Date("2024-05-20T11:00:00+09:00"),
-      },
-      {
-        orgId: org.id,
-        authorId: rep.id,
-        title: "데이터코리아 유지보수 수량 증설 변경합의서",
-        type: "CONTRACT",
-        status: "DRAFT",
-        clientName: "데이터코리아",
-        amount: 3_600_000,
-        createdAt: new Date("2024-05-22T15:20:00+09:00"),
-      },
-      {
-        orgId: org.id,
-        authorId: leader.id,
-        title: "메가시스템 통합 구축 견적서",
-        type: "QUOTE",
-        status: "COMPLETED",
-        clientName: "메가시스템",
-        amount: 45_000_000,
-        createdAt: new Date("2024-05-15T13:10:00+09:00"),
-      },
-      {
-        orgId: org.id,
-        authorId: rep.id,
-        title: "핀테크랩 결제 시스템 구축 제안서",
-        type: "PROPOSAL",
-        status: "SENT",
-        clientName: "핀테크랩",
-        amount: 30_000_000,
-        createdAt: new Date("2024-05-19T10:40:00+09:00"),
-      },
-    ],
+    data: docSeeds.map(([title, type, status, clientName, amount, date, authorId]) => ({
+      orgId: org.id,
+      authorId,
+      title,
+      type,
+      status,
+      clientName,
+      amount,
+      createdAt: new Date(date),
+    })),
   });
 
   // 9) 발송 이력 (SENT 문서)
@@ -432,7 +415,7 @@ async function main() {
       body: "안녕하세요, SpecFlow AI를 통해 생성된 계약서를 전달드립니다. 검토 후 회신 부탁드립니다.",
       attachmentName: "2024_글로벌커머스_고도화계약서.pdf",
       status: "SENT",
-      sentAt: new Date("2024-05-21T09:20:00+09:00"),
+      sentAt: new Date("2026-06-20T09:20:00+09:00"),
     },
   });
 
@@ -445,7 +428,7 @@ async function main() {
       status: "DONE",
       creditsUsed: 10,
       documentId: abcQuote.id,
-      createdAt: new Date("2024-05-23T14:28:00+09:00"),
+      createdAt: new Date("2026-07-06T14:28:00+09:00"),
     },
   });
 
