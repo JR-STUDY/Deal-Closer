@@ -147,7 +147,7 @@
     margin-top:48px;background:var(--surface);border:1px solid var(--line);
     border-radius:20px;padding:clamp(24px,4vw,44px);box-shadow:var(--shadow);position:relative;overflow:hidden;
   }
-  .flow-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;position:relative}
+  .flow-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;position:relative}
   .fnode{text-align:center;position:relative;z-index:2}
   .fnode .disc{
     width:60px;height:60px;border-radius:16px;margin:0 auto 14px;display:grid;place-items:center;
@@ -437,24 +437,20 @@
         <div class="flow-line" aria-hidden="true"></div>
         <div class="flow-row">
           <div class="fnode done">
-            <div class="disc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6M12 4v16"/></svg></div>
-            <span class="n">01</span><b>마스터 데이터</b><small>품목·단가 등록<br>(엑셀 대량 업로드)</small>
-          </div>
-          <div class="fnode done">
             <div class="disc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-            <span class="n">02</span><b>AI 대화형 생성</b><small>대화로 견적·제안<br>초안 자동 완성</small>
+            <span class="n">01</span><b>AI 대화형 생성</b><small>대화로 견적·제안<br>초안 자동 완성</small>
           </div>
           <div class="fnode done">
             <div class="disc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
-            <span class="n">03</span><b>블록 에디터</b><small>서버 총액·부가세<br>재계산</small>
+            <span class="n">02</span><b>블록 에디터</b><small>서버 총액·부가세<br>재계산</small>
           </div>
           <div class="fnode done">
             <div class="disc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></div>
-            <span class="n">04</span><b>메일 발송</b><small>템플릿·서명·CC<br>Gmail·Outlook</small>
+            <span class="n">03</span><b>메일 발송</b><small>템플릿·서명·CC<br>Gmail·Outlook</small>
           </div>
           <div class="fnode won">
             <div class="disc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
-            <span class="n">05</span><b>관리·분석</b><small>보관함(폴더/공용)<br>영업 대시보드</small>
+            <span class="n">04</span><b>관리·분석</b><small>보관함(폴더/공용)<br>영업 대시보드</small>
           </div>
         </div>
         <div class="mig">
@@ -489,7 +485,7 @@
           </div>
           <ul class="feat">
             <li class="hl"><span class="fi star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/></svg></span><span><b>문서 마이그레이션<span class="tag-star">KEY</span></b>기존 엑셀·PDF 계약서를 유사 형태 디지털 초안으로 재현(검수·보정 루프)</span></li>
-            <li><span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><span><b>AI 대화형 문서 생성기</b>마스터 데이터를 참조해 정확한 견적·제안 초안 생성</span></li>
+            <li class="hl"><span class="fi star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><span><b>AI 대화형 문서 생성<span class="tag-star">KEY</span></b>대화로 견적·제안 초안 생성, 품목·단가 카탈로그·참고 파일 반영</span></li>
             <li><span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span><b>블록 캔버스 에디터</b>블록 배치 편집, 저장 시 서버가 총액·부가세 재도출</span></li>
             <li><span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></span><span><b>메일 발송</b>템플릿·서명·팀 도메인·CC·미리보기, 수신자 검증</span></li>
             <li><span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span><span><b>문서 보관함 · 대시보드</b>다단계 폴더·공용문서함 분류, 개인·팀 성과 시각화</span></li>
