@@ -423,13 +423,13 @@ export function DocumentEditor({
     <>
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex items-center justify-between gap-3 border-b bg-background px-4 py-2">
+        <div className="flex items-center gap-3 border-b bg-background px-4 py-2">
           <Input
             value={docTitle}
             onChange={(e) => handleTitleChange(e.target.value)}
             aria-label="문서 제목"
             placeholder="문서 제목"
-            className="max-w-md font-medium"
+            className="min-w-0 max-w-xs flex-1 font-medium"
           />
           <EditorToolbar
             documentId={documentId}

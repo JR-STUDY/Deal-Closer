@@ -26,9 +26,9 @@ export function EditorToolbar({
   onPreview,
 }: Props) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex shrink-0 items-center gap-2">
       {/* 페이지 컨트롤 (#8) */}
-      <div className="flex items-center gap-0.5 rounded-md border px-1">
+      <div className="flex shrink-0 items-center gap-0.5 rounded-md border px-1">
         <Button
           variant="ghost"
           size="icon"
@@ -53,21 +53,27 @@ export function EditorToolbar({
         </Button>
       </div>
 
-      <Button variant="outline" onClick={onPreview}>
+      <Button variant="outline" onClick={onPreview} className="shrink-0">
         <Eye className="size-4" />
         미리보기
       </Button>
 
       {dirty ? (
-        <span className="text-xs text-muted-foreground">
-          저장되지 않은 변경사항
-        </span>
+        <span
+          className="size-2 shrink-0 rounded-full bg-amber-500"
+          title="저장되지 않은 변경사항"
+          aria-label="저장되지 않은 변경사항"
+        />
       ) : null}
-      <Button onClick={onSave} disabled={saving || !dirty}>
+      <Button
+        onClick={onSave}
+        disabled={saving || !dirty}
+        className="shrink-0"
+      >
         <Save className="size-4" />
         {saving ? "저장 중…" : "저장"}
       </Button>
-      <Button asChild variant="outline">
+      <Button asChild variant="outline" className="shrink-0">
         <Link href={`/sender/${documentId}`}>
           <Send className="size-4" />
           발송하기
