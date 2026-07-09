@@ -1,6 +1,11 @@
 "use client";
 
-import type { Block, BlockType, ZOrderAction } from "@/lib/editor-schema";
+import type {
+  Block,
+  BlockType,
+  ZOrderAction,
+  CatalogOption,
+} from "@/lib/editor-schema";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BlockPalette } from "./block-palette";
 import { BlockInspector } from "./block-inspector";
@@ -9,6 +14,7 @@ type Props = {
   tab: string;
   onTabChange: (v: string) => void;
   onAdd: (type: BlockType) => void;
+  catalog: CatalogOption[];
   block: Block | null;
   onChange: (patch: Partial<Block>) => void;
   onChangeProps: (propsPatch: Record<string, unknown>) => void;
@@ -21,6 +27,7 @@ export function EditorSidebar({
   tab,
   onTabChange,
   onAdd,
+  catalog,
   block,
   onChange,
   onChangeProps,
@@ -51,6 +58,7 @@ export function EditorSidebar({
           <TabsContent value="inspector" className="mt-0">
             <BlockInspector
               block={block}
+              catalog={catalog}
               onChange={onChange}
               onChangeProps={onChangeProps}
               onRemove={onRemove}

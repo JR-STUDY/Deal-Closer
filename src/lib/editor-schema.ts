@@ -75,6 +75,16 @@ export type ItemRow = {
 /** 품목표 사용자 추가 열 정의 */
 export type TableColumn = { id: string; label: string; align: Align };
 
+/** 카탈로그(마스터 데이터) 품목 — 품목표에서 드롭다운으로 선택 (#6) */
+export type CatalogOption = {
+  id: string;
+  name: string;
+  unitPrice: number;
+  description: string | null;
+  category: string;
+  unit: string;
+};
+
 export type MetaField = { id: string; label: string; value: string };
 
 export type BlockPropsMap = {

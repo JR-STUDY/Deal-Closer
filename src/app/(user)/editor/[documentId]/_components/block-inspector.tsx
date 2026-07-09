@@ -7,6 +7,7 @@ import type {
   ItemRow,
   MetaField,
   TableColumn,
+  CatalogOption,
   Align,
   FontFamily,
   ZOrderAction,
@@ -36,6 +37,7 @@ const Z_ACTIONS: { action: ZOrderAction; label: string }[] = [
 
 type Props = {
   block: Block | null;
+  catalog: CatalogOption[];
   onChange: (patch: Partial<Block>) => void;
   onChangeProps: (propsPatch: Record<string, unknown>) => void;
   onRemove: (id: string) => void;
@@ -75,6 +77,7 @@ function ColorField({
 
 export function BlockInspector({
   block,
+  catalog,
   onChange,
   onChangeProps,
   onRemove,
@@ -148,7 +151,11 @@ export function BlockInspector({
       </div>
 
       {!block.locked ? (
-        <ContentForm block={block} onChangeProps={onChangeProps} />
+        <ContentForm
+          block={block}
+          catalog={catalog}
+          onChangeProps={onChangeProps}
+        />
       ) : (
         <p className="text-xs text-muted-foreground">
           잠금 상태입니다. 해제하면 내용을 편집할 수 있습니다.
@@ -312,9 +319,11 @@ function LabeledFieldsForm({
 
 function ContentForm({
   block,
+  catalog,
   onChangeProps,
 }: {
   block: Block;
+  catalog: CatalogOption[];
   onChangeProps: (p: Record<string, unknown>) => void;
 }) {
   switch (block.type) {
@@ -462,6 +471,36 @@ function ContentForm({
 
           {p.rows.map((r) => (
             <div key={r.id} className="space-y-1 rounded border p-2">
+              {catalog.length > 0 ? (
+                <select
+                  aria-label="카탈로그에서 품목 선택"
+                  className="h-9 w-full rounded-md border bg-transparent px-2 text-xs"
+                  value=""
+                  onChange={(e) => {
+                    const item = catalog.find((c) => c.id === e.target.value);
+                    if (!item) return;
+                    update(
+                      p.rows.map((x) =>
+                        x.id === r.id
+                          ? {
+                              ...x,
+                              name: item.name,
+                              unitPrice: item.unitPrice,
+                              description: item.description ?? x.description,
+                            }
+                          : x,
+                      ),
+                    );
+                  }}
+                >
+                  <option value="">카탈로그에서 선택…</option>
+                  {catalog.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} · ₩{c.unitPrice.toLocaleString("ko-KR")}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <Input
                 placeholder="품목명"
                 value={r.name}

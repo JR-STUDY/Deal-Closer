@@ -8,6 +8,7 @@ import type {
   BlockType,
   EditorDoc,
   ZOrderAction,
+  CatalogOption,
 } from "@/lib/editor-schema";
 import { createBlock } from "@/lib/editor-schema";
 import { Input } from "@/components/ui/input";
@@ -45,7 +46,22 @@ export function DocumentEditor({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [navTarget, setNavTarget] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState<CatalogOption[]>([]);
   const router = useRouter();
+
+  // 카탈로그(마스터 데이터) 로드 — 품목표 드롭다운용 (#6)
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/catalog")
+      .then((r) => r.json())
+      .then((d) => {
+        if (alive && Array.isArray(d?.data)) setCatalog(d.data);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const selectedBlock = useMemo(
     () => doc.blocks.find((b) => b.id === selectedId) ?? null,
@@ -303,6 +319,7 @@ export function DocumentEditor({
         tab={sidebarTab}
         onTabChange={(v) => setSidebarTab(v as "palette" | "inspector")}
         onAdd={handleAdd}
+        catalog={catalog}
         block={selectedBlock}
         onChange={handleChangeBlock}
         onChangeProps={handleChangeProps}
