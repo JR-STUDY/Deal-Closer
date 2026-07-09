@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,8 @@ export function SignatureForm({
   const [isSaving, setIsSaving] = useState(false);
 
   const isDirty = signature !== saved;
+  // 미리보기는 지연값으로 렌더 — 큰 HTML 편집 시 키 입력마다 iframe 리로드되는 부담 완화
+  const previewSignature = useDeferredValue(signature);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -65,11 +67,11 @@ export function SignatureForm({
         미리보기로 실제 모습을 확인할 수 있습니다.
       </p>
 
-      {signature.trim() ? (
+      {previewSignature.trim() ? (
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground">미리보기</p>
           <div className="rounded-lg border bg-muted/30 p-3">
-            <SignaturePreview signature={signature} />
+            <SignaturePreview signature={previewSignature} />
           </div>
         </div>
       ) : null}

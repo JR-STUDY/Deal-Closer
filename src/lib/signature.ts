@@ -1,11 +1,15 @@
 import { MAX_SIGNATURE_LENGTH } from "./constants";
 
 /**
- * 서명 문자열이 HTML 형식인지(태그 포함) 판별한다.
- * 일반 텍스트 서명은 줄바꿈 그대로, HTML 서명은 렌더링해 보여주기 위한 분기.
+ * 서명이 HTML 형식인지 판별한다 (일반 텍스트는 줄바꿈 그대로, HTML은 렌더).
+ * 닫는 태그(`</...>`) 또는 서명에 흔히 쓰이는 태그가 있을 때만 HTML로 본다.
+ * 이렇게 해야 `홍길동 <hong@company.com>` 같은 흔한 텍스트 서명을 HTML 로 오판하지 않는다.
  */
+const HTML_TAG_PATTERN =
+  /<\/[a-z][a-z0-9]*\s*>|<(?:table|tr|td|th|thead|tbody|div|span|p|br|hr|img|a|font|style|ul|ol|li|b|i|u|strong|em|h[1-6])\b[^>]*>/i;
+
 export function isHtmlSignature(value: string): boolean {
-  return /<\/?[a-z][\s\S]*>/i.test(value);
+  return HTML_TAG_PATTERN.test(value);
 }
 
 /**
