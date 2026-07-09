@@ -1,4 +1,4 @@
-# 개발 백로그 (SpecFlow AI / Deal-Closer)
+# 개발 백로그 (RAINMAKER / Deal-Closer)
 
 > 이 문서는 `docs/SPEC.md`(기획 기준)와 현재 구현 상태를 대조해 도출한 **개발 백로그**입니다.
 > 핵심 분리 축: **① MVP 데모 필수(실제 동작 필요)** vs **② 목업으로 시연 가능(추후 실개발)**.

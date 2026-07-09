@@ -77,7 +77,7 @@ assert.equal(computeAmount(noRows), 0);
 const doc = seedTemplate({
   type: "QUOTE",
   clientName: "(주)테스트",
-  supplierName: "SpecFlow AI",
+  supplierName: "RAINMAKER",
   items: [
     { name: "구축", description: "일괄", quantity: 1, unitPrice: 15_000_000 },
     { name: "서버", description: "5대", quantity: 5, unitPrice: 500_000 },
@@ -91,13 +91,13 @@ assert.equal(computeAmount(doc), 17_500_000);
 const supplier = doc.blocks.find((b) => b.type === "supplier");
 assert.ok(supplier);
 const supplierFields = (supplier.props as BlockPropsMap["supplier"]).fields;
-assert.equal(supplierFields.find((f) => f.label === "상호")?.value, "SpecFlow AI");
+assert.equal(supplierFields.find((f) => f.label === "상호")?.value, "RAINMAKER");
 
 // L4: 문서 타입에 따라 제목 블록 텍스트가 달라진다
 const contract = seedTemplate({
   type: "CONTRACT",
   clientName: null,
-  supplierName: "SpecFlow AI",
+  supplierName: "RAINMAKER",
   items: [],
 });
 const contractTitle = contract.blocks.find((b) => b.type === "title");

@@ -31,7 +31,7 @@ import { SendPreview } from "./send-preview";
 import { SenderAccountBanner } from "./sender-account-banner";
 
 const DEFAULT_BODY =
-  "안녕하세요, SpecFlow AI를 통해 생성된 문서를 전달드립니다. 첨부된 문서를 확인해주시기 바랍니다. 감사합니다.";
+  "안녕하세요, Rainmaker를 통해 생성된 문서를 전달드립니다. 첨부된 문서를 확인해주시기 바랍니다. 감사합니다.";
 
 /** 발송 화면에서 고를 수 있는 발신 계정(개인 연동 계정 / 인증 팀 도메인) */
 export type SenderOption = {

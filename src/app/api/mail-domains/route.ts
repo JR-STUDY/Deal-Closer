@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   }
   const domain = normalizeDomain(raw);
   if (!isValidDomain(domain)) {
-    return fail("올바른 도메인 형식이 아닙니다. (예: specflow.ai)");
+    return fail("올바른 도메인 형식이 아닙니다. (예: rainmaker.ai)");
   }
 
   const labelRaw = (body as { label?: unknown }).label;

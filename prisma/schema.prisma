@@ -1,4 +1,4 @@
-// SpecFlow AI (Deal-Closer) — Prisma schema
+// RAINMAKER (Deal-Closer) — Prisma schema
 // docs: https://pris.ly/d/prisma-schema
 //
 // SQLite 제약 메모:
@@ -201,7 +201,7 @@ model TeamMailDomain {
   id        String   @id @default(cuid())
   orgId     String
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  domain    String   // 호스트명만 저장 (예: "specflow.ai", @ 제외)
+  domain    String   // 호스트명만 저장 (예: "rainmaker.ai", @ 제외)
   label     String?  // 표시용 별칭 (예: "회사 공식 도메인")
   status    String   @default("PENDING") // PENDING | VERIFIED
   isDefault Boolean  @default(false)

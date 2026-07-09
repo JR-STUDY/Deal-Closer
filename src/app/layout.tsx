@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SpecFlow AI — AI 영업 문서 자동화",
+  title: "RAINMAKER — AI 영업 문서 자동화",
   description:
     "AI로 견적서·계약서·제안서를 생성하고 편집·발송하는 영업 문서 자동화 플랫폼",
 };

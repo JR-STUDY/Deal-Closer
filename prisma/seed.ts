@@ -256,7 +256,7 @@ const REP_SIGNATURE_HTML = `<table role="presentation" cellpadding="0" cellspaci
                               <img src="https://design.jirandata.co.kr/mail/2026/icon-email.png" width="15" height="15" alt="" style="display:block; border:0; outline:none; -ms-interpolation-mode:bicubic;" />
                             </td>
                             <td bgcolor="#F5F5F5" valign="middle" style="background-color:#F5F5F5; font-family:Arial, Helvetica sans-serif; font-size:14px; line-height:25px; color:#111111; font-weight:400; letter-spacing: 0;">
-                              kildong.hong@specflow.ai
+                              kildong.hong@rainmaker.ai
                             </td>
                           </tr>
                         </table>
@@ -412,13 +412,13 @@ async function main() {
 
   // 2) 조직
   const org = await prisma.organization.create({
-    data: { name: "SpecFlow Demo", slug: "specflow-demo" },
+    data: { name: "RAINMAKER Demo", slug: "rainmaker-demo" },
   });
 
   // 3) 브랜딩 — 데모 테넌트(우리 회사)는 지란지교소프트.
   //    companyName·logoUrl 은 contentJson 이 없는 문서(예: AI 생성 초안)의
   //    공급자 기본값으로도 쓰이므로, 표준 양식과 동일한 회사 정보로 통일한다.
-  //    (사이드바의 "SpecFlow AI" 는 제품 브랜드로 별도 하드코딩되어 영향 없음)
+  //    (사이드바의 "RAINMAKER" 는 제품 브랜드로 별도 하드코딩되어 영향 없음)
   await prisma.branding.create({
     data: {
       orgId: org.id,
@@ -432,7 +432,7 @@ async function main() {
   await prisma.user.create({
     data: {
       orgId: org.id,
-      email: "admin@specflow.ai",
+      email: "admin@rainmaker.ai",
       name: "김관리",
       role: "ADMIN",
     },
@@ -440,7 +440,7 @@ async function main() {
   const leader = await prisma.user.create({
     data: {
       orgId: org.id,
-      email: "leader@specflow.ai",
+      email: "leader@rainmaker.ai",
       name: "박리더",
       role: "LEADER",
     },
@@ -448,7 +448,7 @@ async function main() {
   const rep = await prisma.user.create({
     data: {
       orgId: org.id,
-      email: "kildong.hong@specflow.ai",
+      email: "kildong.hong@rainmaker.ai",
       name: "홍길동",
       role: "SALES_REP",
       signature: REP_SIGNATURE_HTML,
@@ -564,14 +564,14 @@ async function main() {
   });
 
   // 7-0) 팀 발신 메일 도메인 (관리자 콘솔에서 관리)
-  //  · specflow.ai 를 인증·기본 도메인으로 등록 → 담당자가 발신 주소로 선택 가능
+  //  · rainmaker.ai 를 인증·기본 도메인으로 등록 → 담당자가 발신 주소로 선택 가능
   //  · rep 은 기본적으로 개인 계정(sales-pro@gmail.com) 발신 상태로 두어
   //    "팀 도메인 선택" 흐름을 데모에서 직접 확인할 수 있게 한다
   //  · defaultCc: 팀 도메인 발송 시 기본 참조(CC) — 영업팀(리더·담당자) 전원
   await prisma.teamMailDomain.create({
     data: {
       orgId: org.id,
-      domain: "specflow.ai",
+      domain: "rainmaker.ai",
       label: "회사 공식 도메인",
       status: "VERIFIED",
       isDefault: true,
@@ -963,7 +963,7 @@ async function main() {
       senderId: rep.id,
       recipients: "purchasing@globalcommerce.co.kr; cto@globalcommerce.co.kr",
       subject: "[계약서] 글로벌 커머스 플랫폼 고도화 계약서 송부",
-      body: "안녕하세요, SpecFlow AI를 통해 생성된 계약서를 전달드립니다. 검토 후 회신 부탁드립니다.",
+      body: "안녕하세요, Rainmaker를 통해 생성된 계약서를 전달드립니다. 검토 후 회신 부탁드립니다.",
       attachmentName: "2024_글로벌커머스_고도화계약서.pdf",
       status: "SENT",
       sentAt: new Date("2026-06-20T09:20:00+09:00"),
@@ -988,13 +988,13 @@ async function main() {
     data: [
       {
         orgId: org.id,
-        email: "newbie@specflow.ai",
+        email: "newbie@rainmaker.ai",
         role: "SALES_REP",
         status: "PENDING",
       },
       {
         orgId: org.id,
-        email: "manager@specflow.ai",
+        email: "manager@rainmaker.ai",
         role: "LEADER",
         status: "PENDING",
       },

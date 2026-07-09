@@ -168,7 +168,7 @@ export function MailDomainManager({
               id="new-domain"
               value={newDomain}
               onChange={(e) => setNewDomain(e.target.value)}
-              placeholder="specflow.ai"
+              placeholder="rainmaker.ai"
               autoComplete="off"
               spellCheck={false}
             />

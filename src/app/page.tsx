@@ -1,13 +1,15 @@
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrandMark, BrandWordmark } from "@/components/brand-logo";
 
 export default function Home() {
   return (
     <main className="flex flex-1 items-center justify-center p-6">
       <div className="w-full max-w-2xl space-y-8 text-center">
-        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-          <Sparkles className="size-7" />
+        <div className="flex items-center justify-center gap-3">
+          <BrandMark className="size-14" />
+          <BrandWordmark className="text-4xl tracking-tighter" />
         </div>
 
         <div className="space-y-4">
@@ -17,7 +19,7 @@ export default function Home() {
             견적서부터 계약 성사까지
           </h1>
           <p className="mx-auto max-w-md text-muted-foreground text-pretty">
-            SpecFlow AI는 자연어 한 줄로 견적서·계약서·제안서를 생성하고, 웹에서
+            Rainmaker는 자연어 한 줄로 견적서·계약서·제안서를 생성하고, 웹에서
             편집한 뒤 바로 이메일로 발송하는 영업 문서 자동화 플랫폼입니다.
           </p>
         </div>

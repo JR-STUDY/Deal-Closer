@@ -12,8 +12,8 @@ import { prisma } from "./db";
  * → docs/REACT_BEST_PRACTICES.md · server-cache-react
  */
 
-const DEMO_REP_EMAIL = "kildong.hong@specflow.ai";
-const DEMO_ADMIN_EMAIL = "admin@specflow.ai";
+const DEMO_REP_EMAIL = "kildong.hong@rainmaker.ai";
+const DEMO_ADMIN_EMAIL = "admin@rainmaker.ai";
 
 /** 현재 데모 조직 */
 export const getCurrentOrg = cache(async () => {

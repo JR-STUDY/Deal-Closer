@@ -1,4 +1,4 @@
-# SpecFlow AI (Deal-Closer)
+# RAINMAKER (Deal-Closer)
 
 AI로 영업 문서(견적서·계약서·NDA·제안서)를 생성하고, 웹에서 편집한 뒤 이메일로 발송하는 **영업 문서 자동화 SaaS MVP**.
 
