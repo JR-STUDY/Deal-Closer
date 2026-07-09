@@ -12,10 +12,12 @@ import {
   MAX_ATTACHMENTS_TOTAL_SIZE,
   MAX_REFERENCES,
   isAcceptedAttachment,
+  DOCUMENT_TYPE_LABELS,
+  type DocumentType,
 } from "@/lib/constants";
 
 /** 프롬프트에서 문서 종류를 단순 추론 (MVP 목업 규칙) */
-function inferType(prompt: string): string {
+function inferType(prompt: string): DocumentType {
   if (/nda|비밀유지|기밀/i.test(prompt)) return "NDA";
   if (/계약|합의/i.test(prompt)) return "CONTRACT";
   if (/제안/i.test(prompt)) return "PROPOSAL";
@@ -128,6 +130,7 @@ function formatSize(bytes: number): string {
  *  - prompt: 자연어 프롬프트 (필수)
  *  - files: 첨부 파일 0개 이상 (PDF·이미지·엑셀·CSV)
  *  - referenceIds: 참고 보관함 문서 id 0개 이상
+ *  - saveAsCommon: "true" 이면 공통 문서(팀 공용 기준 문서)로 저장
  *
  * 실제 LLM 호출 대신 프롬프트로 결과를 결정하는 데모 목업이다.
  *  - "양식화/공통 계약 문서" → 공용 표준 양식(기본 견적서)로 안내
@@ -147,6 +150,9 @@ export async function POST(req: NextRequest) {
 
   const prompt = String(form.get("prompt") ?? "").trim();
   if (!prompt) return fail("생성할 문서 내용을 입력해주세요.");
+
+  // 공통 문서(팀 공용 기준 문서)로 저장할지 여부
+  const saveAsCommon = String(form.get("saveAsCommon") ?? "") === "true";
 
   // ── 첨부 파일 검증 (정책 VAL_*) ──
   const files = form.getAll("files").filter((f): f is File => f instanceof File);
@@ -342,7 +348,9 @@ export async function POST(req: NextRequest) {
 
   // ── 기본: 프롬프트 기반 초안 문서 ──
   const type = inferType(prompt);
-  const title = prompt.length > 40 ? `${prompt.slice(0, 40)}…` : prompt;
+  // 제목: 첨부 파일이 있으면 파일명(확장자 제거) 기준, 없으면 문서 종류 기반 추천 제목
+  const attachedName = files[0]?.name.replace(/\.[^.]+$/, "").trim();
+  const title = (attachedName || `${DOCUMENT_TYPE_LABELS[type]} 초안`).slice(0, 80);
 
   // 트랜잭션: 문서 생성 + 크레딧 차감 + 거래내역 + 생성요청 이력(+첨부)
   const doc = await prisma.$transaction(async (tx) => {
@@ -353,6 +361,7 @@ export async function POST(req: NextRequest) {
         title,
         type,
         status: "DRAFT",
+        isCommon: saveAsCommon,
         amount: 0,
         items: {
           create: [
