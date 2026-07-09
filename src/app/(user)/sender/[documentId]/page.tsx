@@ -39,6 +39,7 @@ export default async function SenderPage({
       }}
       account={account ? { email: account.email } : null}
       templates={templates.map(toTemplateDTO)}
+      signature={user.signature ?? ""}
     />
   );
 }

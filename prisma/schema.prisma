@@ -44,6 +44,7 @@ model User {
   name      String
   role      String   @default("SALES_REP") // SALES_REP | LEADER | ADMIN
   avatarUrl String?
+  signature String?  // 메일 서명 (발송 시 본문 하단에 추가)
   orgId     String
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())

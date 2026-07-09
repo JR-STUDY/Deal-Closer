@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { AccountActions } from "./_components/account-actions";
 import { ConnectButton } from "./_components/connect-button";
+import { SignatureForm } from "./_components/signature-form";
 
 const PROVIDER_AVATAR_STYLES: Record<EmailProvider, string> = {
   GMAIL:
@@ -159,6 +160,20 @@ export default async function EmailSettingsPage() {
               </div>
             </Card>
           </div>
+        </section>
+
+        {/* 섹션3: 메일 서명 */}
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              메일 서명
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              저장한 서명은 이메일 발송 화면에서 본문 하단에 자동으로
+              추가됩니다.
+            </p>
+          </div>
+          <SignatureForm initialSignature={user.signature ?? ""} />
         </section>
 
         <p className="text-xs text-muted-foreground">

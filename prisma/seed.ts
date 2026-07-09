@@ -186,6 +186,8 @@ async function main() {
       email: "kildong.hong@specflow.ai",
       name: "홍길동",
       role: "SALES_REP",
+      signature:
+        "홍길동 | 영업팀\nSpecFlow AI\nkildong.hong@specflow.ai · 02-1234-5678",
     },
   });
 

@@ -72,6 +72,9 @@ export type GenerationStatus = (typeof GENERATION_STATUSES)[number];
 // ── AI 문서 1건 생성에 필요한 크레딧 ──
 export const CREDITS_PER_GENERATION = 10;
 
+// ── 메일 서명 최대 길이 ──
+export const MAX_SIGNATURE_LENGTH = 500;
+
 // ── AI 문서 생성 첨부 파일 (정책 VAL_*) ──
 /** 요청당 첨부 가능한 최대 파일 개수 */
 export const MAX_ATTACHMENTS = 5;

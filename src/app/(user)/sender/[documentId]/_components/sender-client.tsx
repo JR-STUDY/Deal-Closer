@@ -8,11 +8,13 @@ import {
   FileText,
   CheckCircle2,
   AlertTriangle,
+  PenLine,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
@@ -39,6 +41,8 @@ type SenderClientProps = {
   };
   account: { email: string } | null;
   templates: EmailTemplateDTO[];
+  /** 현재 사용자의 저장된 메일 서명 (없으면 빈 문자열) */
+  signature: string;
 };
 
 /** 이메일 발송 폼 — 헤더의 발송하기 버튼과 본문 입력값 상태를 함께 관리한다 (데모: 실제 발송 없음) */
@@ -46,6 +50,7 @@ export function SenderClient({
   document,
   account,
   templates,
+  signature,
 }: SenderClientProps) {
   const typeLabel =
     DOCUMENT_TYPE_LABELS[document.type as DocumentType] ?? document.type;
@@ -54,6 +59,10 @@ export function SenderClient({
   const [recipients, setRecipients] = useState("");
   const [subject, setSubject] = useState(`[${typeLabel}] ${document.title}`);
   const [body, setBody] = useState(DEFAULT_BODY);
+  // 서명은 본문과 분리해 발송 시 하단에 붙인다 (템플릿에 서명이 섞이지 않도록)
+  const [includeSignature, setIncludeSignature] = useState(
+    () => signature.length > 0,
+  );
 
   // 템플릿 {{변수}} 치환에 쓸 현재 문서 값
   const templateContext = useMemo<TemplateContext>(
@@ -203,6 +212,52 @@ export function SenderClient({
                 onChange={(e) => setBody(e.target.value)}
                 className="min-h-32"
               />
+            </CardContent>
+          </Card>
+
+          {/* 메일 서명 — 본문과 분리, 발송 시 하단에 추가 */}
+          <Card>
+            <CardHeader className="flex-row items-center justify-between gap-3">
+              <CardTitle className="text-base">서명</CardTitle>
+              {signature ? (
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  메일에 포함
+                  <Switch
+                    checked={includeSignature}
+                    onCheckedChange={setIncludeSignature}
+                    aria-label="메일에 서명 포함"
+                  />
+                </label>
+              ) : null}
+            </CardHeader>
+            <CardContent>
+              {signature ? (
+                <div
+                  className={
+                    includeSignature
+                      ? "rounded-lg border bg-muted/40 p-4"
+                      : "rounded-lg border border-dashed p-4 opacity-60"
+                  }
+                >
+                  <p className="whitespace-pre-line text-sm text-muted-foreground">
+                    {signature}
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-2">
+                    <PenLine className="size-4" />
+                    저장된 서명이 없습니다. 서명을 추가하면 발송 메일에 자동으로
+                    포함됩니다.
+                  </span>
+                  <Link
+                    href="/settings/email"
+                    className="font-medium text-primary hover:underline"
+                  >
+                    서명 추가
+                  </Link>
+                </div>
+              )}
             </CardContent>
           </Card>
 
