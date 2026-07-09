@@ -55,6 +55,14 @@ export type EmailTemplateDTO = {
   scope: TemplateScope;
 };
 
+/** 생성·수정 폼의 편집 값 (shared=true 면 팀 공용) */
+export type TemplateFormValues = {
+  name: string;
+  subject: string;
+  body: string;
+  shared: boolean;
+};
+
 /**
  * "현재 사용자가 볼 수 있는 템플릿" Prisma where 조건 (팀 공용 + 본인 개인).
  * 인가 규칙이므로 한 곳에서만 관리한다 — 목록 조회하는 모든 지점이 이 헬퍼를 쓴다.

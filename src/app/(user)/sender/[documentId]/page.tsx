@@ -9,8 +9,8 @@ export default async function SenderPage({
 }: {
   params: Promise<{ documentId: string }>;
 }) {
-  const { documentId } = await params;
-  const user = await getCurrentUser();
+  // params·현재 사용자는 서로 독립 → 병렬로 await
+  const [{ documentId }, user] = await Promise.all([params, getCurrentUser()]);
 
   // 문서·발신 계정·메일 템플릿을 병렬 조회 (독립 쿼리 — REACT_BEST_PRACTICES)
   const [document, account, templates] = await Promise.all([
