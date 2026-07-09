@@ -17,13 +17,18 @@ import {
 /** 새 비밀번호 최소 길이 (정책 VAL_*) */
 const MIN_LENGTH = 8;
 
+type PasswordFormProps = {
+  /** 비밀번호 관리자·접근성용 계정 식별자(이메일). 숨김 필드로만 노출한다. */
+  username?: string;
+};
+
 /**
  * 비밀번호 변경 카드 — 영업 담당자 포털·관리자 콘솔이 공용으로 사용한다.
  * MVP 는 실제 인증이 없어 저장을 목업(toast)으로 처리한다.
  * 인증(NextAuth 등) 도입 시 handleSubmit 에서 서버로 전송하도록 교체한다.
  * - 평문 비밀번호는 로깅하지 않으며 로컬 state 에만 잠시 보관한다.
  */
-export function PasswordForm() {
+export function PasswordForm({ username }: PasswordFormProps) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -63,6 +68,20 @@ export function PasswordForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-5">
+          {/* 비밀번호 관리자·접근성용 숨김 계정 필드 (Chrome 권고) */}
+          {username ? (
+            <input
+              type="text"
+              name="username"
+              autoComplete="username"
+              value={username}
+              readOnly
+              tabIndex={-1}
+              aria-hidden="true"
+              className="sr-only"
+            />
+          ) : null}
+
           <div className="space-y-1.5">
             <Label htmlFor="current-password">현재 비밀번호</Label>
             <Input
