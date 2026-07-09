@@ -423,9 +423,19 @@ async function main() {
     data: { isCommon: true },
   });
 
-  // 8-5) 문서함별 폴더 (평면) — 내 문서함(isCommon=false) / 공용문서함(isCommon=true)
+  // 8-5) 문서함별 폴더 (다단계) — 내 문서함(isCommon=false) / 공용문서함(isCommon=true)
   const folderClients = await prisma.folder.create({
     data: { orgId: org.id, name: "주요 거래처", isCommon: false, sortOrder: 0 },
+  });
+  // 하위 폴더 예시 (주요 거래처 > 글로벌커머스(주))
+  const folderClientsGlobal = await prisma.folder.create({
+    data: {
+      orgId: org.id,
+      name: "글로벌커머스(주)",
+      isCommon: false,
+      parentId: folderClients.id,
+      sortOrder: 0,
+    },
   });
   const folderProposals = await prisma.folder.create({
     data: { orgId: org.id, name: "제안서", isCommon: false, sortOrder: 1 },
@@ -437,10 +447,10 @@ async function main() {
     data: { orgId: org.id, name: "표준 양식", isCommon: true, sortOrder: 0 },
   });
 
-  // 내 문서함 폴더 배치 (isCommon=false 문서만)
+  // 내 문서함 폴더 배치 (isCommon=false 문서만) — 대표 계약서는 하위 폴더에 배치
   await prisma.document.update({
     where: { id: globalContract.id },
-    data: { folderId: folderClients.id },
+    data: { folderId: folderClientsGlobal.id },
   });
   await prisma.document.update({
     where: { id: abcQuote.id },

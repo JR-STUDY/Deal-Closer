@@ -13,7 +13,7 @@ export default async function UserLayout({
   const folders = await prisma.folder.findMany({
     where: { orgId: user.orgId },
     orderBy: [{ isCommon: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, isCommon: true },
+    select: { id: true, name: true, isCommon: true, parentId: true },
   });
 
   return (
