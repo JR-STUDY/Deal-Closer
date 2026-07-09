@@ -96,12 +96,18 @@ export default async function AnalyticsPage() {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, rev]) => ({ label: `${Number(key.slice(5))}월`, revenue: rev }));
 
-  const typeRevenueData = DOCUMENT_TYPES.map((t) => ({
-    key: t,
-    label: DOCUMENT_TYPE_LABELS[t],
-    revenue: typeRevenue[t],
-    fill: TYPE_FILL[t],
-  })).filter((d) => d.revenue > 0);
+  const typeRevenueData = DOCUMENT_TYPES.flatMap((t) =>
+    typeRevenue[t] > 0
+      ? [
+          {
+            key: t,
+            label: DOCUMENT_TYPE_LABELS[t],
+            revenue: typeRevenue[t],
+            fill: TYPE_FILL[t],
+          },
+        ]
+      : [],
+  );
 
   const reps = users
     .map((user) => {
@@ -115,9 +121,9 @@ export default async function AnalyticsPage() {
     })
     .sort((a, b) => b.revenue - a.revenue);
 
-  const repChartData = reps
-    .filter((r) => r.revenue > 0)
-    .map((r) => ({ name: r.user.name, revenue: r.revenue }));
+  const repChartData = reps.flatMap((r) =>
+    r.revenue > 0 ? [{ name: r.user.name, revenue: r.revenue }] : [],
+  );
 
   const kpis = [
     {

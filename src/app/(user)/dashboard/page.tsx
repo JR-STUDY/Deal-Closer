@@ -100,11 +100,11 @@ export default async function DashboardPage() {
       revenue: v.revenue,
     }));
 
-  const statusData = DOCUMENT_STATUSES.map((s) => ({
-    key: s,
-    label: DOCUMENT_STATUS_LABELS[s],
-    count: byStatus[s],
-  })).filter((d) => d.count > 0);
+  const statusData = DOCUMENT_STATUSES.flatMap((s) =>
+    byStatus[s] > 0
+      ? [{ key: s, label: DOCUMENT_STATUS_LABELS[s], count: byStatus[s] }]
+      : [],
+  );
 
   const typeData = DOCUMENT_TYPES.map((t) => ({
     label: DOCUMENT_TYPE_LABELS[t],
