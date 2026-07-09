@@ -34,8 +34,8 @@ export const userNav: NavItem[] = [
     label: "문서 보관함",
     icon: FolderClosed,
     children: [
-      { href: "/library", label: "내 문서함" },
       { href: "/library/common", label: "공용문서함" },
+      { href: "/library", label: "내 문서함" },
     ],
   },
   { href: "/settings/email", label: "메일 연동", icon: Mail },
