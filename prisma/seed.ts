@@ -419,6 +419,16 @@ async function main() {
         amount: 30_000_000,
         createdAt: new Date("2024-05-19T10:40:00+09:00"),
       },
+      {
+        orgId: org.id,
+        authorId: rep.id,
+        title: "구버전 요율 반영 견적서(폐기)",
+        type: "QUOTE",
+        status: "VOID",
+        clientName: "올드라인상사",
+        amount: 12_000_000,
+        createdAt: new Date("2024-05-10T09:00:00+09:00"),
+      },
     ],
   });
 

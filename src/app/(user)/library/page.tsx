@@ -27,7 +27,8 @@ export default async function LibraryPage({
   const documents = await prisma.document.findMany({
     where: {
       orgId: org.id,
-      ...(active !== "ALL" ? { status: active } : {}),
+      // "전체" 탭은 폐기 문서를 제외한다 (폐기는 전용 탭에서만 노출).
+      ...(active === "ALL" ? { status: { not: "VOID" } } : { status: active }),
     },
     orderBy: { createdAt: "desc" },
     include: { author: true },
@@ -108,15 +109,22 @@ export default async function LibraryPage({
                   <Button asChild variant="outline" size="sm" className="flex-1">
                     <Link href={`/editor/${doc.id}`}>
                       <Pencil className="size-3.5" />
-                      편집
+                      {doc.status === "VOID" ? "편집·복원" : "편집"}
                     </Link>
                   </Button>
-                  <Button asChild variant="outline" size="sm" className="flex-1">
-                    <Link href={`/sender/${doc.id}`}>
-                      <Mail className="size-3.5" />
-                      발송
-                    </Link>
-                  </Button>
+                  {doc.status !== "VOID" ? (
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                    >
+                      <Link href={`/sender/${doc.id}`}>
+                        <Mail className="size-3.5" />
+                        발송
+                      </Link>
+                    </Button>
+                  ) : null}
                 </CardFooter>
               </Card>
             ))}

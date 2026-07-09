@@ -13,9 +13,10 @@ const STATUS_STYLES: Record<DocumentStatus, string> = {
   SENT: "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300",
   COMPLETED:
     "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300",
+  VOID: "bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
 };
 
-/** 문서 상태 배지 (초안 / 발송완료 / 계약완료) */
+/** 문서 상태 배지 (초안 / 발송완료 / 계약완료 / 폐기) */
 export function StatusBadge({ status }: { status: string }) {
   const s = status as DocumentStatus;
   return (

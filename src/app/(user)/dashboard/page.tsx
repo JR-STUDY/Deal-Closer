@@ -28,7 +28,9 @@ export default async function DashboardPage() {
 
   const [total, draft, sent, completed, revenue, wallet, recent] =
     await Promise.all([
-      prisma.document.count({ where: { orgId: org.id } }),
+      prisma.document.count({
+        where: { orgId: org.id, status: { not: "VOID" } },
+      }),
       prisma.document.count({ where: { orgId: org.id, status: "DRAFT" } }),
       prisma.document.count({ where: { orgId: org.id, status: "SENT" } }),
       prisma.document.count({ where: { orgId: org.id, status: "COMPLETED" } }),
@@ -38,7 +40,7 @@ export default async function DashboardPage() {
       }),
       prisma.creditWallet.findUnique({ where: { orgId: org.id } }),
       prisma.document.findMany({
-        where: { orgId: org.id },
+        where: { orgId: org.id, status: { not: "VOID" } },
         orderBy: { createdAt: "desc" },
         take: 6,
         include: { author: true },
