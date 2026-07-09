@@ -10,11 +10,10 @@ import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { formatKRW, formatDate } from "@/lib/format";
 import {
-  DOCUMENT_STATUSES,
+  ACTIVE_DOCUMENT_STATUSES,
   DOCUMENT_STATUS_LABELS,
   DOCUMENT_TYPES,
   DOCUMENT_TYPE_LABELS,
-  type DocumentStatus,
   type DocumentType,
 } from "@/lib/constants";
 import { PageHeader } from "@/components/page-header";
@@ -52,13 +51,15 @@ const TYPE_FILL: Record<DocumentType, string> = {
 export default async function DashboardPage() {
   const org = await getCurrentOrg();
 
+  // 폐기(VOID) 문서는 대시보드 집계·목록에서 제외 (정책: ACTIVE_DOCUMENT_STATUSES)
+  const activeWhere = { orgId: org.id, status: { not: "VOID" } };
   const [docs, recent, wallet] = await Promise.all([
     prisma.document.findMany({
-      where: { orgId: org.id },
+      where: activeWhere,
       select: { createdAt: true, amount: true, status: true, type: true },
     }),
     prisma.document.findMany({
-      where: { orgId: org.id },
+      where: activeWhere,
       orderBy: { createdAt: "desc" },
       take: 6,
       include: { author: true },
@@ -67,11 +68,13 @@ export default async function DashboardPage() {
   ]);
 
   // ── 집계 (단일 조회에서 파생) ──
+  type ActiveStatus = (typeof ACTIVE_DOCUMENT_STATUSES)[number];
   const total = docs.length;
-  const byStatus = { DRAFT: 0, SENT: 0, COMPLETED: 0 } as Record<
-    DocumentStatus,
-    number
-  >;
+  const byStatus: Record<ActiveStatus, number> = {
+    DRAFT: 0,
+    SENT: 0,
+    COMPLETED: 0,
+  };
   const byType = { QUOTE: 0, CONTRACT: 0, NDA: 0, PROPOSAL: 0 } as Record<
     DocumentType,
     number
@@ -80,7 +83,7 @@ export default async function DashboardPage() {
   let revenue = 0;
 
   for (const d of docs) {
-    byStatus[d.status as DocumentStatus] += 1;
+    byStatus[d.status as ActiveStatus] += 1;
     byType[d.type as DocumentType] += 1;
     if (d.status === "COMPLETED") revenue += d.amount;
 
@@ -100,7 +103,7 @@ export default async function DashboardPage() {
       revenue: v.revenue,
     }));
 
-  const statusData = DOCUMENT_STATUSES.flatMap((s) =>
+  const statusData = ACTIVE_DOCUMENT_STATUSES.flatMap((s) =>
     byStatus[s] > 0
       ? [{ key: s, label: DOCUMENT_STATUS_LABELS[s], count: byStatus[s] }]
       : [],

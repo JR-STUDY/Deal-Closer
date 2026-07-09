@@ -78,7 +78,7 @@ model Document {
   id          String   @id @default(cuid())
   title       String
   type        String   @default("QUOTE")  // QUOTE | CONTRACT | NDA | PROPOSAL
-  status      String   @default("DRAFT")  // DRAFT | SENT | COMPLETED
+  status      String   @default("DRAFT")  // DRAFT | SENT | COMPLETED | VOID(폐기)
   clientName  String?                     // 거래처명
   amount      Int      @default(0)        // 총액(KRW 정수)
   currency    String   @default("KRW")
@@ -90,9 +90,10 @@ model Document {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  items      DocumentItem[]
-  emailLogs  EmailLog[]
-  generation GenerationRequest?
+  items        DocumentItem[]
+  emailLogs    EmailLog[]
+  generation   GenerationRequest?
+  referencedIn GenerationReference[] // 이 문서를 참고 자료로 사용한 생성 요청들
 
   @@index([orgId])
   @@index([authorId])
@@ -214,8 +215,45 @@ model GenerationRequest {
   document    Document? @relation(fields: [documentId], references: [id])
   createdAt   DateTime  @default(now())
 
+  attachments Attachment[]
+  references  GenerationReference[]
+
   @@index([userId])
   @@map("generation_requests")
+}
+
+/// AI 문서 생성 시 첨부한 원본 파일 (협력사 견적서 등)
+/// - data: 원본 바이트(BLOB). 나중에 다운로드/열람 가능.
+/// - extractedText: 엑셀/CSV 의 표 데이터를 텍스트로 추출한 값(있을 때만).
+model Attachment {
+  id            String   @id @default(cuid())
+  generationId  String
+  generation    GenerationRequest @relation(fields: [generationId], references: [id], onDelete: Cascade)
+  fileName      String
+  mimeType      String
+  size          Int      // 바이트 단위 크기
+  data          Bytes    // 원본 파일 바이트
+  extractedText String?  // 엑셀/CSV 추출 텍스트 (PDF/이미지는 null)
+  createdAt     DateTime @default(now())
+
+  @@index([generationId])
+  @@map("attachments")
+}
+
+/// AI 문서 생성 시 참고 자료로 가져온 보관함 문서 (기존 견적서 등)
+/// GenerationRequest 와 기존 Document 를 잇는 조인 테이블.
+model GenerationReference {
+  id           String   @id @default(cuid())
+  generationId String
+  generation   GenerationRequest @relation(fields: [generationId], references: [id], onDelete: Cascade)
+  documentId   String
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([generationId, documentId])
+  @@index([generationId])
+  @@index([documentId])
+  @@map("generation_references")
 }
 
 // ========================= 브랜딩 =========================

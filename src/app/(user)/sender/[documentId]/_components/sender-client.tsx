@@ -21,6 +21,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants";
+import { formatKRW } from "@/lib/format";
+import { DocTypeBadge } from "@/components/status-badge";
 
 const DEFAULT_BODY =
   "안녕하세요, SpecFlow AI를 통해 생성된 문서를 전달드립니다. 첨부된 문서를 확인해주시기 바랍니다. 감사합니다.";
@@ -30,6 +32,8 @@ type SenderClientProps = {
     id: string;
     title: string;
     type: string;
+    clientName: string | null;
+    amount: number;
   };
   account: { email: string } | null;
 };
@@ -95,6 +99,32 @@ export function SenderClient({ document, account }: SenderClientProps) {
               </Link>
             </div>
           )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">문서 요약</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-muted-foreground">거래처</p>
+                <p className="mt-1 font-medium">
+                  {document.clientName ?? "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">종류</p>
+                <div className="mt-1">
+                  <DocTypeBadge type={document.type} />
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">총액</p>
+                <p className="mt-1 font-semibold tabular-nums">
+                  {formatKRW(document.amount)}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>

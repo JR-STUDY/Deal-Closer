@@ -42,9 +42,10 @@ const TYPE_FILL: Record<DocumentType, string> = {
 export default async function AnalyticsPage() {
   const org = await getCurrentOrg();
 
+  // 폐기(VOID) 문서는 통계 집계에서 제외
   const [docs, users] = await Promise.all([
     prisma.document.findMany({
-      where: { orgId: org.id },
+      where: { orgId: org.id, status: { not: "VOID" } },
       select: {
         createdAt: true,
         amount: true,
