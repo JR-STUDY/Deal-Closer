@@ -36,6 +36,7 @@ import type { Geometry } from "./canvas-block";
 import { EditorSidebar } from "./editor-sidebar";
 import { EditorToolbar } from "./editor-toolbar";
 import { EditorPreview } from "./editor-preview";
+import { BlockInspector } from "./block-inspector";
 
 type Props = {
   documentId: string;
@@ -58,6 +59,12 @@ export function DocumentEditor({
   const [saving, setSaving] = useState(false);
   const [navTarget, setNavTarget] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [namePrompt, setNamePrompt] = useState<{
+    label: string;
+    onConfirm: (v: string) => void;
+  } | null>(null);
+  const [nameValue, setNameValue] = useState("");
   const [catalog, setCatalog] = useState<CatalogOption[]>([]);
   // 에디터는 ssr:false(클라이언트 전용)라 초기화 시 localStorage 를 안전하게 읽는다 (#3)
   const [customBlocks, setCustomBlocks] = useState<CustomBlock[]>(() =>
@@ -201,23 +208,29 @@ export function DocumentEditor({
 
   const handleSaveAsCustom = useCallback(() => {
     if (!selectedBlock) return;
-    const name = window.prompt(
-      "내 블록 이름을 입력하세요.",
-      selectedBlock.type,
-    );
-    if (!name) return;
-    setCustomBlocks(
-      saveCustomBlock({
-        id: uid(),
-        name: name.trim(),
-        type: selectedBlock.type,
-        w: selectedBlock.w,
-        h: selectedBlock.h,
-        props: JSON.parse(JSON.stringify(selectedBlock.props)),
-      }),
-    );
-    toast.success("내 블록으로 저장했습니다.");
+    setNameValue(selectedBlock.type);
+    setNamePrompt({
+      label: "내 블록 이름",
+      onConfirm: (name) => {
+        setCustomBlocks(
+          saveCustomBlock({
+            id: uid(),
+            name,
+            type: selectedBlock.type,
+            w: selectedBlock.w,
+            h: selectedBlock.h,
+            props: JSON.parse(JSON.stringify(selectedBlock.props)),
+          }),
+        );
+        toast.success("내 블록으로 저장했습니다.");
+      },
+    });
   }, [selectedBlock]);
+
+  const handleEditBlock = useCallback((id: string) => {
+    setSelectedId(id);
+    setEditModalOpen(true);
+  }, []);
 
   const handleDeleteCustomBlock = useCallback((id: string) => {
     setCustomBlocks(deleteCustomBlock(id));
@@ -225,18 +238,29 @@ export function DocumentEditor({
 
   // ── 문서 템플릿 (#3) ──
   const handleSaveTemplate = useCallback(() => {
-    const name = window.prompt("템플릿 이름을 입력하세요.", docTitle);
-    if (!name) return;
-    setTemplates(
-      saveTemplate({
-        id: uid(),
-        name: name.trim(),
-        canvas: doc.canvas,
-        blocks: doc.blocks,
-      }),
-    );
-    toast.success("현재 배치를 템플릿으로 저장했습니다.");
+    setNameValue(docTitle);
+    setNamePrompt({
+      label: "템플릿 이름",
+      onConfirm: (name) => {
+        setTemplates(
+          saveTemplate({
+            id: uid(),
+            name,
+            canvas: doc.canvas,
+            blocks: doc.blocks,
+          }),
+        );
+        toast.success("현재 배치를 템플릿으로 저장했습니다.");
+      },
+    });
   }, [doc, docTitle]);
+
+  function confirmName() {
+    const v = nameValue.trim();
+    if (!v || !namePrompt) return;
+    namePrompt.onConfirm(v);
+    setNamePrompt(null);
+  }
 
   const handleLoadTemplate = useCallback((t: DocTemplate) => {
     setDoc({
@@ -426,6 +450,7 @@ export function DocumentEditor({
           onAddBlock={handleAdd}
           onRemove={handleRemove}
           onZOrder={handleZOrder}
+          onEdit={handleEditBlock}
         />
       </div>
       <EditorSidebar
@@ -463,14 +488,11 @@ export function DocumentEditor({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setNavTarget(null)}>
-              취소
-            </Button>
             <Button variant="outline" onClick={discardAndGo}>
-              저장 안 함
+              저장하지 않음
             </Button>
             <Button onClick={saveAndGo} disabled={saving}>
-              {saving ? "저장 중…" : "저장 후 이동"}
+              {saving ? "저장 중…" : "저장"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -482,6 +504,60 @@ export function DocumentEditor({
         doc={doc}
         title={docTitle}
       />
+
+      {/* 이름 입력 다이얼로그 (#4) */}
+      <Dialog
+        open={namePrompt !== null}
+        onOpenChange={(o) => {
+          if (!o) setNamePrompt(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{namePrompt?.label ?? "이름"}</DialogTitle>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={nameValue}
+            onChange={(e) => setNameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") confirmName();
+            }}
+            placeholder="이름을 입력하세요"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNamePrompt(null)}>
+              취소
+            </Button>
+            <Button onClick={confirmName} disabled={!nameValue.trim()}>
+              저장
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 블록 수정 모달 (#1) */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>블록 수정</DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-auto">
+            <BlockInspector
+              block={selectedBlock}
+              catalog={catalog}
+              onChange={handleChangeBlock}
+              onChangeProps={handleChangeProps}
+              onRemove={(id) => {
+                handleRemove(id);
+                setEditModalOpen(false);
+              }}
+              onZOrder={handleZOrderSelected}
+              onSaveAsCustom={handleSaveAsCustom}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

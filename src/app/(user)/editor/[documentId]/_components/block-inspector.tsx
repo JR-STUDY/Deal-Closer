@@ -423,6 +423,11 @@ function ContentForm({
         onChangeProps({ summaryRows: next });
       return (
         <div className="space-y-2">
+          <datalist id="catalog-datalist">
+            {catalog.map((c) => (
+              <option key={c.id} value={c.name} />
+            ))}
+          </datalist>
           <div className="flex items-center justify-between">
             <Label htmlFor="showTotal" className="text-sm">
               합계 표시
@@ -495,46 +500,28 @@ function ContentForm({
 
           {p.rows.map((r) => (
             <div key={r.id} className="space-y-1 rounded border p-2">
-              {catalog.length > 0 ? (
-                <select
-                  aria-label="카탈로그에서 품목 선택"
-                  className="h-9 w-full rounded-md border bg-transparent px-2 text-xs"
-                  value=""
-                  onChange={(e) => {
-                    const item = catalog.find((c) => c.id === e.target.value);
-                    if (!item) return;
-                    update(
-                      p.rows.map((x) =>
-                        x.id === r.id
-                          ? {
-                              ...x,
-                              name: item.name,
-                              unitPrice: item.unitPrice,
-                              description: item.description ?? x.description,
-                            }
-                          : x,
-                      ),
-                    );
-                  }}
-                >
-                  <option value="">카탈로그에서 선택…</option>
-                  {catalog.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} · ₩{c.unitPrice.toLocaleString("ko-KR")}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
               <Input
-                placeholder="품목명"
+                placeholder="품목명 (입력 시 카탈로그 추천)"
+                list="catalog-datalist"
                 value={r.name}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const match = catalog.find((c) => c.name === val);
                   update(
                     p.rows.map((x) =>
-                      x.id === r.id ? { ...x, name: e.target.value } : x,
+                      x.id === r.id
+                        ? match
+                          ? {
+                              ...x,
+                              name: val,
+                              unitPrice: match.unitPrice,
+                              description: match.description ?? x.description,
+                            }
+                          : { ...x, name: val }
+                        : x,
                     ),
-                  )
-                }
+                  );
+                }}
               />
               <Input
                 placeholder="설명"
@@ -790,6 +777,11 @@ function ContentForm({
       };
       return (
         <div className="space-y-3">
+          <datalist id="catalog-datalist">
+            {catalog.map((c) => (
+              <option key={c.id} value={c.name} />
+            ))}
+          </datalist>
           <div className="flex items-center justify-between">
             <Label htmlFor="hasHeader" className="text-sm">
               첫 행 헤더
@@ -838,6 +830,7 @@ function ContentForm({
                   <Input
                     key={ci}
                     value={cell}
+                    list="catalog-datalist"
                     className="text-xs"
                     onChange={(e) => setCell(ri, ci, e.target.value)}
                   />

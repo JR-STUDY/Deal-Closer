@@ -9,6 +9,7 @@ import type {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BlockPalette } from "./block-palette";
 import { BlockInspector } from "./block-inspector";
+import { useAutoHideScroll } from "./use-auto-hide-scroll";
 import type { CustomBlock, DocTemplate } from "./template-store";
 
 type Props = {
@@ -52,6 +53,7 @@ export function EditorSidebar({
   onLoadTemplate,
   onDeleteTemplate,
 }: Props) {
+  const onScroll = useAutoHideScroll();
   return (
     <aside className="flex w-72 shrink-0 flex-col border-l bg-background">
       <Tabs
@@ -69,7 +71,10 @@ export function EditorSidebar({
             </TabsTrigger>
           </TabsList>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div
+          className="overlay-scroll min-h-0 flex-1 overflow-auto p-4"
+          onScroll={onScroll}
+        >
           <TabsContent value="palette" className="mt-0">
             <BlockPalette
               onAdd={onAdd}

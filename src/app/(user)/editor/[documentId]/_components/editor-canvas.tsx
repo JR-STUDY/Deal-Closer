@@ -5,6 +5,7 @@ import type { DragEvent } from "react";
 import type { EditorDoc, BlockType, ZOrderAction } from "@/lib/editor-schema";
 import { BLOCK_TYPES, pageCount } from "@/lib/editor-schema";
 import { CanvasBlock, type Geometry } from "./canvas-block";
+import { useAutoHideScroll } from "./use-auto-hide-scroll";
 
 type Props = {
   doc: EditorDoc;
@@ -14,6 +15,7 @@ type Props = {
   onAddBlock: (type: BlockType, pos: { x: number; y: number }) => void;
   onRemove: (id: string) => void;
   onZOrder: (id: string, action: ZOrderAction) => void;
+  onEdit: (id: string) => void;
 };
 
 export function EditorCanvas({
@@ -24,8 +26,10 @@ export function EditorCanvas({
   onAddBlock,
   onRemove,
   onZOrder,
+  onEdit,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const onScroll = useAutoHideScroll();
   const pages = pageCount(doc);
   const pageH = doc.canvas.h;
 
@@ -40,7 +44,10 @@ export function EditorCanvas({
   }
 
   return (
-    <div className="flex flex-1 justify-center overflow-auto bg-muted/40 p-8">
+    <div
+      className="overlay-scroll flex flex-1 justify-center overflow-auto bg-muted/40 p-8"
+      onScroll={onScroll}
+    >
       <div
         ref={ref}
         role="group"
@@ -80,6 +87,7 @@ export function EditorCanvas({
             onGeometry={onGeometry}
             onRemove={onRemove}
             onZOrder={onZOrder}
+            onEdit={onEdit}
           />
         ))}
       </div>

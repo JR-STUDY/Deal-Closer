@@ -22,6 +22,7 @@ type Props = {
   onGeometry: (id: string, geo: Geometry) => void;
   onRemove: (id: string) => void;
   onZOrder: (id: string, action: ZOrderAction) => void;
+  onEdit: (id: string) => void;
 };
 
 function CanvasBlockImpl({
@@ -31,6 +32,7 @@ function CanvasBlockImpl({
   onGeometry,
   onRemove,
   onZOrder,
+  onEdit,
 }: Props) {
   return (
     <Rnd
@@ -71,6 +73,10 @@ function CanvasBlockImpl({
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
+          <ContextMenuItem onSelect={() => onEdit(block.id)}>
+            수정
+          </ContextMenuItem>
+          <ContextMenuSeparator />
           <ContextMenuItem onSelect={() => onZOrder(block.id, "front")}>
             맨 앞으로
           </ContextMenuItem>
