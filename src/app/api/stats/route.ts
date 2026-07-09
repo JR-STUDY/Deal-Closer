@@ -18,7 +18,10 @@ export async function GET() {
     }),
   ]);
 
-  const conversionRate = sent > 0 ? Math.round((completed / sent) * 100) : 0;
+  // 성사율: 고객에게 전달된 문서(발송완료 + 계약완료) 중 계약 성사 비율
+  const reached = sent + completed;
+  const conversionRate =
+    reached > 0 ? Math.round((completed / reached) * 100) : 0;
 
   return ok({
     documents: { total, draft, sent, completed },
