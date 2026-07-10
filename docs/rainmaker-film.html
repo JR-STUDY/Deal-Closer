@@ -1,0 +1,623 @@
+<title>Rainmaker — 제품 필름</title>
+<style>
+  :root{
+    --ink:#050507;--ink-2:#0c0c11;--panel:#14141c;--panel-2:#1b1b26;
+    --line:rgba(255,255,255,.08);--line-2:rgba(255,255,255,.14);
+    --fg:#f4f4f8;--dim:#a4a4b6;--dim-2:#6f6f83;
+    --indigo:#4f46e5;--indigo-1:#6366f1;--indigo-2:#818cf8;--glow:rgba(99,102,241,.55);
+    --good:#34d399;--gold:#fbbf24;
+    --xls:#1f9d55;--doc:#2b6cff;--pdf:#e5484d;--ppt:#e8843c;--hwp:#0ea5b7;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Apple SD Gothic Neo","Pretendard",system-ui,sans-serif;
+    --mono:"SF Mono","Geist Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#000;color:var(--fg);font-family:var(--font);-webkit-font-smoothing:antialiased}
+  body{display:flex;align-items:center;justify-content:center;min-height:100vh;overflow:hidden}
+  .wrap{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
+  .stage{position:relative;width:1280px;height:720px;flex:0 0 auto;
+    background:radial-gradient(120% 140% at 50% -10%,#141425 0%,var(--ink) 55%,#020203 100%);
+    border-radius:22px;overflow:hidden;box-shadow:0 40px 120px -30px rgba(0,0,0,.9),inset 0 0 0 1px rgba(255,255,255,.04);transform-origin:center center}
+  .stage::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(90% 90% at 50% 40%,transparent 55%,rgba(0,0,0,.55) 100%)}
+  .aura{position:absolute;left:50%;top:44%;width:900px;height:900px;transform:translate(-50%,-50%);background:radial-gradient(closest-side,var(--glow),transparent 70%);filter:blur(20px);opacity:0;transition:opacity .7s ease;pointer-events:none}
+  .stage.lit .aura{opacity:.18}
+
+  .scene{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:opacity .4s ease}
+  .scene.on{opacity:1;visibility:visible}
+  .u{opacity:0;transform:translateY(22px)}
+  .scene.on .u{animation:rise .6s cubic-bezier(.16,1,.3,1) forwards}
+  .scene.on .pop{animation:pop .5s cubic-bezier(.18,1.5,.4,1) forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  @keyframes pop{0%{opacity:0;transform:scale(.86)}100%{opacity:1;transform:scale(1)}}
+  .step{font-size:13px;letter-spacing:.26em;text-transform:uppercase;color:var(--dim-2);font-weight:600;margin-bottom:16px}
+  .step b{color:var(--indigo-2)}
+
+  /* ===== S1 HOOK ===== */
+  #s1{flex-direction:column;text-align:center}
+  .kicker{font-size:15px;letter-spacing:.42em;text-transform:uppercase;color:var(--indigo-2);font-weight:600;margin-bottom:24px}
+  .hook{font-size:80px;line-height:1.04;font-weight:700;letter-spacing:-.03em;text-wrap:balance;margin:0}
+  .hook .em{background:linear-gradient(120deg,var(--indigo-1),var(--indigo-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hook-sub{margin-top:20px;font-size:20px;color:var(--dim)}
+  .caret{display:inline-block;width:4px;height:.9em;background:var(--indigo-2);margin-left:6px;vertical-align:-.08em;border-radius:2px;animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  /* ===== S2 COMBINE ===== */
+  #s2{flex-direction:column}
+  .combine{position:relative;width:940px;height:400px;display:flex;align-items:center;justify-content:center}
+  .mergeflash{position:absolute;left:50%;top:50%;width:360px;height:360px;transform:translate(-50%,-50%) scale(.4);background:radial-gradient(closest-side,var(--glow),transparent 70%);opacity:0;filter:blur(6px)}
+  .scene.on .mergeflash{animation:flash 1s ease 2.15s}
+  @keyframes flash{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}45%{opacity:.9;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.15)}}
+  .file{position:absolute;display:flex;align-items:center;gap:9px;background:#fff;color:#1a1a24;border-radius:10px;padding:11px 14px;box-shadow:0 22px 44px -22px #000,0 0 0 1px rgba(0,0,0,.04);opacity:0;white-space:nowrap}
+  .file .ic{width:22px;height:26px;border-radius:5px;flex:0 0 auto;display:flex;align-items:flex-end;justify-content:center;font-size:8px;font-weight:800;color:#fff;padding-bottom:2px}
+  .file .fn{font-size:13px;font-weight:600;letter-spacing:-.01em}
+  .file .xls{background:linear-gradient(160deg,#27c06a,var(--xls))}.file .doc{background:linear-gradient(160deg,#4c86ff,var(--doc))}
+  .file .pdf{background:linear-gradient(160deg,#f2686c,var(--pdf))}.file .ppt{background:linear-gradient(160deg,#f19a5a,var(--ppt))}.file .hwp{background:linear-gradient(160deg,#22c3d4,var(--hwp))}
+  .scene.on .file{animation:fileIn .6s cubic-bezier(.16,1,.3,1) forwards, converge .95s cubic-bezier(.7,0,.25,1) 1.95s forwards}
+  @keyframes fileIn{from{opacity:0;transform:translate(var(--fx),calc(var(--fy) + 40px)) rotate(var(--fr)) scale(.92)}to{opacity:1;transform:translate(var(--fx),var(--fy)) rotate(var(--fr)) scale(1)}}
+  @keyframes converge{from{opacity:1;transform:translate(var(--fx),var(--fy)) rotate(var(--fr)) scale(1)}70%{opacity:1}to{opacity:0;transform:translate(0,0) rotate(0) scale(.28)}}
+  .tmpl{position:absolute;width:264px;background:linear-gradient(180deg,#fff,#f6f6ff);color:#14141c;border-radius:14px;padding:20px;box-shadow:0 40px 90px -22px var(--glow),0 0 0 2px var(--indigo-1);opacity:0;transform:scale(.5)}
+  .scene.on .tmpl{animation:pop .6s cubic-bezier(.18,1.6,.4,1) 2.5s forwards}
+  .tmpl .star{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--gold);color:#3a2c00;font-size:11.5px;font-weight:800;padding:4px 12px;border-radius:999px;box-shadow:0 6px 18px -4px rgba(251,191,36,.6);white-space:nowrap}
+  .tmpl .tt{font-size:16px;font-weight:800;letter-spacing:-.02em;margin:6px 0 4px;color:#0f0f18}
+  .tmpl .ts{font-size:12px;color:#6f6f83}
+  .tmpl .trow{height:7px;border-radius:3px;background:#e7e7f5;margin:9px 0}
+  /* AI activation sparkles around template */
+  .tspk{position:absolute;left:50%;top:50%;font-size:20px;opacity:0}
+  .scene.on .tspk{animation:twinkle 1.3s ease forwards}
+  @keyframes twinkle{0%{opacity:0;transform:translate(var(--tx),var(--ty)) scale(.3) rotate(0)}40%{opacity:1;transform:translate(var(--tx),var(--ty)) scale(1.1) rotate(30deg)}100%{opacity:0;transform:translate(var(--tx),var(--ty)) scale(.6) rotate(70deg)}}
+  .aibadge{position:absolute;left:50%;top:50%;transform:translate(-50%,-72px) scale(.6);display:flex;align-items:center;gap:7px;background:var(--indigo);color:#fff;font-size:12.5px;font-weight:700;padding:6px 14px;border-radius:999px;box-shadow:0 10px 30px -8px var(--glow);opacity:0}
+  .scene.on .aibadge{animation:pop .5s cubic-bezier(.18,1.6,.4,1) 2.9s forwards}
+  .aibadge .dot{width:7px;height:7px;border-radius:50%;background:#fff;animation:blink 1s infinite}
+  .cap{margin-top:26px;font-size:17px;color:var(--dim);opacity:0;text-align:center}
+  .scene.on .cap{animation:rise .5s ease 2.85s forwards}
+  .cap b{color:var(--fg);font-weight:700}
+
+  /* ===== S3 PROMPT + REF ===== */
+  #s3{flex-direction:column;padding:0 90px}
+  .promptbar{width:920px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line-2);border-radius:20px;padding:24px 26px;box-shadow:0 30px 80px -40px #000,inset 0 1px 0 rgba(255,255,255,.05);position:relative}
+  .promptbar .ai{position:absolute;top:-15px;left:26px;display:flex;gap:8px;align-items:center;background:var(--indigo);color:#fff;font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:999px;box-shadow:0 8px 24px -6px var(--glow)}
+  .promptbar .ai .dot{width:7px;height:7px;border-radius:50%;background:#fff;animation:blink 1.1s infinite}
+  .ref-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;opacity:0}
+  .scene.on .ref-row{animation:rise .5s ease .3s forwards}
+  .ref-lbl{font-size:12.5px;color:var(--dim-2)}
+  .ref-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.42);color:var(--gold);padding:6px 13px;border-radius:999px;font-size:13px;font-weight:600}
+  .prompt-label{font-size:13px;color:var(--dim-2);margin-bottom:10px}
+  .prompt-text{font-size:25px;line-height:1.42;font-weight:500;letter-spacing:-.01em;min-height:36px}
+  .prompt-text .mrg{color:var(--indigo-2);font-weight:700}
+  .pcaret{display:inline-block;width:3px;height:1.05em;background:var(--indigo-2);vertical-align:-.14em;margin-left:3px;border-radius:2px}
+  .enterhint{margin-top:18px;font-size:14px;color:var(--dim-2);display:flex;gap:8px;align-items:center;opacity:0}
+  .scene.on .enterhint{animation:rise .4s ease 2.9s forwards}
+  .kbd{font-family:var(--mono);font-size:12px;padding:3px 9px;border:1px solid var(--line-2);border-radius:7px;color:var(--dim)}
+
+  /* ===== S4 GENERATE (magic → contract) ===== */
+  #s4{padding:0}
+  .magic{position:absolute;inset:0;pointer-events:none}
+  .spk{position:absolute;left:50%;top:46%;font-size:24px;opacity:0}
+  .scene.on .spk{animation:spkIn .7s ease forwards}
+  @keyframes spkIn{0%{opacity:0;transform:translate(var(--sx),var(--sy)) scale(.3) rotate(0)}45%{opacity:1;transform:translate(calc(var(--sx)*.4),calc(var(--sy)*.4)) scale(1.1) rotate(40deg)}100%{opacity:0;transform:translate(0,0) scale(.4) rotate(90deg)}}
+  .types{display:flex;gap:12px;position:absolute;top:92px;left:50%;transform:translateX(-50%)}
+  .chip{padding:10px 20px;border-radius:13px;font-size:16px;font-weight:600;background:var(--panel);border:1px solid var(--line);color:var(--dim);opacity:0;transform:scale(.8)}
+  .scene.on .chip{animation:pop .4s cubic-bezier(.18,1.5,.4,1) forwards}
+  .chip.hot{color:#fff;border-color:var(--indigo-1);background:linear-gradient(180deg,rgba(99,102,241,.28),rgba(79,70,229,.12));box-shadow:0 0 0 1px var(--indigo),0 14px 40px -16px var(--glow)}
+  .doc{position:relative;width:720px;background:#fff;color:#14141c;border-radius:14px;overflow:hidden;box-shadow:0 50px 120px -30px #000,0 0 0 1px rgba(255,255,255,.06)}
+  .doc .shine{position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 30%,rgba(129,140,248,.35) 48%,rgba(255,255,255,.55) 50%,transparent 66%);transform:translateX(-120%)}
+  .scene.on .doc .shine{animation:sweep 1s cubic-bezier(.4,0,.2,1) .75s}
+  @keyframes sweep{to{transform:translateX(120%)}}
+  .doc-top{height:8px;background:linear-gradient(90deg,var(--indigo),var(--indigo-2))}
+  .doc-body{padding:30px 38px 26px}
+  .doc-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px}
+  .doc-badge{font-size:11.5px;font-weight:700;letter-spacing:.06em;color:#4f46e5;background:#eef0ff;padding:5px 12px;border-radius:999px}
+  .doc-title{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:11px 0 4px;color:#0f0f18}
+  .doc-client{font-size:14px;color:#6f6f83}
+  .doc-logo{font-size:14px;font-weight:800;letter-spacing:-.02em;color:#14141c;display:flex;align-items:center;gap:7px}
+  .doc-logo .mk{width:19px;height:19px;border-radius:6px;background:linear-gradient(135deg,var(--indigo),var(--indigo-2))}
+  .clause{font-size:13px;color:#3a3a48;line-height:1.55;margin-bottom:16px}
+  .clause b{color:#0f0f18}
+  table.items{width:100%;border-collapse:collapse;font-size:13.5px}
+  table.items th{text-align:left;color:#8b8b9c;font-weight:600;font-size:11.5px;padding:0 0 9px;border-bottom:1px solid #ececf1}
+  table.items th.r,table.items td.r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+  table.items td{padding:11px 0;border-bottom:1px solid #f2f2f6;color:#2a2a38}
+  table.items tr.ln{opacity:0;transform:translateX(-14px)}
+  .scene.on table.items tr.ln{animation:slideIn .4s cubic-bezier(.16,1,.3,1) forwards}
+  @keyframes slideIn{to{opacity:1;transform:none}}
+  .doc-total{display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding-top:18px;border-top:2px solid #14141c}
+  .doc-total .lab{font-size:14px;font-weight:700;color:#0f0f18}
+  .doc-total .val{font-size:28px;font-weight:800;font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:#4f46e5}
+
+  /* ===== S5 EDITOR ===== */
+  #s5{padding:0}
+  .editor{position:relative;width:1080px;height:560px;background:var(--ink-2);border:1px solid var(--line-2);border-radius:18px;overflow:hidden;box-shadow:0 44px 110px -40px #000;display:flex;flex-direction:column}
+  .ed-bar{height:48px;flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--panel);transform:translateY(-100%)}
+  .scene.on .ed-bar{animation:slideDown .5s cubic-bezier(.16,1,.3,1) .15s forwards}
+  @keyframes slideDown{to{transform:none}}
+  .ed-bar .dt{font-size:13px;font-weight:600;color:var(--fg)}
+  .ed-bar .muted{font-size:12px;color:var(--dim-2)}
+  .ed-bar .sp{margin-left:auto}
+  .ebtn{font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:9px;border:1px solid var(--line-2);color:var(--dim)}
+  .ebtn.save{color:var(--fg)}
+  .ebtn.pdf{background:var(--indigo);border-color:var(--indigo);color:#fff;box-shadow:0 10px 30px -10px var(--glow)}
+  .scene.on .ebtn.pdf{animation:btnpress .5s ease 5.6s both}
+  @keyframes btnpress{40%{transform:scale(.92)}100%{transform:scale(1)}}
+  .ed-body{flex:1;display:flex;min-height:0}
+  .palette{width:186px;flex:0 0 auto;border-right:1px solid var(--line);padding:16px 14px;background:var(--panel);transform:translateX(-105%)}
+  .scene.on .palette{animation:slideRight .55s cubic-bezier(.16,1,.3,1) .3s forwards}
+  @keyframes slideRight{to{transform:none}}
+  .palette .ph{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim-2);font-weight:600;margin-bottom:12px}
+  .pblock{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--dim);padding:8px 10px;border-radius:9px;border:1px solid var(--line);margin-bottom:8px}
+  .pblock .pi{width:15px;height:15px;border-radius:4px;background:linear-gradient(135deg,var(--indigo-1),var(--indigo-2));flex:0 0 auto}
+  .canvas{flex:1;min-width:0;overflow:hidden;padding:20px;display:flex;justify-content:center;background:radial-gradient(120% 120% at 50% 0%,#111119,#0a0a10)}
+  .paper{position:relative;width:456px;background:#fff;color:#14141c;border-radius:8px;box-shadow:0 30px 70px -30px #000;padding:20px 24px}
+  .cblk{position:relative;border:1.5px solid transparent;border-radius:8px;padding:6px 9px;margin:0 -9px 7px;opacity:0}
+  .scene.on .cblk{animation:fadeIn .4s ease forwards}
+  @keyframes fadeIn{to{opacity:1}}
+  .cblk.title-b{font-size:16px;font-weight:800;color:#0f0f18}
+  .cblk.sel{border-color:var(--indigo-1);background:rgba(99,102,241,.07);box-shadow:0 0 0 3px rgba(99,102,241,.14)}
+  .cblk.sel::after{content:"거래처·견적";position:absolute;top:-23px;left:-2px;background:var(--indigo);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px}
+  .cminis{display:flex;gap:8px}.cminis>div{flex:1;height:24px;border-radius:6px;background:#f0f0f7}
+  .drag-handle{position:absolute;left:-4px;top:50%;transform:translateY(-50%);color:#c3c3d0;font-size:12px;letter-spacing:-2px}
+  /* text block (계약 조항) — moves DOWN during swap+addrow */
+  .blk-text{height:46px;overflow:hidden;font-size:12px;color:#3a3a48;line-height:1.5}
+  .scene.on .blk-text{animation:fadeIn .4s ease .9s forwards, textChoreo 7s linear .9s forwards}
+  @keyframes textChoreo{0%,13%{transform:translateY(0)}24%{transform:translateY(120px)}30%{transform:translateY(120px)}36%,100%{transform:translateY(144px)}}
+  /* table block (계약 내역) — lifts UP above text during swap */
+  .blk-table{background:#fff;border-radius:8px}
+  .scene.on .blk-table{animation:fadeIn .4s ease .9s forwards, tableChoreo 7s linear .9s forwards}
+  @keyframes tableChoreo{0%,13%{transform:translateY(0) scale(1)}17%{transform:translateY(-6px) scale(1.02)}24%,100%{transform:translateY(-50px) scale(1)}}
+  .scene.on .blk-table.lifting{box-shadow:0 22px 44px -18px rgba(0,0,0,.4)}
+  .tbl-cap{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;color:#0f0f18;margin-bottom:6px}
+  .addrow{font-size:10.5px;font-weight:700;color:var(--indigo);background:#eef0ff;padding:3px 9px;border-radius:6px}
+  .scene.on .addrow{animation:btnpress .4s ease 3.0s both}
+  .trow{display:flex;justify-content:space-between;font-size:11px;color:#444;padding:5px 2px;border-bottom:1px solid #f0f0f5;font-family:var(--mono)}
+  .trow.th{color:#9a9aab;font-weight:700;font-family:var(--font)}
+  .trow.sum{font-family:var(--font);font-weight:800;color:#4f46e5;border-bottom:none;border-top:1.5px solid #14141c;padding-top:7px}
+  .trow.newrow{height:0;padding-top:0;padding-bottom:0;overflow:hidden;opacity:0;color:var(--indigo);background:rgba(99,102,241,.06)}
+  .scene.on .trow.newrow{animation:rowOpen .45s cubic-bezier(.16,1,.3,1) 3.05s forwards}
+  @keyframes rowOpen{to{height:22px;padding:5px 2px;opacity:1}}
+  .rcaret{display:inline-block;width:1.5px;height:.95em;background:var(--indigo);vertical-align:-.12em;animation:blink 1s steps(1) infinite}
+  .inspector{width:200px;flex:0 0 auto;border-left:1px solid var(--line);padding:16px 15px;background:var(--panel);transform:translateX(105%)}
+  .scene.on .inspector{animation:slideLeft .55s cubic-bezier(.16,1,.3,1) .45s forwards}
+  @keyframes slideLeft{to{transform:none}}
+  .inspector .ph{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim-2);font-weight:600;margin-bottom:14px}
+  .ifield{margin-bottom:12px}
+  .ifield label{display:block;font-size:11px;color:var(--dim-2);margin-bottom:5px}
+  .ifield .box{height:30px;border-radius:8px;border:1px solid var(--line-2);background:var(--ink-2);display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--fg)}
+  .ecursor{position:absolute;z-index:12;left:0;top:0;font-size:20px;opacity:0;pointer-events:none;filter:drop-shadow(0 3px 4px rgba(0,0,0,.5));transition:transform .42s cubic-bezier(.4,0,.2,1),opacity .25s ease}
+  .ecursor.click{transition:transform .12s ease,opacity .25s ease}
+  .pdf-chip{position:absolute;bottom:56px;left:50%;transform:translateX(-50%) scale(.6);opacity:0;display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line-2);padding:11px 18px;border-radius:12px;font-size:14px;color:var(--fg);box-shadow:0 20px 50px -18px #000;z-index:20}
+  .scene.on .pdf-chip{animation:pop .5s cubic-bezier(.18,1.5,.4,1) 6.0s forwards}
+  .pdf-chip .pdf-ic{width:26px;height:32px;border-radius:5px;background:linear-gradient(135deg,#ef4444,#dc2626);display:flex;align-items:flex-end;justify-content:center;font-size:8px;font-weight:800;color:#fff;padding-bottom:3px}
+  .pdf-chip .ok{color:var(--good);font-weight:700}
+
+  /* ===== S6 SEND ===== */
+  #s6{flex-direction:column}
+  .mailer{width:700px;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line-2);border-radius:20px;overflow:hidden;box-shadow:0 40px 100px -40px #000;position:relative;z-index:2}
+  .mail-head{padding:16px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;font-size:14px;color:var(--dim)}
+  .mail-head .prov{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--fg);font-weight:600;font-size:13px}
+  .mail-head .prov .g{width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,#ea4335,#4285f4)}
+  .mail-row{padding:13px 22px;border-bottom:1px solid var(--line);display:flex;gap:14px;font-size:14.5px}
+  .mail-row .k{color:var(--dim-2);width:64px;flex:0 0 auto}
+  .mail-row .v{color:var(--fg)}
+  .to-pill{background:rgba(99,102,241,.16);border:1px solid rgba(99,102,241,.4);color:var(--indigo-2);padding:3px 11px;border-radius:999px;font-size:13px;font-weight:600}
+  .attach{display:inline-flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line-2);padding:6px 12px;border-radius:10px;font-size:12.5px;color:var(--dim)}
+  .attach .pdf-ic{width:18px;height:22px;border-radius:4px;background:linear-gradient(135deg,#ef4444,#dc2626);display:flex;align-items:flex-end;justify-content:center;font-size:7px;font-weight:800;color:#fff;padding-bottom:2px}
+  .mail-foot{padding:16px 22px;display:flex;align-items:center;justify-content:space-between}
+  .sendbtn{position:relative;background:var(--indigo);color:#fff;font-weight:700;font-size:15px;padding:11px 24px;border-radius:12px;display:flex;align-items:center;gap:10px;box-shadow:0 14px 40px -12px var(--glow)}
+  .scene.on .sendbtn{animation:sendPress .5s ease 2.6s both}
+  @keyframes sendPress{40%{transform:scale(.9);box-shadow:0 6px 20px -8px var(--glow)}100%{transform:scale(1)}}
+  .plane{position:absolute;left:50%;top:64%;font-size:32px;opacity:0;z-index:5}
+  .scene.on .plane{animation:fly 1.35s cubic-bezier(.5,0,.6,1) 2.85s forwards}
+  @keyframes fly{0%{opacity:0;transform:translate(-50%,0) rotate(-8deg) scale(.7)}18%{opacity:1}100%{opacity:0;transform:translate(230px,-330px) rotate(18deg) scale(1.1)}}
+  .sent-toast{margin-top:24px;font-size:16px;color:var(--good);font-weight:600;display:flex;align-items:center;gap:9px;opacity:0}
+  .scene.on .sent-toast{animation:rise .45s ease 3.5s forwards}
+  /* mail template picker */
+  .tpl-btn{display:inline-flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line-2);color:var(--fg);font-size:13px;font-weight:600;padding:7px 13px;border-radius:9px}
+  .scene.on .tpl-btn{animation:tplPress .4s ease 1.0s both}
+  @keyframes tplPress{40%{transform:scale(.95);border-color:var(--indigo-1)}100%{transform:scale(1)}}
+  .tpl-menu{position:absolute;top:38px;left:0;z-index:8;width:230px;background:var(--panel-2);border:1px solid var(--line-2);border-radius:12px;padding:6px;box-shadow:0 24px 60px -20px #000;opacity:0;transform-origin:top left}
+  .scene.on .tpl-menu{animation:menuFlash 1.0s cubic-bezier(.16,1,.3,1) 1.0s both}
+  @keyframes menuFlash{0%{opacity:0;transform:translateY(-6px) scale(.96)}16%{opacity:1;transform:none}72%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-4px) scale(.98)}}
+  .tpl-item{font-size:13px;color:var(--dim);padding:8px 10px;border-radius:8px}
+  .tpl-item.hot{color:#fff;background:var(--indigo);font-weight:600}
+  .subjwrap{position:relative;display:inline-block;min-height:20px}
+  .subj-empty{color:var(--dim-2)}
+  .scene.on .subj-empty{animation:fadeOut .3s ease 1.6s forwards}
+  @keyframes fadeOut{to{opacity:0}}
+  .subj-filled{position:absolute;left:0;top:0;white-space:nowrap;opacity:0}
+  .scene.on .subj-filled{animation:subjIn .4s cubic-bezier(.16,1,.3,1) 1.6s forwards}
+  @keyframes subjIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .applied{font-size:12.5px;color:var(--good);font-weight:600;opacity:0}
+  .scene.on .applied{animation:rise .4s ease 1.75s forwards}
+  .mcursor{position:absolute;left:0;top:0;z-index:15;font-size:20px;opacity:0;pointer-events:none;filter:drop-shadow(0 3px 4px rgba(0,0,0,.5));transition:transform .42s cubic-bezier(.4,0,.2,1),opacity .25s ease}
+  .mcursor.click{transition:transform .12s ease,opacity .25s ease}
+
+  /* ===== S7 LIBRARY + STATS ===== */
+  #s7{gap:36px;padding:0 80px}
+  .panel-card{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:18px;padding:24px 26px;box-shadow:0 30px 80px -50px #000}
+  .lib{width:320px}
+  .lib h4,.stats h4{font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim-2);margin:0 0 16px;font-weight:600}
+  .folder{display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;font-size:14.5px;color:var(--dim);opacity:0;transform:translateX(-12px)}
+  .scene.on .folder{animation:slideIn .45s cubic-bezier(.16,1,.3,1) forwards}
+  .folder .ct{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--dim-2)}
+  .folder.sel{background:rgba(99,102,241,.14);color:var(--fg);border:1px solid rgba(99,102,241,.32)}
+  .folder.child{margin-left:22px;font-size:13.5px}
+  .stats{width:410px}
+  .bars{display:flex;align-items:flex-end;gap:16px;height:180px;padding-top:6px}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:9px;justify-content:flex-end;height:100%}
+  .bar .col{width:100%;border-radius:8px 8px 3px 3px;height:0;background:linear-gradient(180deg,var(--indigo-1),var(--indigo));box-shadow:0 0 24px -6px var(--glow)}
+  .scene.on .bar .col{animation:grow .85s cubic-bezier(.16,1,.3,1) forwards}
+  @keyframes grow{to{height:var(--h)}}
+  .bar .mo{font-size:11.5px;color:var(--dim-2);font-family:var(--mono)}
+  .stat-kpi{display:flex;gap:24px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
+  .kpi .n{font-size:24px;font-weight:800;font-family:var(--mono);letter-spacing:-.02em}
+  .kpi .l{font-size:12px;color:var(--dim-2);margin-top:3px}
+
+  /* ===== S8 LOGO ===== */
+  #s8{flex-direction:column;text-align:center}
+  .brand{display:flex;align-items:center;gap:20px;justify-content:center}
+  .brand .mark{width:74px;height:74px;border-radius:20px;background:linear-gradient(135deg,var(--indigo),var(--indigo-2));box-shadow:0 20px 60px -14px var(--glow),inset 0 1px 0 rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:800;color:#fff}
+  .brand .name{font-size:62px;font-weight:700;letter-spacing:-.03em}
+  .tagline{margin-top:28px;font-size:25px;color:var(--dim);font-weight:400;letter-spacing:-.01em;text-wrap:balance}
+  .tagline b{color:var(--fg);font-weight:600}
+  .flow-badges{margin-top:30px;display:flex;gap:12px;justify-content:center;font-size:14px;color:var(--dim-2);flex-wrap:wrap}
+  .flow-badges span{display:flex;align-items:center;gap:12px}
+  .flow-badges .a{color:var(--indigo-2);font-weight:600}
+
+  /* ===== controls ===== */
+  .controls{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:50;display:flex;align-items:center;gap:16px;background:rgba(10,10,16,.72);backdrop-filter:blur(14px);border:1px solid var(--line-2);border-radius:999px;padding:9px 12px 9px 18px}
+  .controls .pbar{width:220px;height:5px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}
+  .controls .pbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--indigo),var(--indigo-2));border-radius:3px}
+  .controls .t{font-family:var(--mono);font-size:12px;color:var(--dim);min-width:74px;text-align:center}
+  .btn{cursor:pointer;border:1px solid var(--line-2);background:rgba(255,255,255,.05);color:var(--fg);font-family:var(--font);font-size:13px;font-weight:600;padding:8px 16px;border-radius:999px}
+  .btn:hover{background:rgba(255,255,255,.12)}
+  .btn:focus-visible{outline:2px solid var(--indigo-2);outline-offset:2px}
+  .hint{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:50;font-size:12.5px;color:var(--dim-2);background:rgba(10,10,16,.6);border:1px solid var(--line);border-radius:999px;padding:6px 15px}
+  /* capture mode: 녹화용 — 컨트롤/안내 숨기고 스테이지를 프레임 꽉 채움 */
+  body.cap{background:#020203}
+  body.cap .hint,body.cap .controls{display:none!important}
+  body.cap .stage{border-radius:0;box-shadow:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+</style>
+
+<div class="hint">화면 녹화(⇧⌘5) 후 재생하면 36초 영상이 됩니다 · 스테이지 1280×720</div>
+
+<div class="wrap">
+  <div class="stage" id="stage">
+    <div class="aura"></div>
+
+    <!-- S1 HOOK -->
+    <section class="scene" id="s1"><div>
+      <div class="kicker u">Rainmaker</div>
+      <h1 class="hook u" style="animation-delay:.12s">영업 문서,<br><span class="em">한 줄</span>이면 끝.<span class="caret"></span></h1>
+      <p class="hook-sub u" style="animation-delay:.4s">견적서 · 계약서 · NDA · 제안서를 자연어로.</p>
+    </div></section>
+
+    <!-- S2 COMBINE -->
+    <section class="scene" id="s2"><div style="display:flex;flex-direction:column;align-items:center">
+      <div class="step u"><b>01</b> &nbsp;흩어진 문서를 하나로</div>
+      <div class="combine">
+        <div class="mergeflash"></div>
+        <div class="file" style="--fx:-330px;--fy:-118px;--fr:-12deg;animation-delay:.05s,1.95s"><span class="ic xls">X</span><span class="fn">A회사_견적서_최종.xlsx</span></div>
+        <div class="file" style="--fx:-70px;--fy:-150px;--fr:-4deg;animation-delay:.13s,1.95s"><span class="ic xls">X</span><span class="fn">A회사_견적서_최최종.xlsx</span></div>
+        <div class="file" style="--fx:205px;--fy:-138px;--fr:8deg;animation-delay:.21s,1.95s"><span class="ic xls">X</span><span class="fn">A회사_견적서_최최최종_real.xlsx</span></div>
+        <div class="file" style="--fx:-340px;--fy:40px;--fr:-9deg;animation-delay:.29s,1.95s"><span class="ic doc">W</span><span class="fn">계약서_v2.docx</span></div>
+        <div class="file" style="--fx:330px;--fy:-30px;--fr:13deg;animation-delay:.37s,1.95s"><span class="ic doc">W</span><span class="fn">계약서_수정본_final.docx</span></div>
+        <div class="file" style="--fx:-250px;--fy:135px;--fr:-6deg;animation-delay:.45s,1.95s"><span class="ic pdf">P</span><span class="fn">NDA_표준양식.pdf</span></div>
+        <div class="file" style="--fx:40px;--fy:150px;--fr:5deg;animation-delay:.53s,1.95s"><span class="ic hwp">H</span><span class="fn">협력사_단가표.hwp</span></div>
+        <div class="file" style="--fx:305px;--fy:118px;--fr:10deg;animation-delay:.61s,1.95s"><span class="ic ppt">P</span><span class="fn">제안서_초안.pptx</span></div>
+        <div class="tspk" style="--tx:-120px;--ty:-70px;animation-delay:2.55s">✨</div>
+        <div class="tspk" style="--tx:130px;--ty:-40px;animation-delay:2.7s">✨</div>
+        <div class="tspk" style="--tx:-90px;--ty:80px;animation-delay:2.85s">✨</div>
+        <div class="tspk" style="--tx:120px;--ty:70px;animation-delay:3.0s">✨</div>
+        <div class="tmpl">
+          <span class="star">⭐ 공용문서함</span>
+          <div class="tt">표준 계약서 템플릿</div>
+          <div class="ts">팀 공용 · 표준 양식</div>
+          <div class="trow" style="width:100%"></div><div class="trow" style="width:82%"></div><div class="trow" style="width:92%"></div>
+        </div>
+        <div class="aibadge"><span class="dot"></span>AI 학습 완료</div>
+      </div>
+      <div class="cap">수십 개의 버전 → <b>하나의 표준 템플릿</b></div>
+    </div></section>
+
+    <!-- S3 PROMPT + REF -->
+    <section class="scene" id="s3"><div style="width:100%;display:flex;flex-direction:column;align-items:center">
+      <div class="step u"><b>02</b> &nbsp;공통 템플릿을 참고해, 말하듯이</div>
+      <div class="promptbar u pop" style="animation-delay:.08s">
+        <div class="ai"><span class="dot"></span>AI 문서 생성</div>
+        <div class="ref-row"><span class="ref-lbl">참고 문서</span><span class="ref-pill">⭐ 표준 계약서 템플릿</span></div>
+        <div class="prompt-label">무엇을 만들어 드릴까요?</div>
+        <div class="prompt-text" id="typed"><span class="pcaret"></span></div>
+      </div>
+      <div class="enterhint"><span class="kbd">⏎ Enter</span> 누르면 AI가 초안을 완성합니다</div>
+    </div></section>
+
+    <!-- S4 GENERATE -->
+    <section class="scene" id="s4">
+      <div class="magic">
+        <div class="spk" style="--sx:-300px;--sy:-120px">✨</div>
+        <div class="spk" style="--sx:290px;--sy:-140px;animation-delay:.06s">✦</div>
+        <div class="spk" style="--sx:-330px;--sy:110px;animation-delay:.12s">✦</div>
+        <div class="spk" style="--sx:320px;--sy:130px;animation-delay:.18s">✨</div>
+        <div class="spk" style="--sx:0px;--sy:-190px;animation-delay:.1s">✨</div>
+        <div class="spk" style="--sx:-160px;--sy:180px;animation-delay:.16s">✦</div>
+      </div>
+      <div class="types">
+        <div class="chip" style="animation-delay:.35s">견적서</div>
+        <div class="chip hot" style="animation-delay:.46s">계약서 ✓</div>
+        <div class="chip" style="animation-delay:.57s">NDA</div>
+        <div class="chip" style="animation-delay:.68s">제안서</div>
+      </div>
+      <div class="doc pop" style="animation-delay:.5s">
+        <div class="shine"></div>
+        <div class="doc-top"></div>
+        <div class="doc-body">
+          <div class="doc-head">
+            <div>
+              <span class="doc-badge">계약서 · CONTRACT</span>
+              <div class="doc-title">글로벌커머스(주) 유지보수 재계약 갱신 계약서</div>
+              <div class="doc-client">거래처 · 글로벌커머스(주) &nbsp;·&nbsp; 유지보수 만료 → 재계약 · 템플릿 기반 초안</div>
+            </div>
+            <div class="doc-logo"><span class="mk"></span>Rainmaker</div>
+          </div>
+          <p class="clause"><b>제1조 (목적)</b> 본 계약은 기존 유지보수 계약의 만료에 따른 서비스 갱신을 목적으로 한다.</p>
+          <table class="items">
+            <thead><tr style="opacity:1;transform:none"><th>계약 내역</th><th class="r">연간 금액</th></tr></thead>
+            <tbody>
+              <tr class="ln" style="animation-delay:.85s"><td>연간 유지보수 (Standard)</td><td class="r">₩7,000,000</td></tr>
+              <tr class="ln" style="animation-delay:.97s"><td>모니터링 SW 라이선스</td><td class="r">₩2,400,000</td></tr>
+            </tbody>
+          </table>
+          <div class="doc-total"><span class="lab">연 계약금액 (VAT 별도)</span><span class="val" id="total">₩0</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- S5 EDITOR -->
+    <section class="scene" id="s5">
+      <div class="editor pop">
+        <div class="ed-bar">
+          <span class="dt">재계약 갱신 계약서</span><span class="muted">블록 캔버스 에디터</span>
+          <span class="sp"></span><span class="ebtn save">저장</span><span class="ebtn pdf">PDF로 내보내기</span>
+        </div>
+        <div class="ed-body">
+          <div class="palette">
+            <div class="ph">블록 추가</div>
+            <div class="pblock"><span class="pi"></span>문서 제목</div>
+            <div class="pblock"><span class="pi"></span>텍스트</div>
+            <div class="pblock"><span class="pi"></span>공급자 정보</div>
+            <div class="pblock"><span class="pi"></span>거래처·견적</div>
+            <div class="pblock"><span class="pi"></span>품목 표</div>
+            <div class="pblock"><span class="pi"></span>구분선</div>
+          </div>
+          <div class="canvas"><div class="paper">
+            <div class="cblk title-b" style="animation-delay:.55s">계약서</div>
+            <div class="cblk sel" style="animation-delay:.75s"><div class="cminis"><div></div><div></div></div></div>
+            <div class="cblk blk-text"><span class="drag-handle">⠿</span>제1조 (목적) 본 계약은 유지보수 서비스의 갱신을 목적으로 한다. 제2조 (기간) 1년.</div>
+            <div class="cblk blk-table lifting">
+              <span class="drag-handle">⠿</span>
+              <div class="tbl-cap">계약 내역 <span class="addrow">+ 행 추가</span></div>
+              <div class="trow th"><span>품목</span><span>연간 금액</span></div>
+              <div class="trow"><span>연간 유지보수 (Standard)</span><span>₩7,000,000</span></div>
+              <div class="trow"><span>모니터링 SW 라이선스</span><span>₩2,400,000</span></div>
+              <div class="trow newrow"><span id="rowName"></span><span id="rowAmt"></span></div>
+              <div class="trow sum"><span>합계 (연)</span><span id="edtotal">₩9,400,000</span></div>
+            </div>
+          </div></div>
+          <div class="inspector">
+            <div class="ph">블록 속성 · 거래처·견적</div>
+            <div class="ifield"><label>거래처명</label><div class="box">글로벌커머스(주)</div></div>
+            <div class="ifield"><label>계약 기간</label><div class="box">1년 (자동 갱신)</div></div>
+            <div class="ifield"><label>담당자</label><div class="box">김도현</div></div>
+          </div>
+        </div>
+        <div class="ecursor">🖱️</div>
+      </div>
+      <div class="pdf-chip"><span class="pdf-ic">PDF</span>글로벌커머스_재계약갱신_계약서.pdf <span class="ok">✓ 파일 생성됨</span></div>
+    </section>
+
+    <!-- S6 SEND -->
+    <section class="scene" id="s6"><div style="display:flex;flex-direction:column;align-items:center">
+      <div class="step u" style="margin-bottom:20px"><b>03</b> &nbsp;메일 템플릿 불러와 발송</div>
+      <div class="mailer pop" style="animation-delay:.08s">
+        <div class="mail-head">새 메일<span class="prov"><span class="g"></span>Gmail · sales@rainmaker.io</span></div>
+        <div class="mail-row"><span class="k">받는 사람</span><span class="v"><span class="to-pill">김도현 &lt;dohyun.kim@globalcommerce.co.kr&gt;</span></span></div>
+        <div class="mail-row"><span class="k">템플릿</span><span class="v" style="position:relative">
+          <span class="tpl-btn">📄 템플릿 불러오기 <span style="font-size:10px">▾</span></span>
+          <div class="tpl-menu">
+            <div class="tpl-item hot">계약서 송부 ✓</div>
+            <div class="tpl-item">견적서 안내 (표준)</div>
+            <div class="tpl-item">빠른 팔로업</div>
+            <div class="tpl-item">미팅 후 감사</div>
+          </div>
+        </span></div>
+        <div class="mail-row"><span class="k">제목</span><span class="v subjwrap"><span class="subj-empty">(제목 없음)</span><span class="subj-filled">[Rainmaker] 유지보수 재계약 갱신 계약서 송부드립니다</span></span></div>
+        <div class="mail-row"><span class="k">첨부</span><span class="v"><span class="attach"><span class="pdf-ic">PDF</span>글로벌커머스_재계약갱신_계약서.pdf</span></span></div>
+        <div class="mail-foot"><span class="applied">✓ 본문 · 서명 자동 적용됨</span><span class="sendbtn">이메일 발송 <span style="font-size:16px">➤</span></span></div>
+        <div class="mcursor">🖱️</div>
+      </div>
+      <div class="plane">✈️</div>
+      <div class="sent-toast">✓ 김도현 님에게 발송 완료</div>
+    </div></section>
+
+    <!-- S7 LIBRARY + STATS -->
+    <section class="scene" id="s7">
+      <div class="panel-card lib">
+        <h4>문서 보관함</h4>
+        <div class="folder sel" style="animation-delay:.08s">⭐ 공용문서함<span class="ct">5</span></div>
+        <div class="folder child" style="animation-delay:.2s">📄 표준 계약서 템플릿<span class="ct">1</span></div>
+        <div class="folder" style="animation-delay:.32s">📁 주요 거래처<span class="ct">12</span></div>
+        <div class="folder" style="animation-delay:.44s">📁 재계약 진행<span class="ct">4</span></div>
+        <div class="folder" style="animation-delay:.56s">📁 제안서<span class="ct">7</span></div>
+      </div>
+      <div class="panel-card stats">
+        <h4>월별 계약 매출 추이</h4>
+        <div class="bars">
+          <div class="bar"><div class="col" style="--h:42%;animation-delay:.15s"></div><span class="mo">3월</span></div>
+          <div class="bar"><div class="col" style="--h:58%;animation-delay:.25s"></div><span class="mo">4월</span></div>
+          <div class="bar"><div class="col" style="--h:50%;animation-delay:.35s"></div><span class="mo">5월</span></div>
+          <div class="bar"><div class="col" style="--h:78%;animation-delay:.45s"></div><span class="mo">6월</span></div>
+          <div class="bar"><div class="col" style="--h:100%;animation-delay:.55s"></div><span class="mo">7월</span></div>
+        </div>
+        <div class="stat-kpi">
+          <div class="kpi"><div class="n" style="color:var(--indigo-2)" id="kpi1">₩0</div><div class="l">7월 계약 매출</div></div>
+          <div class="kpi"><div class="n" id="kpi2">0</div><div class="l">발송 문서</div></div>
+          <div class="kpi"><div class="n" style="color:var(--good)" id="kpi3">0%</div><div class="l">재계약률</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- S8 LOGO -->
+    <section class="scene" id="s8"><div>
+      <div class="brand"><div class="mark u pop">R</div><div class="name u" style="animation-delay:.12s">Rain<span style="color:var(--indigo-2)">maker</span></div></div>
+      <div class="tagline u" style="animation-delay:.38s">공통 템플릿에서 <b>계약 성사</b>까지, 한 줄로.</div>
+      <div class="flow-badges u" style="animation-delay:.62s"><span class="a">공통 템플릿</span><span>→</span><span class="a">AI 생성</span><span>→</span><span class="a">블록 편집</span><span>→</span><span class="a">발송</span><span>→</span><span class="a">분석</span></div>
+    </div></section>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="pbar"><i id="pfill"></i></div>
+  <span class="t" id="clock">0.0s</span>
+  <button class="btn" id="replay">↻ 다시 재생</button>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var scenes=[
+    {id:"s1",a:0,     b:2200},
+    {id:"s2",a:2200,  b:6900},
+    {id:"s3",a:6900,  b:10600},
+    {id:"s4",a:10600, b:14000},
+    {id:"s5",a:14000, b:21200},
+    {id:"s6",a:21200, b:25900},
+    {id:"s7",a:25900, b:28200},
+    {id:"s8",a:28200, b:30000}
+  ];
+  var TOTAL=30000;
+  var stage=document.getElementById("stage");
+  var els={}; scenes.forEach(function(s){ els[s.id]=document.getElementById(s.id); });
+  var pfill=document.getElementById("pfill"),clock=document.getElementById("clock");
+
+  var typedEl=document.getElementById("typed");
+  var fullPrompt="유지보수 만료 고객사 재계약을 진행하는데, 재계약 갱신 계약서를 만들어줘";
+  var mStr="재계약 갱신 계약서",mStart=fullPrompt.indexOf(mStr),mEnd=mStart+mStr.length;
+  function renderTyped(n){
+    var t=fullPrompt.slice(0,n),h="";
+    for(var i=0;i<t.length;i++){ if(i===mStart)h+='<span class="mrg">'; h+=t[i]; if(i===mEnd-1)h+='</span>'; }
+    typedEl.innerHTML=h+'<span class="pcaret"></span>';
+  }
+  var rowNameEl=document.getElementById("rowName"),rowAmtEl=document.getElementById("rowAmt");
+  var rowName="아키텍처 컨설팅",rowAmt="₩2,400,000";
+  function renderRow(nameN,amtN){
+    rowNameEl.innerHTML=rowName.slice(0,nameN)+(nameN<rowName.length&&nameN>0?'<span class="rcaret"></span>':'');
+    rowAmtEl.innerHTML=rowAmt.slice(0,amtN)+(amtN>0&&amtN<rowAmt.length?'<span class="rcaret"></span>':'');
+  }
+  function fmt(n){ return "₩"+Math.round(n).toLocaleString("en-US"); }
+  var totalEl=document.getElementById("total"),edtotalEl=document.getElementById("edtotal");
+  var kpi1=document.getElementById("kpi1"),kpi2=document.getElementById("kpi2"),kpi3=document.getElementById("kpi3");
+  function ease(x){ return 1-Math.pow(1-x,3); }
+
+  // --- cursor driver: measure real target positions relative to a container ---
+  var edCur=els.s5.querySelector(".ecursor"), edBox=els.s5.querySelector(".editor");
+  var maCur=els.s6.querySelector(".mcursor"), maBox=els.s6.querySelector(".mailer");
+  function posWithin(el,anc){var x=0,y=0,n=el;while(n&&n!==anc){x+=n.offsetLeft;y+=n.offsetTop;n=n.offsetParent;}return{x:x,y:y,w:el.offsetWidth,h:el.offsetHeight};}
+  function moveCursor(cur,anc,sel,yAdj,clicking){
+    var el=anc.querySelector(sel);
+    if(!el){ cur.style.opacity="0"; return; }
+    var p=posWithin(el,anc);
+    var tx=p.x+p.w/2-7, ty=p.y+p.h/2+yAdj-4;
+    cur.classList.toggle("click",!!clicking);
+    cur.style.opacity="1";
+    cur.style.transform="translate("+tx+"px,"+ty+"px) scale("+(clicking?0.82:1)+")";
+  }
+
+  var start=null,raf=null;
+  function setScene(now){
+    scenes.forEach(function(s){
+      var on=now>=s.a&&now<s.b,e=els[s.id];
+      if(on){ if(!e.classList.contains("on"))e.classList.add("on"); }
+      else if(e.classList.contains("on"))e.classList.remove("on");
+    });
+    stage.classList.toggle("lit",now>=2000);
+  }
+  function frame(ts){
+    if(start===null)start=ts;
+    var now=ts-start; if(now>TOTAL)now=TOTAL;
+    setScene(now);
+    pfill.style.width=(now/TOTAL*100)+"%";
+    clock.textContent=(now/1000).toFixed(1)+"s";
+
+    // S3 prompt typewriter (7600 -> 9200)
+    var t2=(now-7600)/1600;
+    renderTyped(t2<=0?0:t2>=1?fullPrompt.length:Math.floor(ease(t2)*fullPrompt.length));
+
+    // S4 draft total count-up to 9,400,000 (11700 -> 12900)
+    var t4=(now-11700)/1200,TVAL=9400000;
+    totalEl.textContent=t4<=0?"₩0":t4>=1?fmt(TVAL):fmt(ease(t4)*TVAL);
+
+    // S5 editor: type new row (scene start 14000; newrow opens ~17050)
+    var tn=(now-17200)/800;    // name type
+    var ta=(now-18100)/600;    // amount type
+    var nameN=tn<=0?0:tn>=1?rowName.length:Math.floor(tn*rowName.length);
+    var amtN=ta<=0?0:ta>=1?rowAmt.length:Math.floor(ta*rowAmt.length);
+    renderRow(nameN,amtN);
+    // editor 합계 count-up 9.4M -> 11.8M (18400 -> 19300)
+    var te=(now-18400)/900;
+    edtotalEl.textContent=te<=0?fmt(9400000):te>=1?fmt(11800000):fmt(9400000+ease(te)*2400000);
+
+    // S7 KPI count-up (26600 -> 28000)
+    var t6=(now-26600)/1400;
+    if(t6<=0){ kpi1.textContent="₩0";kpi2.textContent="0";kpi3.textContent="0%"; }
+    else{ var e=ease(Math.min(t6,1));
+      kpi1.textContent="₩"+(Math.round(e*5210)).toLocaleString("en-US")+"만";
+      kpi2.textContent=Math.round(e*128).toString();
+      kpi3.textContent=Math.round(e*82)+"%"; }
+
+    // S5 editor cursor — grab table → +행 추가 → new cell → PDF 내보내기
+    if(now>=15300&&now<20100){
+      var sel,yAdj=-50,clk=false;
+      if(now<16900){ sel=".blk-table .drag-handle"; yAdj=(now<15900?0:-50); }
+      else if(now<17300){ sel=".addrow"; clk=(now>=17000&&now<=17240); }
+      else if(now<19350){ sel=".trow.newrow"; }
+      else { sel=".ebtn.pdf"; yAdj=0; clk=(now>=19600&&now<=19840); }
+      moveCursor(edCur,edBox,sel,yAdj,clk);
+    } else { edCur.style.opacity="0"; }
+    // S6 mail cursor — 템플릿 불러오기 클릭 → 이메일 발송 클릭
+    if(now>=21600&&now<24500){
+      var msel,mclk=false;
+      if(now<23200){ msel=".tpl-btn"; mclk=(now>=22150&&now<=22400); }
+      else { msel=".sendbtn"; mclk=(now>=23800&&now<=24050); }
+      moveCursor(maCur,maBox,msel,0,mclk);
+    } else { maCur.style.opacity="0"; }
+
+    if(now<TOTAL)raf=requestAnimationFrame(frame); else raf=null;
+  }
+  function play(){
+    if(raf)cancelAnimationFrame(raf);
+    start=null;
+    scenes.forEach(function(s){ els[s.id].classList.remove("on"); });
+    stage.classList.remove("lit");
+    renderTyped(0); renderRow(0,0); totalEl.textContent="₩0"; edtotalEl.textContent=fmt(9400000);
+    edCur.style.opacity="0"; maCur.style.opacity="0";
+    void stage.offsetWidth;
+    if(reduce){
+      setScene(TOTAL-1); renderTyped(fullPrompt.length); renderRow(rowName.length,rowAmt.length);
+      totalEl.textContent=fmt(9400000); edtotalEl.textContent=fmt(11800000);
+      kpi1.textContent="₩5,210만";kpi2.textContent="128";kpi3.textContent="82%";
+      pfill.style.width="100%";clock.textContent=(TOTAL/1000).toFixed(1)+"s"; return;
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  var CAP=/[?&]cap(ture)?=1/.test(location.search);
+  if(CAP) document.body.classList.add("cap");
+  function fit(){
+    if(CAP){ stage.style.transform="none"; return; }
+    var pad=48,sx=(window.innerWidth-pad)/1280,sy=(window.innerHeight-pad)/720;
+    stage.style.transform="scale("+Math.min(sx,sy,1.35)+")";
+  }
+  window.addEventListener("resize",fit); fit();
+  document.getElementById("replay").addEventListener("click",play);
+  play();
+})();
+</script>
