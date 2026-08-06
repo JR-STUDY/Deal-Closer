@@ -35,6 +35,9 @@ model Organization {
   creditTxns      CreditTransaction[]
   emailTemplates  EmailTemplate[]
   teamMailDomains TeamMailDomain[]
+  accounts        Account[]
+  opportunities   Opportunity[]
+  activityLogs    ActivityLog[]
 
   @@map("organizations")
 }
@@ -60,6 +63,8 @@ model User {
   emailLogs     EmailLog[]
   generations   GenerationRequest[]
   emailTemplates EmailTemplate[] // 본인이 소유한 개인 메일 템플릿
+  opportunities  Opportunity[]   // 본인이 Owner 인 영업 기회
+  activityLogs   ActivityLog[]   // 본인이 수행자(Actor)인 활동 이력
 
   @@index([orgId])
   @@index([mailDomainId])
@@ -78,6 +83,88 @@ model Invite {
 
   @@index([orgId])
   @@map("invites")
+}
+
+// ===================== CRM (거래처 · 기회) =====================
+
+/// 거래처(Account) — 영업 대상 회사. 조직 공용 자산이며 Owner 를 두지 않는다. (F-101~103)
+model Account {
+  id           String   @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  companyName  String   // 회사명
+  contactName  String?  // 담당자명
+  position     String?  // 직책
+  phone        String?  // 핸드폰 번호
+  email        String?  // 담당자 이메일
+  bizRegNo     String?  // 사업자등록번호
+  memo         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  opportunities Opportunity[]
+
+  @@index([orgId])
+  @@index([companyName])
+  @@map("accounts")
+}
+
+/// 영업 기회(Opportunity) — 파이프라인의 단위. (F-111~117)
+/// - stage: INITIAL(초기) | PROPOSAL(제안) | NEGOTIATION(검토/협상) | WON(수주) | LOST(실주)
+///   문서 발송 시 자동 전이한다(F-113). 전이 규칙은 src/lib/opportunity-stage.ts 한 곳에 모은다.
+/// - lostReason: LOST 일 때만 채운다(F-117). 이탈률 통계(F-405)의 분류 축이 된다.
+/// - previousOpportunityId: 수주 후 자동 생성되는 "다음 기회"가 직전 기회를 가리킨다(F-115·F-306).
+model Opportunity {
+  id                  String    @id @default(cuid())
+  orgId               String
+  org                 Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId           String
+  account             Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  ownerId             String
+  owner               User      @relation(fields: [ownerId], references: [id])
+  name                String    // 기회명
+  stage               String    @default("INITIAL")
+  expectedAmount      Int       @default(0) // 예상 금액 (KRW 정수)
+  expectedCloseDate   DateTime? // 예상 마감일
+  actualCloseDate     DateTime? // 실제 수주/실주 확정일
+  lostReason          String?   // 실주 사유 (LOST 일 때만)
+  memo                String?
+  previousOpportunityId String?  @unique
+  previousOpportunity   Opportunity?  @relation("OpportunityChain", fields: [previousOpportunityId], references: [id], onDelete: SetNull)
+  nextOpportunity       Opportunity?  @relation("OpportunityChain")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  documents    Document[]
+  activityLogs ActivityLog[]
+
+  @@index([orgId])
+  @@index([accountId])
+  @@index([ownerId])
+  @@index([stage])
+  @@index([expectedCloseDate])
+  @@map("opportunities")
+}
+
+/// 활동 이력(ActivityLog) — 기회 타임라인의 원천. (F-114)
+/// eventType 예: OPPORTUNITY_CREATED · STAGE_CHANGED · DOCUMENT_CREATED · DOCUMENT_SENT · WON · LOST
+/// detail 은 이벤트별 부가 정보(이전/이후 단계 등)를 JSON 문자열로 직렬화해 담는다 (SQLite Json 미지원).
+model ActivityLog {
+  id            String   @id @default(cuid())
+  orgId         String
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  opportunityId String
+  opportunity   Opportunity  @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  actorId       String
+  actor         User     @relation(fields: [actorId], references: [id])
+  eventType     String
+  detail        String?
+  occurredAt    DateTime @default(now())
+
+  @@index([orgId])
+  @@index([opportunityId])
+  @@index([actorId])
+  @@map("activity_logs")
 }
 
 // ============================ 문서 ============================
@@ -101,6 +188,9 @@ model Document {
   folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
   // 팀 공통(공유) 베이스 문서 여부. 폴더 배치와 무관한 교차 분류이며 "공통 문서" 탭에서 모아 본다.
   isCommon    Boolean  @default(false)
+  // 연결된 영업 기회(선택). 기회 상세의 문서 목록·발송 시 단계 자동 전이(F-113)의 기준이 된다.
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -113,6 +203,7 @@ model Document {
   @@index([authorId])
   @@index([status])
   @@index([folderId])
+  @@index([opportunityId])
   @@map("documents")
 }
 
@@ -230,6 +321,11 @@ model EmailLog {
   attachmentName String?
   status         String   @default("SENT") // SENT | FAILED
   sentAt         DateTime @default(now())
+  // ── 오픈 트래킹 (F-234) ──
+  // trackingId: 본문에 삽입하는 추적 픽셀 URL 의 식별자. 수신자가 본문을 열면 서버가 openedAt 을 기록한다.
+  trackingId     String?  @unique
+  openedAt       DateTime? // 최초 열람 시각 (null = 미열람)
+  openCount      Int      @default(0)
 
   @@index([documentId])
   @@map("email_logs")

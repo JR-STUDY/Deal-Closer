@@ -48,6 +48,53 @@ export const ACTIVE_DOCUMENT_STATUSES = [
   "COMPLETED",
 ] as const satisfies readonly DocumentStatus[];
 
+// ── 영업 기회 단계 (PRD F-112) ──
+// INITIAL → PROPOSAL → NEGOTIATION 이 정상 흐름이며, 어느 단계에서든 WON(수주)·LOST(실주)로 마감한다.
+// 견적서 발송 시 PROPOSAL, 계약서 발송 시 NEGOTIATION 으로 자동 전이한다 (F-113).
+export const OPPORTUNITY_STAGES = [
+  "INITIAL",
+  "PROPOSAL",
+  "NEGOTIATION",
+  "WON",
+  "LOST",
+] as const;
+export type OpportunityStage = (typeof OPPORTUNITY_STAGES)[number];
+
+export const OPPORTUNITY_STAGE_LABELS: Record<OpportunityStage, string> = {
+  INITIAL: "초기",
+  PROPOSAL: "제안",
+  NEGOTIATION: "검토/협상",
+  WON: "수주",
+  LOST: "실주",
+};
+
+/** 마감되지 않은 진행 중 단계. 파이프라인 집계(F-402·F-404)의 대상이다. */
+export const OPEN_OPPORTUNITY_STAGES = [
+  "INITIAL",
+  "PROPOSAL",
+  "NEGOTIATION",
+] as const satisfies readonly OpportunityStage[];
+
+// ── 활동 이력 이벤트 유형 (PRD F-114) ──
+export const ACTIVITY_EVENT_TYPES = [
+  "OPPORTUNITY_CREATED",
+  "STAGE_CHANGED",
+  "DOCUMENT_CREATED",
+  "DOCUMENT_SENT",
+  "WON",
+  "LOST",
+] as const;
+export type ActivityEventType = (typeof ACTIVITY_EVENT_TYPES)[number];
+
+export const ACTIVITY_EVENT_LABELS: Record<ActivityEventType, string> = {
+  OPPORTUNITY_CREATED: "기회 생성",
+  STAGE_CHANGED: "단계 변경",
+  DOCUMENT_CREATED: "문서 생성",
+  DOCUMENT_SENT: "문서 발송",
+  WON: "수주",
+  LOST: "실주",
+};
+
 // ── 초대 상태 ──
 export const INVITE_STATUSES = ["PENDING", "ACCEPTED", "EXPIRED"] as const;
 export type InviteStatus = (typeof INVITE_STATUSES)[number];
