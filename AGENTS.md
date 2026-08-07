@@ -45,6 +45,7 @@ pnpm dev            # 개발 서버 (http://localhost:3000)
 pnpm build          # 프로덕션 빌드
 pnpm typecheck      # 타입 검사 (tsc --noEmit)
 pnpm lint           # ESLint
+pnpm test:mailer    # 메일 전송 어댑터 검증 (네트워크 없이 fetch 스텁으로 실행)
 
 pnpm db:migrate     # 스키마 변경 → 마이그레이션 생성·적용
 pnpm db:seed        # 데모 데이터 시드
@@ -94,6 +95,7 @@ src/
     email-template.ts    # 메일 템플릿 치환 변수·검증·DTO
     signature.ts         # 메일 서명 HTML 판별·미리보기 문서·검증
     mail-domain.ts       # 팀 발신 도메인 검증·팀 주소 조합·발신 신원 해석
+    mailer.ts            # 메일 전송 어댑터(server-only, Resend) — 검증·재시도·개발 모드 건너뜀
     pipeline.ts          # 파이프라인 집계 순수 함수 — 단계별 합계·기간 필터·월 마감 요약 (F-402·404·406·302)
     opportunity-stage.ts # 기회 단계 전이 + 활동 이력 기록 (한 트랜잭션, 서버 전용, F-113)
   generated/prisma/    # Prisma Client (자동 생성, 커밋 안 함)
