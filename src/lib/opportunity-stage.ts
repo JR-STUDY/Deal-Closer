@@ -54,7 +54,7 @@ export function stageForSentDocument(type: DocumentType): OpportunityStage | nul
 /**
  * 자동 전이 허용 여부 — 뒤로 가거나(강등) 마감된 기회를 되살리지 않는다.
  *
- * TODO(Phase 3, 구현 계획 §8 "상태 역전 규칙"): 재발송·발송 취소·되돌리기 시 단계를
+ * TODO(Phase 3, 구현 계획 §8.1 "상태 역전 규칙"): 재발송·발송 취소·되돌리기 시 단계를
  * 어떻게 처리할지 PRD 에 규정이 없다. 확정 전까지는 보수적으로
  * ① 이미 지난 단계로 내리지 않고, ② 마감(WON·LOST)된 기회는 건드리지 않는다.
  * 수동 변경(칸반 드래그 F-112)은 이 제약을 받지 않으며 `changeStage()` 로 처리한다.
