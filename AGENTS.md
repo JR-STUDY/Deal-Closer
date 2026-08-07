@@ -96,6 +96,8 @@ src/
     signature.ts         # 메일 서명 HTML 판별·미리보기 문서·검증
     mail-domain.ts       # 팀 발신 도메인 검증·팀 주소 조합·발신 신원 해석
     mailer.ts            # 메일 전송 어댑터(server-only, Resend) — 검증·재시도·개발 모드 건너뜀
+    pdf-html.ts          # PDF 인쇄용 HTML 생성 — 블록 좌표 재현·브랜딩·이스케이프
+    pdf.ts               # contentJson → PDF 바이트(server-only, puppeteer-core) → docs/PDF-RENDERING.md
     pipeline.ts          # 파이프라인 집계 순수 함수 — 단계별 합계·기간 필터·월 마감 요약 (F-402·404·406·302)
     opportunity-stage.ts # 기회 단계 전이 + 활동 이력 기록 (한 트랜잭션, 서버 전용, F-113)
   generated/prisma/    # Prisma Client (자동 생성, 커밋 안 함)
