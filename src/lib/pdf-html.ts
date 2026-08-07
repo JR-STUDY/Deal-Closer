@@ -50,12 +50,17 @@ const PRINT_COLORS = {
 /**
  * 인쇄용 글꼴 스택 — 헤드리스 브라우저는 서버(리눅스 컨테이너 포함)에서 돌 수 있어
  * 화면용 스택(editor-schema)만으로는 한글이 깨질 수 있다. 한글 글꼴을 명시한다.
+ *
+ * 순서가 중요하다. 글꼴 대체는 글자 단위로 왼쪽부터 찾으므로, 계열에 맞는 **한글** 글꼴을
+ * 라틴 글꼴 바로 뒤에 두어야 한다. 고딕 글꼴을 앞에 두면 명조를 골라도 한글만 고딕으로
+ * 나온다. 맨 끝의 고딕은 어느 한글 글꼴도 없을 때 두부(□)를 피하려는 최후 수단이다.
+ * 실제로 어떤 글꼴이 쓰였는지는 `pdf.ts` 의 `checkKoreanFonts()` 로 확인한다.
  */
 const PRINT_FONT_STACKS: Record<FontFamily, string> = {
   sans: 'ui-sans-serif, system-ui, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", sans-serif',
   serif:
-    'ui-serif, Georgia, "Apple SD Gothic Neo", "Nanum Myeongjo", "Noto Serif KR", Batang, serif',
-  mono: 'ui-monospace, SFMono-Regular, D2Coding, "Noto Sans Mono CJK KR", monospace',
+    'ui-serif, Georgia, "Nanum Myeongjo", "Noto Serif KR", AppleMyungjo, Batang, "Apple SD Gothic Neo", serif',
+  mono: 'ui-monospace, SFMono-Regular, "D2Coding ligature", D2Coding, "Noto Sans Mono CJK KR", "Nanum Gothic Coding", "Apple SD Gothic Neo", monospace',
 };
 
 const ALIGNS: readonly Align[] = ["left", "center", "right"];
