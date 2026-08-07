@@ -82,18 +82,20 @@ src/
     provider-logo.tsx  # Gmail/Outlook 브랜드 로고
     page-header.tsx / back-button.tsx / status-badge.tsx / loading-state.tsx  # 공용 UI
   lib/
-    db.ts              # Prisma 싱글톤 (DB 접근은 반드시 여기 경유)
-    session.ts         # 현재 사용자/조직 (MVP: 데모 고정)
-    constants.ts       # enum 대체 상수 + 라벨
-    format.ts          # 통화/날짜 포맷
-    api.ts             # API 응답 헬퍼(ok/fail)
-    nav.ts             # 사이드바 네비게이션 정의 (user/admin)
-    validation.ts      # 이메일 수신자 형식 검증·다중 파싱 (VAL_*)
-    editor-schema.ts   # 블록 캔버스 문서 모델(contentJson) 파싱·총액/거래처 재도출·시드
-    attachments.ts     # AI 생성 첨부(엑셀/CSV) 텍스트 추출
-    email-template.ts  # 메일 템플릿 치환 변수·검증·DTO
-    signature.ts       # 메일 서명 HTML 판별·미리보기 문서·검증
-    mail-domain.ts     # 팀 발신 도메인 검증·팀 주소 조합·발신 신원 해석
+    db.ts                # Prisma 싱글톤 (DB 접근은 반드시 여기 경유)
+    session.ts           # 현재 사용자/조직 (MVP: 데모 고정)
+    constants.ts         # enum 대체 상수 + 라벨
+    format.ts            # 통화/날짜 포맷
+    api.ts               # API 응답 헬퍼(ok/fail)
+    nav.ts               # 사이드바 네비게이션 정의 (user/admin)
+    validation.ts        # 이메일 수신자 형식 검증·다중 파싱 (VAL_*)
+    editor-schema.ts     # 블록 캔버스 문서 모델(contentJson) 파싱·총액/거래처 재도출·시드
+    attachments.ts       # AI 생성 첨부(엑셀/CSV) 텍스트 추출
+    email-template.ts    # 메일 템플릿 치환 변수·검증·DTO
+    signature.ts         # 메일 서명 HTML 판별·미리보기 문서·검증
+    mail-domain.ts       # 팀 발신 도메인 검증·팀 주소 조합·발신 신원 해석
+    pipeline.ts          # 파이프라인 집계 순수 함수 — 단계별 합계·기간 필터·월 마감 요약 (F-402·404·406·302)
+    opportunity-stage.ts # 기회 단계 전이 + 활동 이력 기록 (한 트랜잭션, 서버 전용, F-113)
   generated/prisma/    # Prisma Client (자동 생성, 커밋 안 함)
 ```
 
@@ -111,6 +113,8 @@ src/
 - 데이터 조회는 서버 컴포넌트에서 `prisma` 직접 또는 `/api/*` 라우트를 사용한다.
 - 공통 UI 는 재사용한다: `@/components/ui/*`(shadcn), `@/components/page-header`, `@/components/status-badge`.
 - 포맷은 `@/lib/format`(formatKRW/formatDate/formatDateTime)만 사용한다.
+- **기회 단계 전이는 `@/lib/opportunity-stage` 를 경유한다.** 라우트·컴포넌트가 `stage` 를 직접 `update` 하지 않는다 — 전이와 활동 이력(ActivityLog)이 한 트랜잭션이어야 상태 정합성이 깨지지 않는다.
+- **파이프라인·매출 집계는 `@/lib/pipeline` 의 순수 함수를 쓴다.** 대시보드와 캘린더가 같은 계산을 공유해야 화면끼리 숫자가 어긋나지 않는다.
 - import alias 는 `@/*` = `src/*`.
 - **UI 텍스트는 한국어 존댓말** (정책 COPY-TONE). 접근성·명도대비를 준수한다(ACC_*).
 - **성능**: React/Next 코드를 작성·리뷰·리팩터링할 때 `docs/REACT_BEST_PRACTICES.md`(Vercel 70규칙 정리)를 따른다. 특히 ① 독립 조회는 `Promise.all` 병렬화, ② 서버 조회 함수는 `React.cache`, ③ 클라이언트 컴포넌트에 함수·비직렬화 객체 전달 금지 — 는 필수.
