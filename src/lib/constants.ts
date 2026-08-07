@@ -75,6 +75,20 @@ export const OPEN_OPPORTUNITY_STAGES = [
   "NEGOTIATION",
 ] as const satisfies readonly OpportunityStage[];
 
+/** 마감 단계(수주·실주). 문서 발송에 따른 자동 전이 대상에서 제외한다. */
+export const CLOSED_OPPORTUNITY_STAGES = [
+  "WON",
+  "LOST",
+] as const satisfies readonly OpportunityStage[];
+
+/**
+ * DB 의 `stage` 컬럼은 String 이므로, 읽어온 값을 좁힐 때 사용한다.
+ * 집계(pipeline.ts)와 전이(opportunity-stage.ts)가 공유한다.
+ */
+export function isOpportunityStage(value: string): value is OpportunityStage {
+  return (OPPORTUNITY_STAGES as readonly string[]).includes(value);
+}
+
 // ── 활동 이력 이벤트 유형 (PRD F-114) ──
 export const ACTIVITY_EVENT_TYPES = [
   "OPPORTUNITY_CREATED",
