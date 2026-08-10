@@ -94,15 +94,19 @@ src/
     attachments.ts     # 업로드 파일 검증 + 엑셀/CSV 텍스트 추출
     template.ts        # 표준 양식 공용 select·DTO
     document-version.ts # 문서 버전 묶음(rootId) 유틸·최신본 필터
-    ai/                # Claude API 문서 생성 레이어 (서버 전용)
-      config.ts        #  모델(AI_MODEL_GENERATE/BATCH)·토큰 상한·예외 타입
-      client.ts        #  Anthropic SDK 싱글톤 (키 없으면 AiNotConfiguredError)
-      invoke.ts        #  구조화 출력 호출 래퍼 (프롬프트 캐시·거절/파싱 오류 정규화)
+    ai/                # AI 문서 생성 레이어 (서버 전용, Claude·GPT 공용)
+      config.ts        #  프로바이더 판별·모델(AI_MODEL_GENERATE/BATCH)·토큰 상한·예외 타입
+      client.ts        #  Anthropic·OpenAI SDK 싱글톤 + 키 형식 검사
+      blocks.ts        #  프로바이더 중립 메시지 블록 (text·image·pdf)
+      invoke.ts        #  callStructured — 모델명으로 어댑터 선택 + JSON 파싱·예외 정규화
+      providers/       #  프로바이더 어댑터 (요청 형식 변환은 여기서만)
+        anthropic.ts   #   Claude Messages API (system 캐시 breakpoint · output_config)
+        openai.ts      #   GPT Responses API (instructions · text.format strict · input_file)
       prompts.ts       #  시스템 프롬프트 + 사용자 메시지 조립 (캐시 적중 위해 가변값 금지)
       doc-spec.ts      #  응답 스펙(DocSpec) JSON Schema ↔ EditorDoc 변환
       revision-spec.ts #  부분 재작성 diff 스펙·적용 (F-215)
       describe.ts      #  EditorDoc → 프롬프트용 텍스트 요약
-      content.ts       #  파일 → Claude content 블록 (PDF·이미지 원본 전달)
+      content.ts       #  파일 → 중립 블록 (PDF·이미지 원본 전달)
       generate-document.ts / setup-template.ts / revise-document.ts  # 서비스 진입점
       http.ts          #  AI 예외 → 503/502 응답 매핑
     email-template.ts  # 메일 템플릿 치환 변수·검증·DTO
@@ -148,18 +152,38 @@ React 코드의 **보안·성능·정확성**을 [react-doctor](https://github.c
 - **게이트 강화 절차**: 도입 초기에는 워크플로우 `blocking: none`(advisory — 항상 통과)이다. 팀이 결과에 익숙해지면 `warning` → `error` 로 올려 CI 통과 조건으로 승격한다.
 - react-doctor 는 `.tsx`/`.jsx` 등 React 파일을 대상으로 한다. 규칙 상세는 위 저장소 참고.
 
-## AI 문서 생성 (Claude API)
+## AI 문서 생성 (Claude / GPT)
 
-문서 생성·표준 양식 세팅·부분 재작성은 **실제 Claude API 를 직접 호출**한다. 목업 폴백은 없다.
+문서 생성·표준 양식 세팅·부분 재작성은 **실제 LLM API 를 직접 호출**한다. 목업 폴백은 없다.
 
-- **키 필수**: `.env` 의 `ANTHROPIC_API_KEY`. 없으면 관련 API 가 `503`, 호출 실패 시 `502` 를 반환한다.
-- **모델은 용도별 분리** (환경변수로 오버라이드): `AI_MODEL_GENERATE`(기본 `claude-opus-5`) = 문서 생성·양식 세팅·재작성,
-  `AI_MODEL_BATCH`(기본 `claude-sonnet-5`) = 변수 필드 추출 등 경량 작업.
-- **응답은 구조화 출력(JSON Schema)으로 고정한다.** Claude 가 좌표를 직접 만들지 않고
+### 프로바이더
+
+Claude(Anthropic Messages API)와 GPT(OpenAI Responses API)를 **둘 다 지원**한다. 선택 순서:
+
+1. `AI_PROVIDER`(`anthropic` | `openai`) 를 명시하면 그대로 따른다.
+2. `AI_MODEL_GENERATE` 모델명으로 판별한다 (`claude*`→anthropic, `gpt*`·`o1/o3/o4*`→openai).
+3. 쓸 수 있는 키가 한쪽만 있으면 그쪽을 쓴다. 그래도 모르면 anthropic.
+
+- **키 필수**: Claude 는 `ANTHROPIC_API_KEY`, GPT 는 `OPENAI_API_KEY`.
+  없거나 형식이 틀리면 `503`, 호출 실패 시 `502` 를 반환한다.
+  `sk-ant-oat…`(Claude Code 로그인 토큰)은 Messages API 에 쓸 수 없어 호출 전에 걸러낸다.
+- **모델은 용도별 분리** (환경변수로 오버라이드): `AI_MODEL_GENERATE` = 문서 생성·양식 세팅·재작성,
+  `AI_MODEL_BATCH` = 변수 필드 추출 등 경량 작업.
+  기본값은 Claude `claude-opus-5`/`claude-sonnet-5`, GPT `gpt-5.6-sol`/`gpt-5.6-terra`.
+- **프로바이더별 코드는 `lib/ai/providers/` 안에만 둔다.** 프롬프트 조립부는
+  `lib/ai/blocks.ts` 의 중립 블록(`text`·`image`·`pdf`)만 만들고, 요청 형식 변환은 어댑터가 한다.
+  → 프로바이더를 추가할 때 프롬프트·스펙 코드를 건드리지 않는다.
+
+### 공통 규칙 (프로바이더 무관)
+
+- **응답은 구조화 출력(JSON Schema)으로 고정한다.** 모델이 좌표를 직접 만들지 않고
   의미 기반 스펙(DocSpec)만 반환하며, 블록 배치는 `lib/ai/doc-spec.ts` 의 결정적 코드가 담당한다.
   → 양식이 있으면 **양식 레이아웃·문구·공급자 정보를 보존**하고 거래처 필드·품목표만 채운다.
+- 스키마는 **OpenAI strict 모드 제약을 지킨다**: 모든 object 에 `additionalProperties:false`,
+  전 속성을 `required` 에 넣고, `allOf`·`not`·`if/then/else` 를 쓰지 않는다. (Claude 도 동일 제약)
 - **금액은 항상 서버가 재계산한다** (수량×단가). 모델이 계산한 총액은 신뢰하지 않는다.
-- 시스템 프롬프트에는 날짜·사용자명 같은 **가변 값을 넣지 않는다** — 프롬프트 캐시 적중이 깨진다.
+- 시스템 프롬프트에는 날짜·사용자명 같은 **가변 값을 넣지 않는다** — 프롬프트 캐시 적중이 깨진다
+  (Claude 는 `cache_control`, GPT 는 `instructions` 프리픽스 자동 캐시).
 - docx·hwp 는 변환기가 없어 업로드 단계에서 안내 후 거절한다 (PDF·이미지·엑셀·CSV 지원).
 
 ## MVP 범위 / 주의사항

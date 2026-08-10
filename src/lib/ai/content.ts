@@ -1,14 +1,14 @@
 /**
- * 업로드 파일 → Claude 메시지 content 블록 변환 (서버 전용).
+ * 업로드 파일 → 프로바이더 중립 메시지 블록 변환 (서버 전용).
  *
- * PDF·이미지는 Claude 멀티모달 입력으로 **원본 그대로** 전달하므로 별도 파서가 필요 없다.
+ * PDF·이미지는 멀티모달 입력으로 **원본 그대로** 전달하므로 별도 파서가 필요 없다.
  * 엑셀·CSV 는 lib/attachments.ts 가 추출한 텍스트를 넣는다.
  * docx·hwp 는 변환기를 두지 않았으므로 업로드 단계에서 안내 후 거절한다 (PRD F-202 부분 지원).
  */
 
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
 import { attachmentKind, fileExtension, type AttachmentKind } from "@/lib/constants";
+import type { AiContentBlock, ImageMediaType } from "./blocks";
 
 /** DB 저장 직전의 첨부 레코드 형태 (lib/attachments.ts toAttachmentRecord 결과) */
 export type PreparedFile = {
@@ -27,9 +27,6 @@ export function unsupportedSourceMessage(fileName: string): string | null {
   if (!UNSUPPORTED_EXTENSIONS.includes(ext)) return null;
   return `${fileName} 은 아직 자동 변환을 지원하지 않습니다. PDF 로 내보낸 뒤 업로드해주세요. (지원: PDF·이미지·엑셀·CSV)`;
 }
-
-/** Claude image 블록이 받는 media_type 만 허용한다 */
-type ImageMediaType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
 
 function imageMediaType(file: PreparedFile): ImageMediaType {
   const mime = file.mimeType.toLowerCase();
@@ -69,19 +66,16 @@ function clamp(text: string): string {
 export function fileToContentBlocks(
   file: PreparedFile,
   label: string,
-): Anthropic.ContentBlockParam[] {
+): AiContentBlock[] {
   const kind: AttachmentKind | null = attachmentKind(file.fileName, file.mimeType);
 
   if (kind === "pdf") {
     return [
       { type: "text", text: `${label}: ${file.fileName} (PDF)` },
       {
-        type: "document",
-        source: {
-          type: "base64",
-          media_type: "application/pdf",
-          data: toBase64(file.data),
-        },
+        type: "pdf",
+        fileName: file.fileName,
+        dataBase64: toBase64(file.data),
       },
     ];
   }
@@ -91,11 +85,8 @@ export function fileToContentBlocks(
       { type: "text", text: `${label}: ${file.fileName} (이미지)` },
       {
         type: "image",
-        source: {
-          type: "base64",
-          media_type: imageMediaType(file),
-          data: toBase64(file.data),
-        },
+        mediaType: imageMediaType(file),
+        dataBase64: toBase64(file.data),
       },
     ];
   }
@@ -125,7 +116,7 @@ export function fileToContentBlocks(
 export function filesToContentBlocks(
   files: PreparedFile[],
   label = "첨부 파일",
-): Anthropic.ContentBlockParam[] {
+): AiContentBlock[] {
   return files.flatMap((file, i) =>
     fileToContentBlocks(file, files.length > 1 ? `${label} ${i + 1}` : label),
   );

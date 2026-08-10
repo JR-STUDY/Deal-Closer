@@ -51,6 +51,7 @@ export async function reviseDocument(input: {
       today: documentDate(),
     }),
     schema: REVISION_SPEC_SCHEMA,
+    schemaName: "revision_spec",
   });
 
   const spec = parseRevisionSpec(result.value);

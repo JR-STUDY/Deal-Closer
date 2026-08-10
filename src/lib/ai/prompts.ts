@@ -1,13 +1,14 @@
 /**
- * Claude 프롬프트 (시스템 프롬프트 + 사용자 메시지 조립).
+ * 프롬프트 (시스템 프롬프트 + 사용자 메시지 조립).
  *
- * 시스템 프롬프트는 요청마다 바이트 단위로 동일해야 프롬프트 캐시가 적중한다.
+ * 시스템 프롬프트는 요청마다 바이트 단위로 동일해야 프롬프트 캐시가 적중한다
+ * (Claude 는 cache_control, GPT 는 instructions 프리픽스 자동 캐시).
  * → 날짜·사용자명 같은 가변 값을 절대 넣지 않는다 (모두 사용자 메시지로 보낸다).
  */
 
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants";
+import { text, type AiContentBlock } from "./blocks";
 import { describeDocument, describeTemplate, type DocumentMeta } from "./describe";
 import { filesToContentBlocks, type PreparedFile } from "./content";
 
@@ -100,10 +101,6 @@ export const SYSTEM_REVISE = `당신은 이미 작성된 한국 B2B 영업 문�
 
 // ===================== 사용자 메시지 =====================
 
-function text(value: string): Anthropic.ContentBlockParam {
-  return { type: "text", text: value };
-}
-
 /** 거래처 정보 입력값 (생성 폼에서 받은 값) */
 export type ClientInput = {
   name?: string | null;
@@ -148,8 +145,8 @@ export type GenerateContentInput = {
 /** 문서 초안 생성 요청 메시지 */
 export function buildGenerateContent(
   input: GenerateContentInput,
-): Anthropic.ContentBlockParam[] {
-  const blocks: Anthropic.ContentBlockParam[] = [];
+): AiContentBlock[] {
+  const blocks: AiContentBlock[] = [];
 
   blocks.push(
     text(
@@ -259,8 +256,8 @@ export type TemplateSetupContentInput = {
 /** 표준 양식 AI 세팅 요청 메시지 */
 export function buildTemplateSetupContent(
   input: TemplateSetupContentInput,
-): Anthropic.ContentBlockParam[] {
-  const blocks: Anthropic.ContentBlockParam[] = [];
+): AiContentBlock[] {
+  const blocks: AiContentBlock[] = [];
 
   blocks.push(
     text(
@@ -304,7 +301,7 @@ export function buildVariablesContent(input: {
   name: string;
   type: string;
   contentJson?: string | null;
-}): Anthropic.ContentBlockParam[] {
+}): AiContentBlock[] {
   return [
     text(
       [
@@ -326,7 +323,7 @@ export function buildReviseContent(input: {
   /** 블록 id 가 붙은 현재 문서 구조 */
   blockOutline: string;
   today: string;
-}): Anthropic.ContentBlockParam[] {
+}): AiContentBlock[] {
   return [
     text(
       [

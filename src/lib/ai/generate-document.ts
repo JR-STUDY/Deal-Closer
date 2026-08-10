@@ -52,6 +52,7 @@ export async function generateDocument(
     system: SYSTEM_GENERATE,
     content: buildGenerateContent({ ...input, today: documentDate() }),
     schema: DOC_SPEC_SCHEMA,
+    schemaName: "document_spec",
   });
 
   const spec = parseDocSpec(result.value, input.documentType ?? "QUOTE");

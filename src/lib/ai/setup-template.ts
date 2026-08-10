@@ -53,6 +53,7 @@ export async function setupTemplate(
     system: SYSTEM_TEMPLATE_SETUP,
     content: buildTemplateSetupContent({ ...input, today: documentDate() }),
     schema: TEMPLATE_SPEC_SCHEMA,
+    schemaName: "template_spec",
   });
 
   const spec = parseTemplateSpec(result.value, input.documentType ?? "QUOTE");
@@ -86,6 +87,7 @@ export async function extractTemplateVariables(input: {
     system: SYSTEM_VARIABLES,
     content: buildVariablesContent(input),
     schema: VARIABLES_SCHEMA,
+    schemaName: "template_variables",
     effort: "medium",
     maxTokens: 4_000,
   });
