@@ -9,7 +9,6 @@
  */
 
 import {
-  CLOSED_OPPORTUNITY_STAGES,
   OPEN_OPPORTUNITY_STAGES,
   OPPORTUNITY_STAGE_LABELS,
   isClosedOpportunityStage,
@@ -30,8 +29,14 @@ export type OpportunityProgress = {
   current: OpportunityStage;
   /** 진행 트랙 (초기 → 제안 → 검토/협상). 순차다. */
   track: StageNode[];
-  /** 마감 갈래 (수주 · 실주). 순차가 아니라 **병렬**이다. */
-  branches: StageNode[];
+  /**
+   * 마감 결과 노드 **하나**. 진행 중이면 null 이다.
+   *
+   * 수주·실주를 갈래로 나란히 보여주지 않는다 — 아직 오지 않은 결과를 미리 띄우면
+   * 화면이 "두 갈래 중 하나를 고르는 단계"처럼 읽히고, 어느 쪽이 실제 상태인지 흐려진다.
+   * 마감된 뒤에는 실제 결과 하나만 채워진 상태로 트랙 끝에 이어 붙인다 (기회-11).
+   */
+  outcome: StageNode | null;
   /** 수주·실주로 마감됐는지 */
   isClosed: boolean;
 };
@@ -44,7 +49,9 @@ function toNode(stage: OpportunityStage, status: StageNodeStatus): StageNode {
  * 현재 단계로부터 스테퍼 노드 상태를 계산한다.
  *
  * 마감(WON·LOST)된 기회는 진행 트랙 3단계를 모두 "지나온"으로 본다 — 어느 단계에서 마감했는지는
- * 활동 이력(ActivityLog)에만 남고 `stage` 하나로는 알 수 없기 때문이다. 강조는 마감 갈래로 옮긴다.
+ * 활동 이력(ActivityLog)에만 남고 `stage` 하나로는 알 수 없기 때문이다. 강조는 결과 노드로 옮긴다.
+ *
+ * 진행 중이면 `outcome` 이 null 이라 트랙 3단계만 남는다 (기회-11).
  */
 export function opportunityProgress(
   stage: OpportunityStage,
@@ -60,11 +67,13 @@ export function opportunityProgress(
     return toNode(openStage, "upcoming");
   });
 
-  const branches = CLOSED_OPPORTUNITY_STAGES.map((closedStage) =>
-    toNode(closedStage, closedStage === stage ? "current" : "upcoming"),
-  );
-
-  return { current: stage, track, branches, isClosed };
+  return {
+    current: stage,
+    track,
+    // 마감된 단계 자체가 결과다 — 채워진(현재) 상태로 하나만 내보낸다.
+    outcome: isClosed ? toNode(stage, "current") : null,
+    isClosed,
+  };
 }
 
 /**

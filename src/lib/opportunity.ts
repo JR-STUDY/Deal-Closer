@@ -196,7 +196,7 @@ export function parseOpportunityInput(
   const closeDateRaw = text("expectedCloseDate");
 
   if (!accountId) return { error: "거래처를 선택해주세요." };
-  if (!ownerId) return { error: "담당자를 선택해주세요." };
+  if (!ownerId) return { error: "영업 담당자를 선택해주세요." };
   if (!name) return { error: "기회명을 입력해주세요." };
   if (name.length > OPPORTUNITY_NAME_MAX) {
     return { error: `기회명은 ${OPPORTUNITY_NAME_MAX}자 이내여야 합니다.` };

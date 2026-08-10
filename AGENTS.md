@@ -48,6 +48,7 @@ pnpm lint           # ESLint
 pnpm test:mailer    # 메일 전송 어댑터 검증 (네트워크 없이 fetch 스텁으로 실행)
 pnpm test:opportunity-progress  # 기회 단계 진행 표시 순수 함수 검증 (DB 없이 실행)
 pnpm test:opportunity-transition # 기회 단계 전이 규칙 순수 함수 검증 (DB 없이 실행)
+pnpm test:pagination # 목록 페이지네이션 순수 함수 검증 (DB 없이 실행)
 
 pnpm db:migrate     # 스키마 변경 → 마이그레이션 생성·적용
 pnpm db:seed        # 데모 데이터 시드
@@ -81,6 +82,7 @@ src/
     email-template/    # 메일 템플릿 공용 폼 다이얼로그 (관리 페이지·발송폼 재사용)
     opportunity/       # 기회 공용 — 등록 버튼·폼 다이얼로그, 단계 흐름 안내·진행 스테퍼(표시 전용),
                        #   stage-change(칸반·목록 공용 단계 변경 메뉴·확인창, 키보드 대체 수단)
+    list-pagination.tsx / list-row-link.tsx  # 목록 공용 — 페이지 이동 UI, 행 전체 클릭 링크
     app-sidebar.tsx    # 공용 사이드바
     sidebar-folders.tsx / add-folder-button.tsx  # 보관함 폴더 트리 UI
     signature-html-editor.tsx / signature-preview.tsx  # 메일 서명 편집·미리보기
@@ -93,6 +95,7 @@ src/
     format.ts            # 통화/날짜 포맷
     api.ts               # API 응답 헬퍼(ok/fail)
     nav.ts               # 사이드바 네비게이션 정의 (user/admin)
+    pagination.ts        # 목록 페이지네이션 순수 함수 — page 파싱·구간·번호 목록·href·필터 변경 시 리셋
     validation.ts        # 이메일 수신자 형식 검증·다중 파싱 (VAL_*)
     editor-schema.ts     # 블록 캔버스 문서 모델(contentJson) 파싱·총액/거래처 재도출·시드
     attachments.ts       # AI 생성 첨부(엑셀/CSV) 텍스트 추출
@@ -107,7 +110,7 @@ src/
     pipeline.ts          # 파이프라인 집계 순수 함수 — 단계별 합계·기간 필터·월 마감 요약 (F-402·404·406·302)
     opportunity-transition.ts # 단계 전이 **규칙** 순수 함수 — 전진만·되돌리기 판정·문서별 목표 단계 (F-112·113)
     opportunity-stage.ts # 기회 생성·단계 전이 + 활동 이력 기록 (한 트랜잭션, 서버 전용, F-111·113)
-    opportunity-progress.ts # 단계 진행 **표시** 순수 함수 — 지나온/현재/남은·마감 갈래·다음 행동 안내
+    opportunity-progress.ts # 단계 진행 **표시** 순수 함수 — 지나온/현재/남은·마감 결과 1건·다음 행동 안내
   generated/prisma/    # Prisma Client (자동 생성, 커밋 안 함)
 ```
 
@@ -129,9 +132,12 @@ src/
 - **전이 허용 규칙은 `@/lib/opportunity-transition` 의 순수 함수가 단일 기준이다.** 서버(`opportunity-stage`)와 칸반 클라이언트가 같은 판정을 공유해야 화면 안내와 실제 저장 결과가 어긋나지 않는다. server-only 를 import 하지 않으므로 클라이언트·`tsx` 테스트에서도 쓴다. 자동 전이(문서 발송)는 **앞으로만**, 수동 전이(칸반 드래그·⋯ 메뉴)는 **어느 단계로든** 이동하며 마감 해제 시 확인창을 띄운다.
 - **단계 변경 UI 는 드래그 전용으로 만들지 않는다.** 칸반 카드와 목록 행이 `@/components/opportunity/stage-change` 의 ⋯ 메뉴를 공유해 키보드로도 단계를 바꿀 수 있어야 한다 (정책 ACC_*).
 - **파이프라인·매출 집계는 `@/lib/pipeline` 의 순수 함수를 쓴다.** 대시보드와 캘린더가 같은 계산을 공유해야 화면끼리 숫자가 어긋나지 않는다.
-- **단계 진행 표시(스테퍼·흐름 안내)는 `@/lib/opportunity-progress` 의 순수 함수를 쓴다.** 목록과 상세가 같은 계산을 공유해야 표현이 어긋나지 않는다. 이 모듈은 읽기 전용이며 단계를 바꾸지 않는다.
+- **단계 진행 표시(스테퍼·흐름 안내)는 `@/lib/opportunity-progress` 의 순수 함수를 쓴다.** 목록과 상세가 같은 계산을 공유해야 표현이 어긋나지 않는다. 이 모듈은 읽기 전용이며 단계를 바꾸지 않는다. **진행 중에는 마감 결과(수주·실주)를 노출하지 않고**, 마감된 뒤 실제 결과 하나만 트랙 끝에 붙인다 — 아직 오지 않은 결과를 갈래로 미리 띄우면 화면이 "둘 중 하나를 고르는 단계"처럼 읽힌다.
+- **목록 페이지네이션은 `@/lib/pagination` + `@/components/list-pagination` 을 쓴다.** 페이지는 URL 쿼리(`?page=`)로만 주고받는 **서버 페이지네이션**이며, 페이지 크기는 `LIST_PAGE_SIZE` 상수 하나다. 검색·필터를 바꿀 때는 툴바가 `nextListSearch` 로 page 를 1로 되돌린다(3페이지에 머문 채 조건을 좁히면 빈 화면이 뜬다). 총 건수·합계는 **필터를 적용한 전체**를 기준으로 내고, 건수 조회는 목록 조회와 `Promise.all` 로 병렬화한다. 기회 **칸반 보기는 페이지네이션 대상이 아니다** — 전체가 보여야 파이프라인이 성립한다.
+- **목록 행 전체 클릭은 `@/components/list-row-link` 를 쓴다.** `onClick` + `router.push` 로 행을 이동시키지 않는다 — `RowLink` 의 `::after` 덮개가 행을 채우므로 JS 없이 동작하고 키보드 Tab·Enter·새 탭이 그대로 된다(정책 ACC_*). 행에 `ROW_LINK_ROW`, 행 안의 다른 링크·`⋯` 메뉴 칸에 `ROW_LINK_ABOVE` 를 함께 붙인다.
 - import alias 는 `@/*` = `src/*`.
 - **UI 텍스트는 한국어 존댓말** (정책 COPY-TONE). 접근성·명도대비를 준수한다(ACC_*).
+- **영업 담당자(기회의 owner)와 거래처 담당자(Account.contactName)는 라벨을 구분한다.** 기회 화면에서는 `영업 담당자` 로 적는다 — 한 화면에 두 담당자가 등장하는 순간 그냥 `담당자` 는 어느 쪽인지 알 수 없다.
 - **성능**: React/Next 코드를 작성·리뷰·리팩터링할 때 `docs/REACT_BEST_PRACTICES.md`(Vercel 70규칙 정리)를 따른다. 특히 ① 독립 조회는 `Promise.all` 병렬화, ② 서버 조회 함수는 `React.cache`, ③ 클라이언트 컴포넌트에 함수·비직렬화 객체 전달 금지 — 는 필수.
 - 커밋 전 `pnpm typecheck` 와 `pnpm lint` 를 통과시킨다.
 
