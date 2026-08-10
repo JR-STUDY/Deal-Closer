@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Send, FileText, PenLine, Eye } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -36,6 +37,10 @@ import { SignaturePreview } from "@/components/signature-preview";
 import { EmailTemplateToolbar } from "./email-template-toolbar";
 import { SendPreview } from "./send-preview";
 import { SenderAccountBanner } from "./sender-account-banner";
+import {
+  SenderOpportunityLink,
+  type SenderOpportunityOption,
+} from "./sender-opportunity-link";
 
 const DEFAULT_BODY =
   "안녕하세요, Rainmaker를 통해 생성된 문서를 전달드립니다. 첨부된 문서를 확인해주시기 바랍니다. 감사합니다.";
@@ -58,7 +63,11 @@ type SenderClientProps = {
     type: string;
     clientName: string | null;
     amount: number;
+    /** 연결된 영업 기회 (F-113). null 이면 발송해도 단계가 바뀌지 않는다. */
+    opportunityId: string | null;
   };
+  /** 문서를 연결할 수 있는 영업 기회 후보 (조직 전체) */
+  opportunityOptions: SenderOpportunityOption[];
   /** 발신 계정 선택지 (개인 계정 + 인증 팀 도메인). 비어 있으면 연동 필요 */
   senderOptions: SenderOption[];
   /** 초기 선택값 (SenderOption.value) — 없으면 null */
@@ -70,15 +79,23 @@ type SenderClientProps = {
   signature: string;
 };
 
-/** 이메일 발송 폼 — 헤더의 발송하기 버튼과 본문 입력값 상태를 함께 관리한다 (데모: 실제 발송 없음) */
+/**
+ * 이메일 발송 폼 — 헤더의 발송하기 버튼과 본문 입력값 상태를 함께 관리한다.
+ *
+ * 발송하면 `POST /api/documents/:id/send` 가 발송 이력(EmailLog)·문서 상태·연결된 기회의
+ * 단계 전이를 한 트랜잭션으로 처리한다 (F-113 · F-114). 실제 메일 전송과 PDF 첨부는
+ * Phase 5(F-232 · F-233) 범위라 아직 붙지 않았다 — 화면에서도 그렇게 안내한다.
+ */
 export function SenderClient({
   document,
+  opportunityOptions,
   senderOptions,
   initialSelectedValue,
   senderName,
   templates,
   signature,
 }: SenderClientProps) {
+  const router = useRouter();
   const typeLabel =
     DOCUMENT_TYPE_LABELS[document.type as DocumentType] ?? document.type;
   const attachmentName = `[${typeLabel}] ${document.title}.pdf`;
@@ -160,7 +177,9 @@ export function SenderClient({
   const composedSubject = applyTemplateVariables(subject, nameContext);
   const composedBody = applyTemplateVariables(body, nameContext);
 
-  const handleSend = () => {
+  const [isSending, setIsSending] = useState(false);
+
+  const handleSend = async () => {
     const { valid, invalid } = parseRecipients(recipients);
 
     if (valid.length === 0 && invalid.length === 0) {
@@ -181,7 +200,38 @@ export function SenderClient({
     }
 
     setRecipientError(null);
-    toast.success(`${valid.length}명에게 이메일이 발송되었습니다 (데모)`);
+    setIsSending(true);
+    try {
+      const res = await fetch(`/api/documents/${document.id}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipients: valid.join("; "),
+          subject: composedSubject,
+          body: composedBody,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(json?.error ?? "발송에 실패했습니다.");
+      }
+
+      toast.success(
+        `${valid.length}명에게 발송 처리했습니다. (실제 메일 전송은 준비 중입니다)`,
+      );
+
+      // 단계가 어떻게 됐는지 서버가 알려준다 (F-113) — 담당자가 결과를 바로 알 수 있게 띄운다
+      const stage = json?.data?.stage as { message?: string } | null | undefined;
+      if (stage?.message) toast.info(stage.message);
+
+      router.refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "발송에 실패했습니다.",
+      );
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
@@ -196,9 +246,9 @@ export function SenderClient({
               <Eye className="size-4" />
               미리보기
             </Button>
-            <Button onClick={handleSend}>
+            <Button onClick={handleSend} disabled={isSending}>
               <Send className="size-4" />
-              발송하기
+              {isSending ? "발송 중…" : "발송하기"}
             </Button>
           </div>
         }
@@ -252,6 +302,14 @@ export function SenderClient({
               </div>
             </CardContent>
           </Card>
+
+          {/* 단계 자동 전이가 일어나는 지점이라 발송 폼 안, 문서 요약 바로 아래에 둔다 */}
+          <SenderOpportunityLink
+            documentId={document.id}
+            documentType={document.type}
+            currentOpportunityId={document.opportunityId}
+            options={opportunityOptions}
+          />
 
           <Card>
             <CardHeader>

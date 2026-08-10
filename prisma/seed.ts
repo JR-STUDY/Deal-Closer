@@ -1367,21 +1367,106 @@ async function main() {
     });
   }
 
-  // 10-3) 대표 문서를 대응 기회에 연결 — 기회 상세의 "연관 문서" 탭과
-  //       거래처 상세의 문서·이메일 탭(기회를 경유해 조회)이 실제 데이터로 채워진다.
-  const abcOpportunityId = opportunityIdByName.get("2026 그룹웨어 도입");
-  if (abcOpportunityId) {
+  // 10-3) 대표 문서를 대응 기회에 연결 + 문서·발송 이력 (F-113 · F-114)
+  //   기회 상세의 "연관 문서" 탭과 타임라인이 실제 데이터로 채워져야 한다.
+  //   `detail` 은 `src/lib/opportunity-stage.ts` 가 실제로 남기는 형식과 같아야
+  //   타임라인의 문서 링크·수신자 표시가 시드 데이터에서도 동작한다.
+
+  // 발송 전 초안 견적서 — 초기 단계 기회에 붙여 두면 발송 시 제안 단계로 자동 전이하는 흐름을
+  // 시드 상태에서 바로 눌러볼 수 있다 (F-113 견적서 → 제안).
+  const abcSecurityQuote = await prisma.document.create({
+    data: {
+      orgId: org.id,
+      authorId: rep.id,
+      title: "(주)에이비씨 테크놀로지 보안 솔루션 견적서",
+      type: "QUOTE",
+      status: "DRAFT",
+      clientName: "(주)에이비씨 테크놀로지",
+      amount: 12_000_000,
+      folderId: folderClients.id,
+      createdAt: new Date("2026-08-04T10:20:00+09:00"),
+    },
+  });
+
+  type DocumentEventSeed = {
+    opportunityName: string;
+    documentId: string;
+    documentType: string;
+    documentTitle: string;
+    /** 기회에 연결(=타임라인상 문서 등장) 시각 */
+    linkedAt: string;
+    /** 발송 이력을 함께 남길 때만 */
+    sent?: { at: string; recipients: string };
+  };
+
+  const DOCUMENT_EVENT_SEEDS: DocumentEventSeed[] = [
+    {
+      opportunityName: "2026 그룹웨어 도입",
+      documentId: abcQuote.id,
+      documentType: "QUOTE",
+      documentTitle: abcQuote.title,
+      linkedAt: "2026-07-06T14:30:00+09:00",
+    },
+    {
+      // 아직 발송하지 않은 초안 — 발송 버튼을 누르면 초기 → 제안으로 이동한다
+      opportunityName: "보안 솔루션 추가 도입",
+      documentId: abcSecurityQuote.id,
+      documentType: "QUOTE",
+      documentTitle: abcSecurityQuote.title,
+      linkedAt: "2026-08-04T10:25:00+09:00",
+    },
+    {
+      // 이미 검토/협상 단계에서 보낸 계약서 — 단계는 그대로 두고 발송 이력만 쌓인 사례
+      opportunityName: "커머스 플랫폼 고도화",
+      documentId: globalContract.id,
+      documentType: "CONTRACT",
+      documentTitle: globalContract.title,
+      linkedAt: "2026-06-20T09:15:00+09:00",
+      sent: {
+        at: "2026-06-20T09:20:00+09:00",
+        recipients: "purchasing@globalcommerce.co.kr; cto@globalcommerce.co.kr",
+      },
+    },
+  ];
+
+  for (const seed of DOCUMENT_EVENT_SEEDS) {
+    const opportunityId = opportunityIdByName.get(seed.opportunityName);
+    if (!opportunityId) continue;
+
     await prisma.document.update({
-      where: { id: abcQuote.id },
-      data: { opportunityId: abcOpportunityId },
+      where: { id: seed.documentId },
+      data: { opportunityId },
     });
-  }
-  const globalOpportunityId = opportunityIdByName.get("커머스 플랫폼 고도화");
-  if (globalOpportunityId) {
-    await prisma.document.update({
-      where: { id: globalContract.id },
-      data: { opportunityId: globalOpportunityId },
+
+    const base = {
+      documentId: seed.documentId,
+      documentType: seed.documentType,
+      documentTitle: seed.documentTitle,
+    };
+
+    await prisma.activityLog.create({
+      data: {
+        orgId: org.id,
+        opportunityId,
+        actorId: rep.id,
+        eventType: "DOCUMENT_CREATED",
+        detail: JSON.stringify(base),
+        occurredAt: new Date(seed.linkedAt),
+      },
     });
+
+    if (seed.sent) {
+      await prisma.activityLog.create({
+        data: {
+          orgId: org.id,
+          opportunityId,
+          actorId: rep.id,
+          eventType: "DOCUMENT_SENT",
+          detail: JSON.stringify({ ...base, recipients: seed.sent.recipients }),
+          occurredAt: new Date(seed.sent.at),
+        },
+      });
+    }
   }
 
   // 11) 팀원 초대 (대기 중)

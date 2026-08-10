@@ -38,9 +38,35 @@ function stageLabel(stage: string): string {
   return isOpportunityStage(stage) ? OPPORTUNITY_STAGE_LABELS[stage] : stage;
 }
 
+/** detail 에서 문자열 필드를 꺼낸다 (없거나 빈 값이면 null) */
+function text(
+  detail: Record<string, unknown> | null,
+  key: string,
+): string | null {
+  const value = detail?.[key];
+  return typeof value === "string" && value ? value : null;
+}
+
+/**
+ * 수신자 요약 — 세미콜론 구분 목록을 "첫 주소 외 N명" 으로 줄인다.
+ * 타임라인 한 줄에 주소가 길게 늘어지면 다른 정보가 밀린다.
+ */
+function summarizeRecipients(recipients: string): string {
+  // 다듬기와 빈 값 제거를 한 번에 처리한다 (map + filter 로 두 번 돌지 않는다)
+  const list = recipients.split(";").flatMap((one) => {
+    const trimmed = one.trim();
+    return trimmed ? [trimmed] : [];
+  });
+  if (list.length === 0) return "";
+  return list.length === 1 ? list[0] : `${list[0]} 외 ${list.length - 1}명`;
+}
+
 /**
  * 활동 이력의 `detail`(JSON 문자열)을 사람이 읽을 한 줄로 옮긴다 (F-114).
  * 형식이 깨졌거나 표시할 내용이 없으면 null 을 돌려 타임라인이 라벨만 보이게 한다.
+ *
+ * 문서 발송으로 단계가 바뀌면 detail 에 단계와 문서 정보가 함께 담긴다 →
+ * "제안 → 검토/협상 · 계약서" 처럼 이어 붙인다.
  */
 function describeActivity(
   eventType: string,
@@ -48,27 +74,34 @@ function describeActivity(
 ): string | null {
   if (!detail) return null;
 
-  if (typeof detail.from === "string" && typeof detail.to === "string") {
-    const transition = `${stageLabel(detail.from)} → ${stageLabel(detail.to)}`;
-    return typeof detail.lostReason === "string" && detail.lostReason
-      ? `${transition} · 사유 ${detail.lostReason}`
-      : transition;
-  }
+  const parts: string[] = [];
 
-  if (typeof detail.documentType === "string") {
-    return (
-      DOCUMENT_TYPE_LABELS[detail.documentType as DocumentType] ??
-      detail.documentType
+  const from = text(detail, "from");
+  const to = text(detail, "to");
+  if (from && to) parts.push(`${stageLabel(from)} → ${stageLabel(to)}`);
+
+  const lostReason = text(detail, "lostReason");
+  if (lostReason) parts.push(`사유 ${lostReason}`);
+
+  const documentType = text(detail, "documentType");
+  if (documentType) {
+    parts.push(
+      DOCUMENT_TYPE_LABELS[documentType as DocumentType] ?? documentType,
     );
   }
 
-  if (eventType === "OPPORTUNITY_CREATED") {
-    return typeof detail.expectedAmount === "number"
-      ? `예상 금액 ${formatKRW(detail.expectedAmount)}`
-      : null;
+  const recipients = text(detail, "recipients");
+  if (recipients) parts.push(`수신 ${summarizeRecipients(recipients)}`);
+
+  if (
+    parts.length === 0 &&
+    eventType === "OPPORTUNITY_CREATED" &&
+    typeof detail.expectedAmount === "number"
+  ) {
+    parts.push(`예상 금액 ${formatKRW(detail.expectedAmount)}`);
   }
 
-  return null;
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 /**
@@ -133,14 +166,29 @@ export default async function OpportunityDetailPage({
   if (!opportunity) notFound();
 
   const dto = toOpportunityDTO(opportunity);
-  const timeline: TimelineEntry[] = activityLogs.map((log) => ({
-    id: log.id,
-    label:
-      ACTIVITY_EVENT_LABELS[log.eventType as ActivityEventType] ?? log.eventType,
-    actorName: log.actor.name,
-    occurredAt: log.occurredAt,
-    detailText: describeActivity(log.eventType, parseDetail(log.detail)),
-  }));
+
+  // 이력의 documentId 를 실제 문서와 맞춰 링크를 건다. 이 목록은 이미 orgId 로 좁혀 조회했으므로
+  // 여기 없는 id(삭제됐거나 연결이 끊긴 문서)는 링크하지 않는다 — 조직 밖 문서로 새지 않는다.
+  const documentById = new Map(documents.map((document) => [document.id, document]));
+
+  const timeline: TimelineEntry[] = activityLogs.map((log) => {
+    const detail = parseDetail(log.detail);
+    const linked = text(detail, "documentId");
+    const document = linked ? documentById.get(linked) : undefined;
+    return {
+      id: log.id,
+      eventType: log.eventType,
+      label:
+        ACTIVITY_EVENT_LABELS[log.eventType as ActivityEventType] ??
+        log.eventType,
+      actorName: log.actor.name,
+      occurredAt: log.occurredAt,
+      detailText: describeActivity(log.eventType, detail),
+      documentHref: document ? `/editor/${document.id}` : null,
+      // 제목은 현재 문서 값을 우선 쓰고, 없으면 이력에 남긴 당시 제목을 보여준다
+      documentTitle: document?.title ?? text(detail, "documentTitle"),
+    };
+  });
 
   return (
     <>

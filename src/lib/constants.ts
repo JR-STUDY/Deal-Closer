@@ -24,6 +24,14 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   PROPOSAL: "제안서",
 };
 
+/**
+ * DB 의 `type` 컬럼은 String 이므로, 읽어온 값을 좁힐 때 사용한다.
+ * 발송 연동 전이(F-113)가 문서 종류별 규칙을 고르기 전에 통과시킨다.
+ */
+export function isDocumentType(value: string): value is DocumentType {
+  return (DOCUMENT_TYPES as readonly string[]).includes(value);
+}
+
 // ── 문서 상태 ──
 // DRAFT → SENT → COMPLETED 가 정상 흐름이며, 어느 상태에서든 VOID(폐기)로 보낼 수 있다.
 // 상태 전환은 편집 화면의 상태 드롭다운에서 수동으로 자유롭게 수행한다.

@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, X } from "lucide-react";
+import { Columns3, List, Search, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -18,11 +19,13 @@ const DEBOUNCE_MS = 350;
 const LIST_HREF = "/opportunities";
 /** Radix Select 는 빈 문자열 value 를 허용하지 않아 "전체" 를 표현할 표식이 필요하다 */
 const ALL = "ALL";
+/** 칸반 보기 표식 (`?view=board`). 목록이 기본이라 목록일 때는 파라미터를 지운다. */
+const BOARD_VIEW = "board";
 
 /**
- * 영업 기회 목록 툴바 (F-111) — 기회명·거래처명 검색 + 단계별·담당자별 필터.
- * 조건은 URL 쿼리(`?q=&stage=&owner=`)에 담아 서버 컴포넌트가 조회 조건으로 쓰게 한다
- * (새로고침·공유 시에도 같은 결과가 나온다).
+ * 영업 기회 목록 툴바 (F-111 · F-112) — 검색 + 단계별·담당자별 필터 + 목록/칸반 전환.
+ * 조건은 URL 쿼리(`?q=&stage=&owner=&view=`)에 담아 서버 컴포넌트가 조회 조건으로 쓰게 한다
+ * (새로고침·공유 시에도 같은 결과·같은 보기가 나온다).
  */
 export function OpportunitiesToolbar({
   owners,
@@ -36,8 +39,14 @@ export function OpportunitiesToolbar({
 
   const stage = searchParams.get("stage") ?? ALL;
   const owner = searchParams.get("owner") ?? ALL;
+  const isBoard = searchParams.get("view") === BOARD_VIEW;
 
-  function push(next: { q?: string; stage?: string; owner?: string }) {
+  function push(next: {
+    q?: string;
+    stage?: string;
+    owner?: string;
+    view?: string;
+  }) {
     const sp = new URLSearchParams(searchParams.toString());
     for (const [key, value] of Object.entries(next)) {
       const trimmed = value?.trim() ?? "";
@@ -111,6 +120,34 @@ export function OpportunitiesToolbar({
           ))}
         </SelectContent>
       </Select>
+
+      {/* 보기 전환 — 검색·필터는 그대로 두고 view 파라미터만 바꾼다 */}
+      <div
+        role="group"
+        aria-label="보기 방식"
+        className="ml-auto flex items-center gap-0.5 rounded-md border p-0.5"
+      >
+        <Button
+          type="button"
+          size="sm"
+          variant={isBoard ? "ghost" : "secondary"}
+          aria-pressed={!isBoard}
+          onClick={() => push({ view: "" })}
+        >
+          <List className="size-4" aria-hidden="true" />
+          목록
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={isBoard ? "secondary" : "ghost"}
+          aria-pressed={isBoard}
+          onClick={() => push({ view: BOARD_VIEW })}
+        >
+          <Columns3 className="size-4" aria-hidden="true" />
+          칸반
+        </Button>
+      </div>
     </div>
   );
 }

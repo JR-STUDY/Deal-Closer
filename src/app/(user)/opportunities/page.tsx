@@ -26,23 +26,30 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { OpportunitiesToolbar } from "./_components/opportunities-toolbar";
+import { OpportunityBoard } from "./_components/opportunity-board";
 import { OpportunityRowActions } from "./_components/opportunity-row-actions";
 
 /**
- * 영업 기회 목록 (F-111) — 기회명·거래처·단계·예상 금액·예상 마감일·담당자.
+ * 영업 기회 목록·칸반 (F-111 · F-112) — 기회명·거래처·단계·예상 금액·예상 마감일·담당자.
  *
- * 검색어·단계·담당자는 URL 쿼리(`?q=&stage=&owner=`)로 받아 조회 조건으로 쓴다.
+ * 검색어·단계·담당자·보기는 URL 쿼리(`?q=&stage=&owner=&view=`)로 받는다. 조회 조건은
+ * 두 보기가 완전히 같고 표현만 다르다 — `?view=board` 면 칸반, 아니면 목록이다.
  * 정렬은 예상 마감일 오름차순(임박한 것 먼저)이고 마감일 미정은 뒤로 보낸다.
- * 칸반 보드는 Phase 3(F-112) 범위라 이번에는 리스트 뷰만 제공한다.
  */
 export default async function OpportunitiesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; stage?: string; owner?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    stage?: string;
+    owner?: string;
+    view?: string;
+  }>;
 }) {
   // searchParams 와 세션 조회는 서로 독립 → 병렬 처리
   const [params, user] = await Promise.all([searchParams, getCurrentUser()]);
   const filters = parseOpportunityFilters(params);
+  const isBoard = params.view === "board";
 
   // 목록·셀렉트 후보는 서로 독립 조회다
   const [opportunities, accounts, owners] = await Promise.all([
@@ -125,70 +132,77 @@ export default async function OpportunitiesPage({
               </span>
               {isFiltering ? " (필터를 적용한 결과 기준입니다)" : ""}
             </p>
-            <div className="overflow-hidden rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>기회명</TableHead>
-                    <TableHead>거래처</TableHead>
-                    <TableHead>단계</TableHead>
-                    <TableHead className="text-right">예상 금액</TableHead>
-                    <TableHead className="text-right">예상 마감일</TableHead>
-                    <TableHead>담당자</TableHead>
-                    <TableHead className="w-12">
-                      <span className="sr-only">관리</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {opportunities.map((opportunity) => (
-                    <TableRow key={opportunity.id}>
-                      <TableCell className="font-medium">
-                        <Link
-                          href={`/opportunities/${opportunity.id}`}
-                          className="rounded transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        >
-                          {opportunity.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          href={`/accounts/${opportunity.accountId}`}
-                          className="rounded text-muted-foreground transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        >
-                          {opportunity.account.companyName}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <StageBadge stage={opportunity.stage} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatKRW(opportunity.expectedAmount)}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {opportunity.expectedCloseDate ? (
-                          formatDate(opportunity.expectedCloseDate)
-                        ) : (
-                          <span title="예상 마감일을 아직 정하지 않았습니다.">
-                            미정
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>{opportunity.owner.name}</TableCell>
-                      {/* 기회명 링크와 영역을 분리해 메뉴 클릭이 상세로 새지 않게 한다 */}
-                      <TableCell className="text-right">
-                        <OpportunityRowActions
-                          opportunity={toOpportunityDTO(opportunity)}
-                          // 수정 다이얼로그 후보는 위에서 이미 조회한 값을 재사용한다
-                          accounts={accounts}
-                          owners={owners}
-                        />
-                      </TableCell>
+            {isBoard ? (
+              // 클라이언트에는 직렬화 가능한 DTO 만 넘긴다 (Prisma 레코드·Date 를 그대로 넘기지 않는다)
+              <OpportunityBoard
+                opportunities={opportunities.map(toOpportunityDTO)}
+              />
+            ) : (
+              <div className="overflow-hidden rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>기회명</TableHead>
+                      <TableHead>거래처</TableHead>
+                      <TableHead>단계</TableHead>
+                      <TableHead className="text-right">예상 금액</TableHead>
+                      <TableHead className="text-right">예상 마감일</TableHead>
+                      <TableHead>담당자</TableHead>
+                      <TableHead className="w-12">
+                        <span className="sr-only">관리</span>
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {opportunities.map((opportunity) => (
+                      <TableRow key={opportunity.id}>
+                        <TableCell className="font-medium">
+                          <Link
+                            href={`/opportunities/${opportunity.id}`}
+                            className="rounded transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                          >
+                            {opportunity.name}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <Link
+                            href={`/accounts/${opportunity.accountId}`}
+                            className="rounded text-muted-foreground transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                          >
+                            {opportunity.account.companyName}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <StageBadge stage={opportunity.stage} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatKRW(opportunity.expectedAmount)}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {opportunity.expectedCloseDate ? (
+                            formatDate(opportunity.expectedCloseDate)
+                          ) : (
+                            <span title="예상 마감일을 아직 정하지 않았습니다.">
+                              미정
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>{opportunity.owner.name}</TableCell>
+                        {/* 기회명 링크와 영역을 분리해 메뉴 클릭이 상세로 새지 않게 한다 */}
+                        <TableCell className="text-right">
+                          <OpportunityRowActions
+                            opportunity={toOpportunityDTO(opportunity)}
+                            // 수정 다이얼로그 후보는 위에서 이미 조회한 값을 재사용한다
+                            accounts={accounts}
+                            owners={owners}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </>
         )}
       </div>
