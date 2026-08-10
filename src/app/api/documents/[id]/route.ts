@@ -44,6 +44,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
  * - contentJson 이 오면(블록 캔버스 에디터) 총액·거래처명을 contentJson 에서 서버 재도출한다.
  *   (정책 VAL: 금액 서버 재계산 — 클라이언트가 보낸 총액은 신뢰하지 않는다).
  * - type/status 는 허용된 값인지 검증한다.
+ * - isConfirmed 는 버전별 확정본 플래그다 (F-214). 같은 묶음에서 다중 지정이 허용되므로
+ *   다른 버전의 플래그를 해제하지 않는다.
  */
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
@@ -134,6 +136,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // isCommon: 팀 공통(공유) 베이스 문서 지정/해제
         isCommon:
           typeof body.isCommon === "boolean" ? body.isCommon : undefined,
+        // isConfirmed: 확정본 지정/해제 (F-214) — 같은 묶음에서 여러 버전을 동시에 지정 가능
+        isConfirmed:
+          typeof body.isConfirmed === "boolean" ? body.isConfirmed : undefined,
         // 총액 우선순위: items(레거시) → contentJson(블록 에디터) → body.amount
         amount: hasItems
           ? itemsTotal
