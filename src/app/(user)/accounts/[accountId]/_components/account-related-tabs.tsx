@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { StatusBadge, DocTypeBadge } from "@/components/status-badge";
-import { OPPORTUNITY_STAGE_LABELS } from "@/lib/constants";
+import {
+  StatusBadge,
+  DocTypeBadge,
+  StageBadge,
+} from "@/components/status-badge";
 import { formatDate, formatDateTime, formatKRW } from "@/lib/format";
 
 /**
  * 거래처 상세의 연관 데이터 (F-103).
- * Phase 1 에는 기회가 아직 없어 세 탭 모두 빈 상태로 보이지만, 조회는 실제 쿼리로
- * 하므로 Phase 2 에서 기회가 생기면 그대로 채워진다.
+ * 영업 기회 탭은 Phase 2(F-111)에서 실제 데이터로 채워지며, 각 기회는 상세로 이동한다.
  *
  * shadcn Tabs 만 클라이언트 컴포넌트이고 목록 내용은 서버에서 렌더한다
  * (클라이언트로 내려보내는 JS 를 늘리지 않는다).
@@ -95,23 +96,24 @@ export function AccountRelatedTabs({
                 className="flex items-center justify-between gap-4 p-4"
               >
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{opportunity.name}</p>
+                  <Link
+                    href={`/opportunities/${opportunity.id}`}
+                    className="truncate font-medium transition-colors hover:text-primary hover:underline"
+                  >
+                    {opportunity.name}
+                  </Link>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     담당 {opportunity.owner.name}
                     {opportunity.expectedCloseDate
                       ? ` · 예상 마감 ${formatDate(opportunity.expectedCloseDate)}`
-                      : ""}
+                      : " · 예상 마감 미정"}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <span className="text-sm font-medium">
                     {formatKRW(opportunity.expectedAmount)}
                   </span>
-                  <Badge variant="outline" className="font-normal">
-                    {OPPORTUNITY_STAGE_LABELS[
-                      opportunity.stage as keyof typeof OPPORTUNITY_STAGE_LABELS
-                    ] ?? opportunity.stage}
-                  </Badge>
+                  <StageBadge stage={opportunity.stage} />
                 </div>
               </li>
             ))}
