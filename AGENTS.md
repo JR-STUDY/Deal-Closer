@@ -46,6 +46,7 @@ pnpm build          # 프로덕션 빌드
 pnpm typecheck      # 타입 검사 (tsc --noEmit)
 pnpm lint           # ESLint
 pnpm test:mailer    # 메일 전송 어댑터 검증 (네트워크 없이 fetch 스텁으로 실행)
+pnpm test:opportunity-progress  # 기회 단계 진행 표시 순수 함수 검증 (DB 없이 실행)
 
 pnpm db:migrate     # 스키마 변경 → 마이그레이션 생성·적용
 pnpm db:seed        # 데모 데이터 시드
@@ -77,6 +78,7 @@ src/
     ui/                # shadcn/ui (직접 수정 지양, CLI 로 관리)
     account/           # 프로필/계정 공용 폼 (profile-form·password-form·profile-tabs, user·admin 공유)
     email-template/    # 메일 템플릿 공용 폼 다이얼로그 (관리 페이지·발송폼 재사용)
+    opportunity/       # 기회 공용 — 등록 버튼·폼 다이얼로그, 단계 흐름 안내·진행 스테퍼(표시 전용)
     app-sidebar.tsx    # 공용 사이드바
     sidebar-folders.tsx / add-folder-button.tsx  # 보관함 폴더 트리 UI
     signature-html-editor.tsx / signature-preview.tsx  # 메일 서명 편집·미리보기
@@ -102,6 +104,7 @@ src/
     opportunity.ts       # 기회 검증·금액/날짜 입력 변환·DTO·목록 조회 조건·정렬 (F-111)
     pipeline.ts          # 파이프라인 집계 순수 함수 — 단계별 합계·기간 필터·월 마감 요약 (F-402·404·406·302)
     opportunity-stage.ts # 기회 생성·단계 전이 + 활동 이력 기록 (한 트랜잭션, 서버 전용, F-111·113)
+    opportunity-progress.ts # 단계 진행 **표시** 순수 함수 — 지나온/현재/남은·마감 갈래·다음 행동 안내
   generated/prisma/    # Prisma Client (자동 생성, 커밋 안 함)
 ```
 
@@ -121,6 +124,7 @@ src/
 - 포맷은 `@/lib/format`(formatKRW/formatDate/formatDateTime)만 사용한다.
 - **기회 생성·단계 전이는 `@/lib/opportunity-stage` 를 경유한다.** 라우트·컴포넌트가 `stage` 를 직접 `update` 하거나 `opportunity.create()` 를 직접 호출하지 않는다 — 생성/전이와 활동 이력(ActivityLog)이 한 트랜잭션이어야 상태 정합성이 깨지지 않는다.
 - **파이프라인·매출 집계는 `@/lib/pipeline` 의 순수 함수를 쓴다.** 대시보드와 캘린더가 같은 계산을 공유해야 화면끼리 숫자가 어긋나지 않는다.
+- **단계 진행 표시(스테퍼·흐름 안내)는 `@/lib/opportunity-progress` 의 순수 함수를 쓴다.** 목록과 상세가 같은 계산을 공유해야 표현이 어긋나지 않는다. 이 모듈은 읽기 전용이며 단계를 바꾸지 않는다.
 - import alias 는 `@/*` = `src/*`.
 - **UI 텍스트는 한국어 존댓말** (정책 COPY-TONE). 접근성·명도대비를 준수한다(ACC_*).
 - **성능**: React/Next 코드를 작성·리뷰·리팩터링할 때 `docs/REACT_BEST_PRACTICES.md`(Vercel 70규칙 정리)를 따른다. 특히 ① 독립 조회는 `Promise.all` 병렬화, ② 서버 조회 함수는 `React.cache`, ③ 클라이언트 컴포넌트에 함수·비직렬화 객체 전달 금지 — 는 필수.

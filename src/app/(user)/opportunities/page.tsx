@@ -9,12 +9,14 @@ import {
   hasOpportunityFilter,
   opportunitiesWhere,
   parseOpportunityFilters,
+  toOpportunityDTO,
 } from "@/lib/opportunity";
 import { summarizeByStage } from "@/lib/pipeline";
 import { formatDate, formatKRW, formatNumber } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { StageBadge } from "@/components/status-badge";
 import { NewOpportunityButton } from "@/components/opportunity/new-opportunity-button";
+import { StageFlowGuide } from "@/components/opportunity/stage-flow-guide";
 import {
   Table,
   TableBody,
@@ -24,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { OpportunitiesToolbar } from "./_components/opportunities-toolbar";
+import { OpportunityRowActions } from "./_components/opportunity-row-actions";
 
 /**
  * 영업 기회 목록 (F-111) — 기회명·거래처·단계·예상 금액·예상 마감일·담당자.
@@ -79,6 +82,9 @@ export default async function OpportunitiesPage({
       />
 
       <div className="flex-1 space-y-4 overflow-auto p-8">
+        {/* 단계가 몇 개인지·어떤 순서인지 목록에서 바로 보이도록 흐름을 먼저 안내한다 */}
+        <StageFlowGuide />
+
         <Suspense fallback={<div className="h-9" />}>
           <OpportunitiesToolbar owners={owners} />
         </Suspense>
@@ -129,6 +135,9 @@ export default async function OpportunitiesPage({
                     <TableHead className="text-right">예상 금액</TableHead>
                     <TableHead className="text-right">예상 마감일</TableHead>
                     <TableHead>담당자</TableHead>
+                    <TableHead className="w-12">
+                      <span className="sr-only">관리</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -166,6 +175,15 @@ export default async function OpportunitiesPage({
                         )}
                       </TableCell>
                       <TableCell>{opportunity.owner.name}</TableCell>
+                      {/* 기회명 링크와 영역을 분리해 메뉴 클릭이 상세로 새지 않게 한다 */}
+                      <TableCell className="text-right">
+                        <OpportunityRowActions
+                          opportunity={toOpportunityDTO(opportunity)}
+                          // 수정 다이얼로그 후보는 위에서 이미 조회한 값을 재사용한다
+                          accounts={accounts}
+                          owners={owners}
+                        />
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

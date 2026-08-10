@@ -89,6 +89,17 @@ export function isOpportunityStage(value: string): value is OpportunityStage {
   return (OPPORTUNITY_STAGES as readonly string[]).includes(value);
 }
 
+/**
+ * 마감 단계(수주·실주)인지. 목록 정의 바로 옆이라 판별도 여기 둔다.
+ * 전이(opportunity-stage.ts — server-only)와 표시(opportunity-progress.ts — 클라이언트 공용)가
+ * 같은 기준을 쓰려면 공용 모듈인 constants 에 있어야 한다.
+ */
+export function isClosedOpportunityStage(stage: OpportunityStage): boolean {
+  return (CLOSED_OPPORTUNITY_STAGES as readonly OpportunityStage[]).includes(
+    stage,
+  );
+}
+
 // ── 활동 이력 이벤트 유형 (PRD F-114) ──
 export const ACTIVITY_EVENT_TYPES = [
   "OPPORTUNITY_CREATED",
