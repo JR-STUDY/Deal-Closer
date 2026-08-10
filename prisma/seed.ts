@@ -395,6 +395,9 @@ async function main() {
   await prisma.generationRequest.deleteMany();
   await prisma.documentItem.deleteMany();
   await prisma.document.deleteMany();
+  await prisma.activityLog.deleteMany();
+  await prisma.opportunity.deleteMany();
+  await prisma.account.deleteMany();
   await prisma.emailTemplate.deleteMany();
   await prisma.folder.deleteMany();
   await prisma.emailAccount.deleteMany();
@@ -1064,6 +1067,65 @@ async function main() {
     },
   });
 
+  // 10-1) 거래처(Account) — CRM 데모 데이터 (F-101 · 102 · 103)
+  //   회사명을 기존 문서의 clientName 과 맞춰 두어, Phase 2 에서 기회·문서를 이 거래처에
+  //   연결할 때 이름을 새로 만들지 않아도 되게 한다.
+  //   사업자등록번호는 실재하지 않는 합성값이다.
+  await prisma.account.createMany({
+    data: [
+      {
+        orgId: org.id,
+        companyName: "(주)에이비씨 테크놀로지",
+        contactName: "이서준",
+        position: "구매팀 과장",
+        phone: "010-2345-6789",
+        email: "seojun.lee@abctech.example.com",
+        bizRegNo: "123-45-67890",
+        memo: "그룹웨어 도입 검토 중. 견적 재발송 이력 있음(2026-07). 결재 라인은 팀장 → 본부장 2단계.",
+      },
+      {
+        orgId: org.id,
+        companyName: "글로벌커머스(주)",
+        contactName: "박지훈",
+        position: "IT기획팀 팀장",
+        phone: "010-3456-7890",
+        email: "jihoon.park@globalcommerce.example.com",
+        bizRegNo: "211-86-01234",
+        memo: "통합 계약 체결 완료. 연간 유지보수 갱신 시점은 매년 4월.",
+      },
+      {
+        orgId: org.id,
+        companyName: "세종테크",
+        contactName: "최유진",
+        position: "정보보안팀 대리",
+        phone: "010-4567-8901",
+        email: "yujin.choi@sejongtech.example.com",
+        bizRegNo: "305-81-45678",
+        memo: null,
+      },
+      {
+        orgId: org.id,
+        companyName: "다올테크",
+        contactName: "정민석",
+        position: "인프라팀 차장",
+        phone: "010-5678-9012",
+        email: null,
+        bizRegNo: null,
+        memo: "인프라 증설 견적 검토 중. 메일보다 전화 연락을 선호.",
+      },
+      {
+        orgId: org.id,
+        companyName: "Bluewave Systems Korea",
+        contactName: "한그레이스",
+        position: "Sales Director",
+        phone: null,
+        email: "grace.han@bluewave.example.com",
+        bizRegNo: "412-88-90123",
+        memo: "본사 승인 절차가 있어 계약까지 6주 이상 소요된다.",
+      },
+    ],
+  });
+
   // 11) 팀원 초대 (대기 중)
   await prisma.invite.createMany({
     data: [
@@ -1095,6 +1157,7 @@ async function main() {
   const counts = {
     조직: await prisma.organization.count(),
     사용자: await prisma.user.count(),
+    거래처: await prisma.account.count(),
     문서: await prisma.document.count(),
     문서항목: await prisma.documentItem.count(),
     폴더: await prisma.folder.count(),
