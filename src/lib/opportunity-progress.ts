@@ -9,19 +9,50 @@
  */
 
 import {
+  CLOSED_OPPORTUNITY_STAGES,
   OPEN_OPPORTUNITY_STAGES,
   OPPORTUNITY_STAGE_LABELS,
   isClosedOpportunityStage,
+  isOpportunityStage,
   type OpportunityStage,
 } from "./constants";
 
 /** 스테퍼 노드의 상태 — 지나온 / 현재 / 남은 */
 export type StageNodeStatus = "done" | "current" | "upcoming";
 
-export type StageNode = {
-  stage: OpportunityStage;
+/**
+ * 스테퍼가 그리는 노드 공통 모양.
+ * 마감 노드는 **진행 중일 때 어느 결과인지 정해지지 않아** `stage` 가 null 이다.
+ */
+export type ProgressNode = {
+  stage: OpportunityStage | null;
   label: string;
   status: StageNodeStatus;
+};
+
+/** 진행 트랙(초기 · 제안 · 검토/협상) 노드 — 단계가 항상 정해져 있다 */
+export type StageNode = ProgressNode & { stage: OpportunityStage };
+
+/** 트랙 끝의 마감 노드 — 진행 중이면 `stage` 가 null 이고 상태는 `upcoming` 이다 */
+export type OutcomeNode = ProgressNode;
+
+/**
+ * 진행 중일 때 마감 노드에 붙는 라벨.
+ * 상수에서 파생한다 — 라벨을 문자열로 적어 두면 `수주`·`실주` 표기가 바뀔 때 여기만 어긋난다.
+ */
+export const PENDING_OUTCOME_LABEL = CLOSED_OPPORTUNITY_STAGES.map(
+  (stage) => OPPORTUNITY_STAGE_LABELS[stage],
+).join("/");
+
+/**
+ * 단계 전이 이력 한 줄 — 활동 이력(ActivityLog)의 `detail` 에서 꺼낸 `from`/`to` 다.
+ *
+ * 단계 이름이 아닌 값(문서 종류·수신자 같은 다른 detail, 정의 밖 문자열, null)은 무시된다.
+ * 정렬 순서는 상관없다 — 도달 지점을 최댓값으로 뽑기 때문이다(상세 화면은 시간 역순으로 읽는다).
+ */
+export type StageHistoryEntry = {
+  from?: string | null;
+  to?: string | null;
 };
 
 export type OpportunityProgress = {
@@ -30,13 +61,13 @@ export type OpportunityProgress = {
   /** 진행 트랙 (초기 → 제안 → 검토/협상). 순차다. */
   track: StageNode[];
   /**
-   * 마감 결과 노드 **하나**. 진행 중이면 null 이다.
+   * 마감 결과 노드 **하나**. 항상 있다.
    *
-   * 수주·실주를 갈래로 나란히 보여주지 않는다 — 아직 오지 않은 결과를 미리 띄우면
-   * 화면이 "두 갈래 중 하나를 고르는 단계"처럼 읽히고, 어느 쪽이 실제 상태인지 흐려진다.
-   * 마감된 뒤에는 실제 결과 하나만 채워진 상태로 트랙 끝에 이어 붙인다 (기회-11).
+   * 수주·실주를 두 갈래로 나란히 두지 않는다 — 갈래로 띄우면 화면이 "둘 중 하나를 고르는
+   * 단계"처럼 읽힌다. 대신 한 줄 트랙 끝에 노드 하나를 두고, 진행 중이면 회색 `수주/실주`
+   * (앞으로 갈 곳)로, 마감되면 **실제 결과 하나**를 채워 보여준다 (기회-11).
    */
-  outcome: StageNode | null;
+  outcome: OutcomeNode;
   /** 수주·실주로 마감됐는지 */
   isClosed: boolean;
 };
@@ -45,33 +76,74 @@ function toNode(stage: OpportunityStage, status: StageNodeStatus): StageNode {
   return { stage, label: OPPORTUNITY_STAGE_LABELS[stage], status };
 }
 
+/** 진행 트랙에서의 위치. 트랙에 없는 값(마감 단계·정의 밖 문자열·null)은 -1. */
+function openRank(value: string | null | undefined): number {
+  if (!value || !isOpportunityStage(value)) return -1;
+  return (OPEN_OPPORTUNITY_STAGES as readonly OpportunityStage[]).indexOf(
+    value,
+  );
+}
+
 /**
- * 현재 단계로부터 스테퍼 노드 상태를 계산한다.
+ * 진행 트랙에서 **실제로 도달한 가장 앞선 단계**.
  *
- * 마감(WON·LOST)된 기회는 진행 트랙 3단계를 모두 "지나온"으로 본다 — 어느 단계에서 마감했는지는
- * 활동 이력(ActivityLog)에만 남고 `stage` 하나로는 알 수 없기 때문이다. 강조는 결과 노드로 옮긴다.
+ * 진행 중인 기회는 현재 단계가 곧 도달 지점이라 이력을 볼 필요가 없다. 마감된 기회는
+ * `stage` 가 WON·LOST 하나뿐이어서 어디까지 갔었는지 알 수 없으므로 **이력에서 도출한다** —
+ * 상단(진행 단계)과 하단(이력)이 같은 출처를 보게 만들어야 둘이 어긋나지 않는다.
+ * 예: 초기 → 제안 → 실주 인 기회는 검토/협상을 지나온 것으로 표시해선 안 된다.
  *
- * 진행 중이면 `outcome` 이 null 이라 트랙 3단계만 남는다 (기회-11).
+ * **이력이 없으면 초기 단계까지만 지나온 것으로 본다** — 모든 기회는 초기에서 시작하므로
+ * (스키마 기본값) 이력 없이 확실히 말할 수 있는 최소 사실이다. 알 수 없는 구간을 "지나온"으로
+ * 채우는 과대 주장이 바로 이 함수가 고치려는 결함이라, 모르면 덜 주장하는 쪽으로 넘어진다.
+ */
+export function reachedOpenStage(
+  stage: OpportunityStage,
+  history?: readonly StageHistoryEntry[],
+): OpportunityStage {
+  if (!isClosedOpportunityStage(stage)) return stage;
+
+  // 초기(0)에서 시작한다. from·to 를 함께 보므로 전이 한 줄만 남아 있어도 도달 지점이 잡힌다.
+  let rank = 0;
+  for (const entry of history ?? []) {
+    rank = Math.max(rank, openRank(entry.from), openRank(entry.to));
+  }
+  return OPEN_OPPORTUNITY_STAGES[rank];
+}
+
+/**
+ * 스테퍼 노드 상태를 계산한다.
+ *
+ * 트랙의 기준점은 **도달 지점 하나**다 — 진행 중이면 현재 단계, 마감이면 이력에서 도출한
+ * 마지막 진행 단계(`reachedOpenStage`)다. 그 앞은 지나온, 뒤는 남은 단계다.
+ * 마감된 기회의 트랙에는 `current` 가 없다 — 강조는 트랙 끝의 결과 노드로 옮긴다.
+ *
+ * 마감을 풀어 되돌린 기회(검토/협상 → 제안)는 현재 단계가 기준점이라 검토/협상이 다시
+ * **남은 단계**로 보인다. 트랙에 기준점이 둘일 수는 없고, 되돌린 사실은 아래 이력에 남는다.
  */
 export function opportunityProgress(
   stage: OpportunityStage,
+  history?: readonly StageHistoryEntry[],
 ): OpportunityProgress {
   const isClosed = isClosedOpportunityStage(stage);
-  const currentIndex = (
-    OPEN_OPPORTUNITY_STAGES as readonly OpportunityStage[]
-  ).indexOf(stage);
+  const reachedIndex = openRank(reachedOpenStage(stage, history));
 
   const track = OPEN_OPPORTUNITY_STAGES.map((openStage, index) => {
-    if (isClosed || index < currentIndex) return toNode(openStage, "done");
-    if (index === currentIndex) return toNode(openStage, "current");
+    if (index < reachedIndex) return toNode(openStage, "done");
+    // 마감된 기회는 도달 지점도 "지나온" 이다 (현재는 결과 노드다)
+    if (index === reachedIndex) {
+      return toNode(openStage, isClosed ? "done" : "current");
+    }
     return toNode(openStage, "upcoming");
   });
 
   return {
     current: stage,
     track,
-    // 마감된 단계 자체가 결과다 — 채워진(현재) 상태로 하나만 내보낸다.
-    outcome: isClosed ? toNode(stage, "current") : null,
+    outcome: isClosed
+      ? // 마감된 단계 자체가 결과다 — 채워진(현재) 상태로 하나만 내보낸다.
+        toNode(stage, "current")
+      : // 진행 중 — 아직 어느 쪽인지 모르니 단계 없이 "앞으로 갈 곳"으로만 둔다.
+        { stage: null, label: PENDING_OUTCOME_LABEL, status: "upcoming" },
     isClosed,
   };
 }

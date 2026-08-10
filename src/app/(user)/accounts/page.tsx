@@ -12,6 +12,7 @@ import {
 } from "@/lib/pagination";
 import { formatDate, formatNumber } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
+import { InfoHint } from "@/components/info-hint";
 import { ListPagination } from "@/components/list-pagination";
 import {
   ROW_LINK_ABOVE,
@@ -83,9 +84,19 @@ export default async function AccountsPage({
           {/* 총 건수는 검색란과 같은 줄 우측에 둔다 — 세로 공간을 아낀다 (기회-15 와 같은 규칙) */}
           <AccountsToolbar>
             {totalCount > 0 ? (
-              <p className="text-xs text-muted-foreground">
-                총 {formatNumber(totalCount)}곳
-                {isSearching ? ` (검색어: ${query})` : ""}
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span>총 {formatNumber(totalCount)}곳</span>
+                {/*
+                  검색어를 문구로 되풀이하면(검색어: …) 입력한 글자 수만큼 이 줄이 늘어나
+                  검색창 폭이 흔들린다. 검색어는 바로 옆 입력에 그대로 보이므로 되풀이하지 않고,
+                  건수의 기준만 폭이 고정된 ⓘ 로 알린다 (A-5 보완).
+                */}
+                {isSearching ? (
+                  <InfoHint label="건수 기준 안내">
+                    검색을 적용한 결과 전체를 기준으로 낸 건수입니다. 현재
+                    페이지에 보이는 행 수가 아닙니다.
+                  </InfoHint>
+                ) : null}
               </p>
             ) : null}
           </AccountsToolbar>

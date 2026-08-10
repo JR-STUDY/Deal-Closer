@@ -16,7 +16,10 @@ import {
  * 주소 공유가 그대로 동작한다. 검색·필터 파라미터는 `pageHref` 가 함께 실어 보낸다.
  * 상호작용 로직이 없으므로 서버 컴포넌트이며 클라이언트 번들을 늘리지 않는다.
  *
- * 페이지가 하나뿐이면 아무것도 그리지 않는다 (총 건수는 검색란 우측에 이미 있다).
+ * **1페이지뿐이어도 그린다** (이전·다음은 비활성). 결과 수에 따라 나타났다 사라지면 표 아래가
+ * 들썩이고, 이 목록이 페이지로 나뉘는 화면인지조차 알 수 없다 (기회-18 · 거래처-3 보완).
+ * 결과가 0건일 때만 그리지 않는다 — 나눌 페이지가 없고, 호출측이 그 자리에 빈 상태 안내를
+ * 대신 띄운다. "총 0건 중 0–0번째" 는 안내가 아니라 소음이다.
  */
 
 const BOX =
@@ -45,7 +48,8 @@ export function ListPagination({
   const { page, totalPages, totalCount, from, to, hasPrev, hasNext } =
     pagination;
 
-  if (totalPages <= 1) return null;
+  // 빈 목록에는 페이지 UI 를 두지 않는다 (호출측이 빈 상태 안내를 대신 그린다)
+  if (totalCount === 0) return null;
 
   return (
     <nav
