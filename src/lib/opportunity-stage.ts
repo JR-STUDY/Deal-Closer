@@ -12,9 +12,9 @@ import {
 } from "./constants";
 
 /**
- * 영업 기회 단계 전이 도메인 (F-112 · F-113 · F-114 · F-115 · F-117).
+ * 영업 기회 생성·단계 전이 도메인 (F-111 · F-112 · F-113 · F-114 · F-115 · F-117).
  *
- * 단계 변경과 활동 이력(ActivityLog) 기록은 **항상 한 트랜잭션**에서 일어나야 한다.
+ * 기회 생성/단계 변경과 활동 이력(ActivityLog) 기록은 **항상 한 트랜잭션**에서 일어나야 한다.
  * 라우트마다 흩뿌리면 전이는 됐는데 타임라인에는 없는 상태 불일치가 생긴다
  * (구현 계획 §4-② · PRD 9장 "상태 정합성 엣지 케이스").
  * 라우트는 이 모듈의 함수를 호출만 하고 스스로 stage 를 update 하지 않는다.
@@ -100,6 +100,49 @@ export type StageTransitionInput = {
   /** ActivityLog.detail 에 함께 남길 부가 정보 (문서 id 등) */
   detail?: Record<string, unknown>;
 };
+
+export type CreateOpportunityInput = {
+  orgId: string;
+  /** 이력에 남길 행위자 (기회를 등록한 사람) */
+  actorId: string;
+  accountId: string;
+  ownerId: string;
+  name: string;
+  expectedAmount: number;
+  expectedCloseDate: Date | null;
+  memo: string | null;
+};
+
+/**
+ * 기회 생성 (F-111) + OPPORTUNITY_CREATED 활동 이력 (F-114) — 한 트랜잭션.
+ *
+ * 라우트가 `prisma.opportunity.create()` 를 직접 부르면 이력을 빠뜨릴 수 있으므로
+ * 생성 경로도 이 모듈로 모은다. 초기 단계는 스키마 기본값(INITIAL)에 맡기고
+ * `stage` 를 명시하지 않는다 — 단계 값을 정하는 곳은 이 파일 하나뿐이어야 한다.
+ */
+export function createOpportunity(
+  input: CreateOpportunityInput,
+  tx?: Prisma.TransactionClient,
+): Promise<{ id: string }> {
+  const { orgId, actorId, accountId, ownerId, ...rest } = input;
+
+  return runInTransaction(async (client) => {
+    const created = await client.opportunity.create({
+      data: { orgId, accountId, ownerId, ...rest },
+      select: { id: true },
+    });
+
+    await recordActivity(client, {
+      orgId,
+      opportunityId: created.id,
+      actorId,
+      eventType: "OPPORTUNITY_CREATED",
+      detail: { accountId, ownerId, expectedAmount: rest.expectedAmount },
+    });
+
+    return created;
+  }, tx);
+}
 
 /**
  * 수동 단계 변경 (F-112 칸반 드래그 · 기회 상세).
