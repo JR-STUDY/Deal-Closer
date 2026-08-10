@@ -3,8 +3,13 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { toTemplateDTO, visibleTemplatesWhere } from "@/lib/email-template";
 import { teamAddress } from "@/lib/mail-domain";
-import { EMAIL_PROVIDER_LABELS, type EmailProvider } from "@/lib/constants";
+import {
+  EMAIL_PROVIDER_LABELS,
+  isOpportunityStage,
+  type EmailProvider,
+} from "@/lib/constants";
 import { SenderClient, type SenderOption } from "./_components/sender-client";
+import type { SenderOpportunityOption } from "./_components/sender-opportunity-link";
 
 export default async function SenderPage({
   params,
@@ -14,10 +19,11 @@ export default async function SenderPage({
   // params·현재 사용자는 서로 독립 → 병렬로 await
   const [{ documentId }, user] = await Promise.all([params, getCurrentUser()]);
 
-  // 문서·개인 발신 계정·메일 템플릿·인증 팀 도메인을 병렬 조회 (REACT_BEST_PRACTICES)
-  const [document, personalAccount, templates, verifiedDomains] =
+  // 문서·개인 발신 계정·메일 템플릿·인증 팀 도메인·연결 후보 기회를 병렬 조회 (REACT_BEST_PRACTICES)
+  const [document, personalAccount, templates, verifiedDomains, opportunities] =
     await Promise.all([
-      prisma.document.findUnique({ where: { id: documentId } }),
+      // 다른 조직의 문서 id 가 들어와도 404 로 끝나야 한다 → orgId 로 좁힌다
+      prisma.document.findFirst({ where: { id: documentId, orgId: user.orgId } }),
       prisma.emailAccount
         .findFirst({ where: { userId: user.id, isDefault: true } })
         .then(
@@ -32,6 +38,17 @@ export default async function SenderPage({
       prisma.teamMailDomain.findMany({
         where: { orgId: user.orgId, status: "VERIFIED" },
         orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+      }),
+      // 문서를 연결할 수 있는 영업 기회 (F-113) — 최근 갱신 순
+      prisma.opportunity.findMany({
+        where: { orgId: user.orgId },
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          stage: true,
+          account: { select: { companyName: true } },
+        },
       }),
     ]);
 
@@ -70,6 +87,18 @@ export default async function SenderPage({
   const selectedValue =
     selectedTeamId ?? (personalAccount ? "personal" : null);
 
+  // stage 는 DB 가 String 컬럼이라 정의 밖 값이 들어올 수 있다. 초기 단계로 보수 해석한다.
+  const opportunityOptions: SenderOpportunityOption[] = opportunities.map(
+    (opportunity) => ({
+      id: opportunity.id,
+      name: opportunity.name,
+      accountName: opportunity.account.companyName,
+      stage: isOpportunityStage(opportunity.stage)
+        ? opportunity.stage
+        : "INITIAL",
+    }),
+  );
+
   return (
     <SenderClient
       document={{
@@ -78,7 +107,9 @@ export default async function SenderPage({
         type: document.type,
         clientName: document.clientName,
         amount: document.amount,
+        opportunityId: document.opportunityId,
       }}
+      opportunityOptions={opportunityOptions}
       senderOptions={senderOptions}
       initialSelectedValue={selectedValue}
       senderName={user.name}

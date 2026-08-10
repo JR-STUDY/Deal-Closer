@@ -9,6 +9,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -23,6 +24,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { OpportunityFormDialog } from "@/components/opportunity/opportunity-form-dialog";
 import {
+  StageChangeConfirmDialog,
+  StageChangeMenuItems,
+  useStageChange,
+} from "@/components/opportunity/stage-change";
+import {
   toOpportunityFormValues,
   type OpportunityAccountOption,
   type OpportunityDTO,
@@ -30,10 +36,12 @@ import {
 } from "@/lib/opportunity";
 
 /**
- * 영업 기회 목록 행 액션 (F-111).
+ * 영업 기회 목록 행 액션 (F-111 · F-112).
  *
- * 목록에서도 수정·삭제가 가능하다는 사실이 드러나야 해서 각 행 끝에 `⋯` 메뉴를 둔다.
+ * 목록에서도 수정·삭제·단계 변경이 가능하다는 사실이 드러나야 해서 각 행 끝에 `⋯` 메뉴를 둔다.
  * 수정은 상세로 보내지 않고 목록에서 바로 폼 다이얼로그를 연다.
+ * 단계 변경은 칸반 카드와 **같은 컴포넌트**(`@/components/opportunity/stage-change`)를 쓴다 —
+ * 드래그를 쓸 수 없어도 목록에서 키보드로 단계를 바꿀 수 있어야 한다 (정책 ACC_*).
  *
  * 기회 삭제에는 거래처처럼 차단 조건이 없다. 대신 활동 이력이 함께 사라진다는 사실과
  * 문서는 보관함에 남는다는 사실을 **누르기 전에** 알린다.
@@ -52,6 +60,7 @@ export function OpportunityRowActions({
   const [isEditing, setIsEditing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const stageChange = useStageChange({ onChanged: () => router.refresh() });
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -88,6 +97,20 @@ export function OpportunityRowActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <StageChangeMenuItems
+            current={opportunity.stage}
+            onSelect={(stage) =>
+              stageChange.request({
+                target: {
+                  id: opportunity.id,
+                  name: opportunity.name,
+                  stage: opportunity.stage,
+                },
+                toStage: stage,
+              })
+            }
+          />
+          <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setIsEditing(true)}>
             <Pencil aria-hidden="true" />
             수정
@@ -101,6 +124,14 @@ export function OpportunityRowActions({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* 마감 → 진행 되돌리기 확인 (칸반과 같은 문구·같은 규칙) */}
+      <StageChangeConfirmDialog
+        pending={stageChange.pending}
+        isSaving={stageChange.isSaving}
+        onCancel={stageChange.cancel}
+        onConfirm={stageChange.confirm}
+      />
 
       {isEditing ? (
         <OpportunityFormDialog

@@ -47,6 +47,7 @@ pnpm typecheck      # 타입 검사 (tsc --noEmit)
 pnpm lint           # ESLint
 pnpm test:mailer    # 메일 전송 어댑터 검증 (네트워크 없이 fetch 스텁으로 실행)
 pnpm test:opportunity-progress  # 기회 단계 진행 표시 순수 함수 검증 (DB 없이 실행)
+pnpm test:opportunity-transition # 기회 단계 전이 규칙 순수 함수 검증 (DB 없이 실행)
 
 pnpm db:migrate     # 스키마 변경 → 마이그레이션 생성·적용
 pnpm db:seed        # 데모 데이터 시드
@@ -78,7 +79,8 @@ src/
     ui/                # shadcn/ui (직접 수정 지양, CLI 로 관리)
     account/           # 프로필/계정 공용 폼 (profile-form·password-form·profile-tabs, user·admin 공유)
     email-template/    # 메일 템플릿 공용 폼 다이얼로그 (관리 페이지·발송폼 재사용)
-    opportunity/       # 기회 공용 — 등록 버튼·폼 다이얼로그, 단계 흐름 안내·진행 스테퍼(표시 전용)
+    opportunity/       # 기회 공용 — 등록 버튼·폼 다이얼로그, 단계 흐름 안내·진행 스테퍼(표시 전용),
+                       #   stage-change(칸반·목록 공용 단계 변경 메뉴·확인창, 키보드 대체 수단)
     app-sidebar.tsx    # 공용 사이드바
     sidebar-folders.tsx / add-folder-button.tsx  # 보관함 폴더 트리 UI
     signature-html-editor.tsx / signature-preview.tsx  # 메일 서명 편집·미리보기
@@ -103,6 +105,7 @@ src/
     account.ts           # 거래처 검증·정규화(사업자번호)·DTO·목록 조회 조건 (F-101·102·103)
     opportunity.ts       # 기회 검증·금액/날짜 입력 변환·DTO·목록 조회 조건·정렬 (F-111)
     pipeline.ts          # 파이프라인 집계 순수 함수 — 단계별 합계·기간 필터·월 마감 요약 (F-402·404·406·302)
+    opportunity-transition.ts # 단계 전이 **규칙** 순수 함수 — 전진만·되돌리기 판정·문서별 목표 단계 (F-112·113)
     opportunity-stage.ts # 기회 생성·단계 전이 + 활동 이력 기록 (한 트랜잭션, 서버 전용, F-111·113)
     opportunity-progress.ts # 단계 진행 **표시** 순수 함수 — 지나온/현재/남은·마감 갈래·다음 행동 안내
   generated/prisma/    # Prisma Client (자동 생성, 커밋 안 함)
@@ -123,6 +126,8 @@ src/
 - 공통 UI 는 재사용한다: `@/components/ui/*`(shadcn), `@/components/page-header`, `@/components/status-badge`.
 - 포맷은 `@/lib/format`(formatKRW/formatDate/formatDateTime)만 사용한다.
 - **기회 생성·단계 전이는 `@/lib/opportunity-stage` 를 경유한다.** 라우트·컴포넌트가 `stage` 를 직접 `update` 하거나 `opportunity.create()` 를 직접 호출하지 않는다 — 생성/전이와 활동 이력(ActivityLog)이 한 트랜잭션이어야 상태 정합성이 깨지지 않는다.
+- **전이 허용 규칙은 `@/lib/opportunity-transition` 의 순수 함수가 단일 기준이다.** 서버(`opportunity-stage`)와 칸반 클라이언트가 같은 판정을 공유해야 화면 안내와 실제 저장 결과가 어긋나지 않는다. server-only 를 import 하지 않으므로 클라이언트·`tsx` 테스트에서도 쓴다. 자동 전이(문서 발송)는 **앞으로만**, 수동 전이(칸반 드래그·⋯ 메뉴)는 **어느 단계로든** 이동하며 마감 해제 시 확인창을 띄운다.
+- **단계 변경 UI 는 드래그 전용으로 만들지 않는다.** 칸반 카드와 목록 행이 `@/components/opportunity/stage-change` 의 ⋯ 메뉴를 공유해 키보드로도 단계를 바꿀 수 있어야 한다 (정책 ACC_*).
 - **파이프라인·매출 집계는 `@/lib/pipeline` 의 순수 함수를 쓴다.** 대시보드와 캘린더가 같은 계산을 공유해야 화면끼리 숫자가 어긋나지 않는다.
 - **단계 진행 표시(스테퍼·흐름 안내)는 `@/lib/opportunity-progress` 의 순수 함수를 쓴다.** 목록과 상세가 같은 계산을 공유해야 표현이 어긋나지 않는다. 이 모듈은 읽기 전용이며 단계를 바꾸지 않는다.
 - import alias 는 `@/*` = `src/*`.

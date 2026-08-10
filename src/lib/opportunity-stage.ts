@@ -3,13 +3,17 @@ import "server-only";
 import { prisma } from "./db";
 import type { Prisma } from "@/generated/prisma/client";
 import {
-  OPEN_OPPORTUNITY_STAGES,
-  isClosedOpportunityStage,
   isOpportunityStage,
   type ActivityEventType,
   type DocumentType,
   type OpportunityStage,
 } from "./constants";
+import {
+  decideTransition,
+  isClosedStage,
+  stageForSentDocument,
+  type StageSkipReason,
+} from "./opportunity-transition";
 
 /**
  * 영업 기회 생성·단계 전이 도메인 (F-111 · F-112 · F-113 · F-114 · F-115 · F-117).
@@ -19,61 +23,23 @@ import {
  * (구현 계획 §4-② · PRD 9장 "상태 정합성 엣지 케이스").
  * 라우트는 이 모듈의 함수를 호출만 하고 스스로 stage 를 update 하지 않는다.
  *
+ * **전이 허용 규칙은 여기 없다** — `@/lib/opportunity-transition` 의 순수 함수가 단일
+ * 기준이며, 칸반 카드(클라이언트)와 이 모듈이 같은 판정을 공유한다. 이 파일은 그 판정을
+ * DB 쓰기·이력 기록으로 옮기는 일만 한다.
+ *
  * DB 접근은 `src/lib/db.ts` 의 prisma 싱글톤만 경유한다. 호출측이 이미 트랜잭션을
  * 열었다면 `tx` 로 넘겨 같은 트랜잭션에 합류시킨다 (문서 발송처럼 EmailLog·문서 상태
  * 전환과 함께 묶어야 하는 경우).
  */
 
-/** 진행 순서. 자동 전이는 이 순서를 앞으로만 이동한다. */
-const STAGE_PROGRESSION: readonly OpportunityStage[] = OPEN_OPPORTUNITY_STAGES;
-
-/** 마감 단계(WON·LOST)인지 — 판별 기준은 constants 하나뿐이다 (표시 모듈과 공유) */
-export const isClosedStage = isClosedOpportunityStage;
-
-/** 진행 순서상 위치. 마감 단계는 -1. */
-function progressionRank(stage: OpportunityStage): number {
-  return STAGE_PROGRESSION.indexOf(stage);
-}
-
-/**
- * 문서 발송으로 자동 전이할 단계 (F-113).
- * 견적서 → 제안, 계약서 → 검토/협상. NDA·제안서는 PRD 에 규정이 없어 전이하지 않는다.
- */
-export const DOCUMENT_SEND_STAGE: Partial<Record<DocumentType, OpportunityStage>> = {
-  QUOTE: "PROPOSAL",
-  CONTRACT: "NEGOTIATION",
-};
-
-/** 발송한 문서 종류에 대응하는 전이 단계. 전이 대상이 아니면 null. */
-export function stageForSentDocument(type: DocumentType): OpportunityStage | null {
-  return DOCUMENT_SEND_STAGE[type] ?? null;
-}
-
-/**
- * 자동 전이 허용 여부 — 뒤로 가거나(강등) 마감된 기회를 되살리지 않는다.
- *
- * TODO(Phase 3, 구현 계획 §8.1 "상태 역전 규칙"): 재발송·발송 취소·되돌리기 시 단계를
- * 어떻게 처리할지 PRD 에 규정이 없다. 확정 전까지는 보수적으로
- * ① 이미 지난 단계로 내리지 않고, ② 마감(WON·LOST)된 기회는 건드리지 않는다.
- * 수동 변경(칸반 드래그 F-112)은 이 제약을 받지 않으며 `changeStage()` 로 처리한다.
- */
-export function canAutoAdvance(from: OpportunityStage, to: OpportunityStage): boolean {
-  if (isClosedStage(from)) return false;
-  const toRank = progressionRank(to);
-  if (toRank < 0) return false; // 자동 전이로 기회를 마감시키지 않는다
-  return toRank > progressionRank(from);
-}
-
-/** 전이하지 않은 이유 */
-export type StageSkipReason =
-  /** 이미 같은 단계 */
-  | "same-stage"
-  /** 수주·실주로 마감된 기회 */
-  | "already-closed"
-  /** 자동 전이가 단계를 되돌리려 함 (보수적으로 무시) */
-  | "no-downgrade"
-  /** 전이 규칙이 없는 트리거 (예: NDA·제안서 발송) */
-  | "not-applicable";
+// 규칙은 옮겼지만 서버측 호출자가 두 모듈을 나눠 import 하지 않도록 도메인 진입점에서 다시 노출한다.
+export {
+  DOCUMENT_SEND_STAGE,
+  canAutoAdvance,
+  isClosedStage,
+  stageForSentDocument,
+  type StageSkipReason,
+} from "./opportunity-transition";
 
 /** 전이 결과. 라우트는 이 판별 유니온으로 응답을 결정한다. */
 export type StageTransitionResult =
@@ -143,8 +109,13 @@ export function createOpportunity(
 }
 
 /**
- * 수동 단계 변경 (F-112 칸반 드래그 · 기회 상세).
- * 사용자가 명시적으로 고른 단계이므로 되돌리기(강등)도 허용한다.
+ * 수동 단계 변경 (F-112 칸반 드래그 · 목록 행 메뉴).
+ *
+ * 사용자가 명시적으로 고른 단계이므로 **어느 단계로든** 이동한다 — 되돌리기(강등)와
+ * 마감(WON·LOST) 해제까지 포함한다 (구현 계획 §8.1 "담당자가 칸반에서 직접 되돌림" 행).
+ * 담당자가 화면에서 고른 단계를 시스템이 거부하면 실제 영업 상황과 파이프라인이 어긋난다.
+ * 대신 마감 해제는 확정일·실주 사유를 지우므로 화면에서 확인을 받는다
+ * (`stageChangeWarning()` — 정책 STATE_BACK_NAV_CONFIRM).
  *
  * TODO(Phase 4): WON 전이의 후속 처리(F-115 매출 반영·다음 기회 생성, F-117 실주 사유
  * 목록)는 여기에 얹는다. 확인 팝업이 필요한 흐름이라 UI 결정과 함께 붙인다.
@@ -173,12 +144,20 @@ export function advanceStage(
   );
 }
 
-export type DocumentSentInput = {
+/** 문서 이벤트(생성·발송)가 타임라인에 남길 공통 정보 (F-114) */
+export type DocumentEventInput = {
   opportunityId: string;
   orgId: string;
   actorId: string;
   documentId: string;
   documentType: DocumentType;
+  /** 타임라인에서 문서를 알아볼 제목. 문서가 나중에 지워져도 이력에는 남는다. */
+  documentTitle: string;
+};
+
+export type DocumentSentInput = DocumentEventInput & {
+  /** 발송한 수신자 (세미콜론 구분). 타임라인에 함께 표시한다. */
+  recipients: string;
 };
 
 /**
@@ -190,7 +169,16 @@ export function applyDocumentSent(
   input: DocumentSentInput,
   tx?: Prisma.TransactionClient,
 ): Promise<StageTransitionResult> {
-  const { opportunityId, orgId, actorId, documentId, documentType } = input;
+  const {
+    opportunityId,
+    orgId,
+    actorId,
+    documentId,
+    documentType,
+    documentTitle,
+    recipients,
+  } = input;
+  const detail = { documentId, documentType, documentTitle, recipients };
 
   return runInTransaction(async (client) => {
     const opportunity = await findOpportunity(client, opportunityId, orgId);
@@ -201,7 +189,7 @@ export function applyDocumentSent(
       opportunityId,
       actorId,
       eventType: "DOCUMENT_SENT",
-      detail: { documentId, documentType },
+      detail,
     });
 
     const toStage = stageForSentDocument(documentType);
@@ -213,9 +201,38 @@ export function applyDocumentSent(
 
     return applyTransition(
       client,
-      { opportunityId, orgId, actorId, toStage, detail: { documentId, documentType } },
+      { opportunityId, orgId, actorId, toStage, detail },
       { allowDowngrade: false },
     );
+  }, tx);
+}
+
+/**
+ * 문서를 기회에 연결했을 때의 이력 (F-114 DOCUMENT_CREATED).
+ *
+ * 이 기회의 타임라인 관점에서는 문서가 "이때 생긴" 것이다 — 문서는 보관함에서 먼저 만들어질
+ * 수 있고, 기회에 붙는 순간부터 그 기회의 자산이 된다. 단계는 바꾸지 않는다(전이는 발송 시점).
+ * 연결 해제는 이력을 남기지 않는다 — 없던 일로 만드는 게 아니라 연결만 끊는 동작이다.
+ */
+export function applyDocumentLinked(
+  input: DocumentEventInput,
+  tx?: Prisma.TransactionClient,
+): Promise<{ status: "recorded" } | { status: "not-found" }> {
+  const { opportunityId, orgId, actorId, documentId, documentType, documentTitle } =
+    input;
+
+  return runInTransaction(async (client) => {
+    const opportunity = await findOpportunity(client, opportunityId, orgId);
+    if (!opportunity) return { status: "not-found" as const };
+
+    await recordActivity(client, {
+      orgId,
+      opportunityId,
+      actorId,
+      eventType: "DOCUMENT_CREATED",
+      detail: { documentId, documentType, documentTitle },
+    });
+    return { status: "recorded" as const };
   }, tx);
 }
 
@@ -258,16 +275,10 @@ async function applyTransition(
   if (!opportunity) return { status: "not-found" };
 
   const from = opportunity.stage;
-  if (from === toStage) {
-    return { status: "skipped", from, to: toStage, reason: "same-stage" };
-  }
-  if (!options.allowDowngrade && !canAutoAdvance(from, toStage)) {
-    return {
-      status: "skipped",
-      from,
-      to: toStage,
-      reason: isClosedStage(from) ? "already-closed" : "no-downgrade",
-    };
+  // 허용 여부는 순수 규칙 모듈이 판정한다 (칸반 클라이언트와 같은 기준).
+  const decision = decideTransition(from, toStage, options);
+  if (!decision.allowed) {
+    return { status: "skipped", from, to: toStage, reason: decision.reason };
   }
 
   await client.opportunity.update({
