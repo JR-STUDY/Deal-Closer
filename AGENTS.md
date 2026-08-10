@@ -102,6 +102,7 @@ src/
       providers/       #  프로바이더 어댑터 (요청 형식 변환은 여기서만)
         anthropic.ts   #   Claude Messages API (system 캐시 breakpoint · output_config)
         openai.ts      #   GPT Responses API (instructions · text.format strict · input_file)
+        mock.ts        #   로컬 검증용 (실제 호출 없음, 프로덕션에서 거부)
       prompts.ts       #  시스템 프롬프트 + 사용자 메시지 조립 (캐시 적중 위해 가변값 금지)
       doc-spec.ts      #  응답 스펙(DocSpec) JSON Schema ↔ EditorDoc 변환
       revision-spec.ts #  부분 재작성 diff 스펙·적용 (F-215)
@@ -160,9 +161,15 @@ React 코드의 **보안·성능·정확성**을 [react-doctor](https://github.c
 
 Claude(Anthropic Messages API)와 GPT(OpenAI Responses API)를 **둘 다 지원**한다. 선택 순서:
 
-1. `AI_PROVIDER`(`anthropic` | `openai`) 를 명시하면 그대로 따른다.
+1. `AI_PROVIDER`(`anthropic` | `openai` | `mock`) 를 명시하면 그대로 따른다.
 2. `AI_MODEL_GENERATE` 모델명으로 판별한다 (`claude*`→anthropic, `gpt*`·`o1/o3/o4*`→openai).
 3. 쓸 수 있는 키가 한쪽만 있으면 그쪽을 쓴다. 그래도 모르면 anthropic.
+
+**로컬 검증용 목 프로바이더**: `AI_PROVIDER=mock` 으로 켜면 실제 LLM 을 호출하지 않고
+스키마에 맞는 응답을 즉시 돌려준다. 키·비용 없이 생성→에디터→버전→크레딧 경로를
+결정적으로 확인할 때 쓴다. **문장 품질·추론 정확도는 검증되지 않는다.**
+자동 선택되지 않으며(명시해야 켜짐), `NODE_ENV=production` 에서는 어댑터가 거부한다
+— 가짜 견적서가 고객에게 발송되는 사고를 코드로 차단한다.
 
 - **키 필수**: Claude 는 `ANTHROPIC_API_KEY`, GPT 는 `OPENAI_API_KEY`.
   없거나 형식이 틀리면 `503`, 호출 실패 시 `502` 를 반환한다.

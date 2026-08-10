@@ -10,12 +10,17 @@
 
 import "server-only";
 
-export type AiProvider = "anthropic" | "openai";
+/** 실제 API 를 호출하는 프로바이더 (키가 필요하다) */
+export type AiLiveProvider = "anthropic" | "openai";
+
+/** mock = 로컬 검증용. 실제 호출 없이 스키마에 맞는 응답을 즉시 돌려준다 */
+export type AiProvider = AiLiveProvider | "mock";
 
 /** 프로바이더별 기본 모델 */
 const DEFAULT_MODELS: Record<AiProvider, { generate: string; batch: string }> = {
   anthropic: { generate: "claude-opus-5", batch: "claude-sonnet-5" },
   openai: { generate: "gpt-5.6-sol", batch: "gpt-5.6-terra" },
+  mock: { generate: "mock-local", batch: "mock-local" },
 };
 
 /** 모델 이름만 보고 프로바이더를 판별한다 (판별 불가면 null) */
@@ -23,6 +28,7 @@ export function providerOfModel(model: string): AiProvider | null {
   const name = model.trim().toLowerCase();
   if (!name) return null;
   if (name.startsWith("claude")) return "anthropic";
+  if (name.startsWith("mock")) return "mock";
   if (
     name.startsWith("gpt") ||
     name.startsWith("chatgpt") ||
@@ -37,14 +43,18 @@ export function providerOfModel(model: string): AiProvider | null {
  * 사용할 프로바이더를 결정한다.
  *
  * 우선순위:
- *  1. AI_PROVIDER 를 명시했으면 그대로 따른다.
+ *  1. AI_PROVIDER 를 명시했으면 그대로 따른다. (mock 포함)
  *  2. AI_MODEL_GENERATE 모델명으로 판별한다. (예: gpt-5.6-sol → openai)
  *  3. 쓸 수 있는 키가 한쪽만 있으면 그쪽을 쓴다.
  *  4. 그래도 모르면 anthropic.
+ *
+ * mock 은 절대 자동 선택되지 않는다 — 명시해야만 켜진다.
  */
 function detectProvider(): AiProvider {
   const explicit = process.env.AI_PROVIDER?.trim().toLowerCase();
-  if (explicit === "openai" || explicit === "anthropic") return explicit;
+  if (explicit === "openai" || explicit === "anthropic" || explicit === "mock") {
+    return explicit;
+  }
 
   const fromModel = providerOfModel(process.env.AI_MODEL_GENERATE ?? "");
   if (fromModel) return fromModel;

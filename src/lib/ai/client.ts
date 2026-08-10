@@ -9,7 +9,11 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import { AiNotConfiguredError, type AiProvider } from "./config";
+import {
+  AiNotConfiguredError,
+  type AiLiveProvider,
+  type AiProvider,
+} from "./config";
 
 /** 문서 생성은 수십 초까지 걸릴 수 있다 (ms) */
 const REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
@@ -53,12 +57,12 @@ function openaiKeyProblem(apiKey: string): string | null {
 }
 
 /** 프로바이더별 환경변수 이름 (안내 문구용) */
-const KEY_ENV_NAME: Record<AiProvider, string> = {
+const KEY_ENV_NAME: Record<AiLiveProvider, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
 };
 
-function readKey(provider: AiProvider): { key: string } | { problem: string } {
+function readKey(provider: AiLiveProvider): { key: string } | { problem: string } {
   const envName = KEY_ENV_NAME[provider];
   const apiKey = process.env[envName]?.trim();
   if (!apiKey) {
@@ -75,6 +79,8 @@ function readKey(provider: AiProvider): { key: string } | { problem: string } {
 
 /** 해당 프로바이더로 문서 생성이 가능한 상태인지 (UI 안내·사전 검사용) */
 export function isAiConfigured(provider: AiProvider): boolean {
+  // mock 은 키가 필요 없다 (단, 프로덕션에서는 어댑터가 거부한다)
+  if (provider === "mock") return process.env.NODE_ENV !== "production";
   return "key" in readKey(provider);
 }
 

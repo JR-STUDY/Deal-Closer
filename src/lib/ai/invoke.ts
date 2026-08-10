@@ -44,12 +44,20 @@ export type StructuredValue = Omit<StructuredResult, "raw"> & {
   value: unknown;
 };
 
+function callProvider(call: StructuredCall): Promise<StructuredResult> {
+  switch (providerOf(call.model)) {
+    case "openai":
+      return import("./providers/openai").then((m) => m.callOpenAI(call));
+    case "mock":
+      return import("./providers/mock").then((m) => m.callMock(call));
+    default:
+      return import("./providers/anthropic").then((m) => m.callAnthropic(call));
+  }
+}
+
 export async function callStructured(call: StructuredCall): Promise<StructuredValue> {
   // 어댑터는 필요할 때만 로드한다 (쓰지 않는 SDK 를 서버 번들에 끌어오지 않도록)
-  const result =
-    providerOf(call.model) === "openai"
-      ? await (await import("./providers/openai")).callOpenAI(call)
-      : await (await import("./providers/anthropic")).callAnthropic(call);
+  const result = await callProvider(call);
 
   if (!result.raw) {
     throw new AiGenerationError("AI 응답이 비어 있습니다. 다시 시도해주세요.");
