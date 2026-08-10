@@ -6,6 +6,7 @@ import { getCurrentOrg } from "@/lib/session";
 import { DOCUMENT_STATUSES, DOCUMENT_TYPES } from "@/lib/constants";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { latestVersionsOnly } from "@/lib/document-version";
 import { LibraryToolbar } from "./_components/library-toolbar";
 import { DocumentList } from "./_components/document-list";
 
@@ -53,7 +54,7 @@ export default async function LibraryPage({
   // 이 화면은 "내 문서함"(공통 아님)만 다룬다. 공용 문서는 /library/common 에서 관리.
   const baseWhere = { orgId: org.id, isCommon: false };
 
-  const [documents, folders] = await Promise.all([
+  const [allDocuments, folders] = await Promise.all([
     prisma.document.findMany({
       where: {
         ...baseWhere,
@@ -71,6 +72,9 @@ export default async function LibraryPage({
       select: { id: true, name: true, parentId: true },
     }),
   ]);
+
+  // 버전 묶음별 최신 버전만 카드/목록에 노출한다 (F-214) — 지난 버전은 에디터의 버전 이력에서 본다
+  const documents = latestVersionsOnly(allDocuments);
 
   // 현재 폴더의 경로(브레드크럼) — 내 문서함 › 상위 › … › 현재
   const byId = new Map(folders.map((f) => [f.id, f]));

@@ -16,6 +16,14 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -36,8 +44,37 @@ import {
   MAX_ATTACHMENTS_TOTAL_SIZE,
   ATTACHMENT_ACCEPT,
   isAcceptedAttachment,
+  DOCUMENT_TYPES,
+  DOCUMENT_TYPE_LABELS,
+  TEMPLATE_SCOPE_LABELS,
+  type DocumentType,
+  type TemplateScope,
 } from "@/lib/constants";
+import { formatKRW } from "@/lib/format";
 import { DocumentPicker, type LibraryDoc } from "./document-picker";
+
+/** 불러올 수 있는 표준 양식 (F-211) */
+export type TemplateChoice = {
+  id: string;
+  name: string;
+  type: string;
+  scope: string;
+  variables: { key: string; label: string; sample: string | null; required: boolean }[];
+};
+
+/** 계약서의 소스로 고를 수 있는 확정 견적서 (F-213) */
+export type ConfirmedQuote = {
+  id: string;
+  title: string;
+  clientName: string | null;
+  amount: number;
+  version: number;
+};
+
+/** 문서 종류 미지정 = AI 가 프롬프트를 보고 판단 */
+const AUTO_TYPE = "AUTO";
+/** 양식 미선택 = 양식 없이 새로 구성 */
+const NO_TEMPLATE = "NONE";
 
 const MAX_LENGTH = 2000;
 
@@ -61,11 +98,27 @@ function formatBytes(bytes: number): string {
 /** AI 대화형 문서 생성기 입력 폼 (클라이언트 전용 상태) */
 export function GeneratorForm({
   libraryDocuments,
+  templates,
+  confirmedQuotes,
+  initialTemplateId,
 }: {
   libraryDocuments: LibraryDoc[];
+  templates: TemplateChoice[];
+  confirmedQuotes: ConfirmedQuote[];
+  /** 표준 양식 화면에서 넘어온 경우 미리 선택할 양식 (?template=) */
+  initialTemplateId?: string | null;
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
+  // 문서 설정 (F-211 · F-213)
+  const [templateId, setTemplateId] = useState<string>(
+    initialTemplateId ?? NO_TEMPLATE,
+  );
+  const [documentType, setDocumentType] = useState<string>(AUTO_TYPE);
+  const [sourceQuoteId, setSourceQuoteId] = useState<string>(NO_TEMPLATE);
+  const [clientName, setClientName] = useState("");
+  const [clientContact, setClientContact] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [folderAttach, setFolderAttach] = useState<{
     name: string;
@@ -91,6 +144,23 @@ export function GeneratorForm({
   const selectedRefs = refIds
     .map((id) => libraryDocuments.find((d) => d.id === id))
     .filter((d): d is LibraryDoc => Boolean(d));
+
+  const selectedTemplate =
+    templateId === NO_TEMPLATE
+      ? null
+      : (templates.find((t) => t.id === templateId) ?? null);
+
+  // 양식을 고르면 그 양식의 문서 종류를 따른다 (수동 선택이 있으면 그 값 우선)
+  const effectiveType =
+    documentType !== AUTO_TYPE ? documentType : (selectedTemplate?.type ?? AUTO_TYPE);
+
+  // 확정 견적서 소스 선택은 계약서를 만들 때만 의미가 있다 (F-213)
+  const showQuoteSource =
+    effectiveType === "CONTRACT" && confirmedQuotes.length > 0;
+
+  const requiredVariables = (selectedTemplate?.variables ?? []).filter(
+    (v) => v.required,
+  );
 
   /** 선택/드롭한 파일을 검증 후 상태에 병합 (클라이언트 1차 검증, 서버 재검증) */
   const addFiles = (incoming: FileList | File[]) => {
@@ -218,6 +288,20 @@ export function GeneratorForm({
     if (saveAsCommon) {
       formData.append("saveAsCommon", "true");
     }
+    // 표준 양식 불러오기 (F-211)
+    if (templateId !== NO_TEMPLATE) {
+      formData.append("templateId", templateId);
+    }
+    if (effectiveType !== AUTO_TYPE) {
+      formData.append("documentType", effectiveType);
+    }
+    // 확정 견적서를 소스로 계약서 생성 (F-213)
+    if (showQuoteSource && sourceQuoteId !== NO_TEMPLATE) {
+      formData.append("sourceDocumentId", sourceQuoteId);
+    }
+    if (clientName.trim()) formData.append("clientName", clientName.trim());
+    if (clientContact.trim()) formData.append("clientContact", clientContact.trim());
+    if (clientEmail.trim()) formData.append("clientEmail", clientEmail.trim());
 
     try {
       const res = await fetch("/api/generate", {
@@ -239,7 +323,8 @@ export function GeneratorForm({
         return;
       }
 
-      toast.success("AI 초안을 생성했습니다.");
+      // 생성 요약(무엇을 어떻게 만들었는지)을 그대로 보여준다
+      toast.success(json?.data?.summary ?? "AI 초안을 생성했습니다.");
       router.push(`/editor/${documentId}`);
       // 성공 시 페이지 이동하므로 isSubmitting 을 유지해 중복 제출을 막는다.
     } catch {
@@ -270,6 +355,142 @@ export function GeneratorForm({
             placeholder="예: 협력사에게 받은 견적서에 마진 20%를 붙여서 견적서를 만들어줘"
             className="min-h-40 resize-none text-base"
           />
+
+          {/* 문서 설정 — 표준 양식 불러오기(F-211) · 문서 종류 · 거래처 정보 */}
+          <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="template-select" className="text-xs">
+                  표준 양식 불러오기
+                </Label>
+                <Select
+                  value={templateId}
+                  onValueChange={setTemplateId}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger id="template-select" className="w-full">
+                    <SelectValue placeholder="양식 없이 생성" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_TEMPLATE}>양식 없이 생성</SelectItem>
+                    {templates.map((template) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        {template.name} ·{" "}
+                        {DOCUMENT_TYPE_LABELS[template.type as DocumentType] ??
+                          template.type}
+                        {" · "}
+                        {TEMPLATE_SCOPE_LABELS[template.scope as TemplateScope] ??
+                          template.scope}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="type-select" className="text-xs">
+                  문서 종류
+                </Label>
+                <Select
+                  value={documentType}
+                  onValueChange={setDocumentType}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger id="type-select" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={AUTO_TYPE}>AI 가 판단</SelectItem>
+                    {DOCUMENT_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {DOCUMENT_TYPE_LABELS[type]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* 계약서: 확정된 견적서를 소스로 지정 (F-213) */}
+            {showQuoteSource && (
+              <div className="space-y-1.5">
+                <Label htmlFor="quote-select" className="text-xs">
+                  근거가 되는 확정 견적서
+                </Label>
+                <Select
+                  value={sourceQuoteId}
+                  onValueChange={setSourceQuoteId}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger id="quote-select" className="w-full">
+                    <SelectValue placeholder="선택 안 함" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_TEMPLATE}>선택 안 함</SelectItem>
+                    {confirmedQuotes.map((quote) => (
+                      <SelectItem key={quote.id} value={quote.id}>
+                        {quote.title} · v{quote.version} · {formatKRW(quote.amount)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  선택한 견적서의 품목·금액을 그대로 계약 조건에 반영합니다.
+                </p>
+              </div>
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="client-name" className="text-xs">
+                  고객사명
+                </Label>
+                <Input
+                  id="client-name"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  disabled={isSubmitting}
+                  placeholder="(주)글로벌커머스"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="client-contact" className="text-xs">
+                  수신 담당자
+                </Label>
+                <Input
+                  id="client-contact"
+                  value={clientContact}
+                  onChange={(e) => setClientContact(e.target.value)}
+                  disabled={isSubmitting}
+                  placeholder="김레인 책임"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="client-email" className="text-xs">
+                  담당자 이메일
+                </Label>
+                <Input
+                  id="client-email"
+                  type="email"
+                  value={clientEmail}
+                  onChange={(e) => setClientEmail(e.target.value)}
+                  disabled={isSubmitting}
+                  placeholder="rain@example.com"
+                />
+              </div>
+            </div>
+
+            {/* 선택한 양식의 필수 변수 안내 (F-204) */}
+            {requiredVariables.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                이 양식의 필수 항목:{" "}
+                <span className="font-medium text-foreground">
+                  {requiredVariables.map((v) => v.label).join(", ")}
+                </span>{" "}
+                — 위 입력값이나 요청 내용에 포함해주세요.
+              </p>
+            )}
+          </div>
 
           {/* 파일/폴더 첨부 — 클릭 시 [파일 선택 / 폴더 선택] 메뉴, 드롭도 지원 */}
           <DropdownMenu>

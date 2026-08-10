@@ -35,9 +35,40 @@ export type DocRow = {
   createdAt: Date;
   folderId: string | null;
   isCommon: boolean;
+  /** 버전 번호 (F-214) — 목록에는 묶음별 최신 버전만 노출된다 */
+  version: number;
+  /** 확정본 여부 (F-214) */
+  isConfirmed: boolean;
 };
 
 type FolderOption = { id: string; name: string };
+
+/** 버전·확정본 배지 (F-214) — v1 이고 확정본이 아니면 아무것도 표시하지 않는다 */
+function VersionBadges({
+  version,
+  isConfirmed,
+}: {
+  version: number;
+  isConfirmed: boolean;
+}) {
+  return (
+    <>
+      {version > 1 ? (
+        <span
+          className="rounded border px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground"
+          title={`${version}번째 버전`}
+        >
+          v{version}
+        </span>
+      ) : null}
+      {isConfirmed ? (
+        <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+          확정본
+        </span>
+      ) : null}
+    </>
+  );
+}
 
 type View = "card" | "list";
 
@@ -133,7 +164,13 @@ export function DocumentList({
             <Card key={doc.id} className="flex flex-col">
               <CardContent className="flex-1 space-y-3">
                 <div className="flex items-center justify-between">
-                  <StatusBadge status={doc.status} />
+                  <div className="flex items-center gap-1.5">
+                    <StatusBadge status={doc.status} />
+                    <VersionBadges
+                      version={doc.version}
+                      isConfirmed={doc.isConfirmed}
+                    />
+                  </div>
                   <div className="flex items-center gap-1">
                     <DocTypeBadge type={doc.type} />
                     <DocumentCardActions
@@ -216,7 +253,13 @@ export function DocumentList({
                     <DocTypeBadge type={doc.type} />
                   </TableCell>
                   <TableCell className="text-center">
-                    <StatusBadge status={doc.status} />
+                    <div className="flex flex-wrap items-center justify-center gap-1.5">
+                      <StatusBadge status={doc.status} />
+                      <VersionBadges
+                        version={doc.version}
+                        isConfirmed={doc.isConfirmed}
+                      />
+                    </div>
                   </TableCell>
                   <TableCell className="text-center tabular-nums">
                     {formatKRW(doc.amount)}

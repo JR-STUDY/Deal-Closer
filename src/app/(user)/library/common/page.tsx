@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { latestVersionsOnly } from "@/lib/document-version";
 import { DocumentList } from "../_components/document-list";
 import { ViewToggle } from "../_components/view-toggle";
 
@@ -20,7 +21,7 @@ export default async function CommonDocumentsPage({
   const activeFolder = folder || null;
   const activeView = view === "list" ? "list" : "card";
 
-  const [documents, folders] = await Promise.all([
+  const [allDocuments, folders] = await Promise.all([
     prisma.document.findMany({
       where: {
         orgId: org.id,
@@ -37,6 +38,9 @@ export default async function CommonDocumentsPage({
       select: { id: true, name: true, parentId: true },
     }),
   ]);
+
+  // 버전 묶음별 최신 버전만 노출한다 (F-214)
+  const documents = latestVersionsOnly(allDocuments);
 
   // 현재 폴더의 경로(브레드크럼) — 공용문서함 › 상위 › … › 현재
   const byId = new Map(folders.map((f) => [f.id, f]));

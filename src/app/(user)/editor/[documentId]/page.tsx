@@ -53,6 +53,8 @@ export default async function EditorPage({
       initialStatus={document.status}
       initialDoc={initialDoc}
       catalog={catalog}
+      version={document.version}
+      isConfirmed={document.isConfirmed}
     />
   );
 }

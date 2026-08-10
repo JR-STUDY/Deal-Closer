@@ -23,6 +23,8 @@ export function DocumentEditorLoader(props: {
   initialStatus: string;
   initialDoc: EditorDoc;
   catalog: CatalogOption[];
+  version: number;
+  isConfirmed: boolean;
 }) {
   return <DocumentEditor {...props} />;
 }

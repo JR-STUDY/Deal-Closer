@@ -3,13 +3,22 @@ import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
+import { latestVersionsOnly } from "@/lib/document-version";
 import { GeneratorForm } from "./_components/generator-form";
 
-export default async function GeneratorPage() {
-  const org = await getCurrentOrg();
+export default async function GeneratorPage({
+  searchParams,
+}: {
+  // Next.js 16: searchParams 는 Promise 이므로 await 한다
+  searchParams: Promise<{ template?: string }>;
+}) {
+  const [{ template: templateParam }, org] = await Promise.all([
+    searchParams,
+    getCurrentOrg(),
+  ]);
 
   // 독립 조회는 병렬화 (REACT_BEST_PRACTICES ①)
-  const [wallet, documents] = await Promise.all([
+  const [wallet, allDocuments, templates, confirmedQuotes] = await Promise.all([
     prisma.creditWallet.findUnique({ where: { orgId: org.id } }),
     prisma.document.findMany({
       where: { orgId: org.id, status: { not: "VOID" } },
@@ -22,10 +31,48 @@ export default async function GeneratorPage() {
         clientName: true,
         amount: true,
         createdAt: true,
+        rootId: true,
+        version: true,
       },
-      take: 100,
+      take: 200,
+    }),
+    // 불러올 표준 양식 (F-211) — 변수 필드도 함께 넘겨 입력 안내에 쓴다
+    prisma.template.findMany({
+      where: { orgId: org.id },
+      orderBy: [{ scope: "asc" }, { updatedAt: "desc" }],
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        scope: true,
+        variables: {
+          orderBy: { sortOrder: "asc" },
+          select: { key: true, label: true, sample: true, required: true },
+        },
+      },
+    }),
+    // 계약서의 소스로 고를 수 있는 "확정된 견적서" (F-213)
+    prisma.document.findMany({
+      where: {
+        orgId: org.id,
+        type: "QUOTE",
+        isConfirmed: true,
+        status: { not: "VOID" },
+      },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        clientName: true,
+        amount: true,
+        version: true,
+      },
+      take: 50,
     }),
   ]);
+
+  // 참고 문서 선택기에는 버전 묶음별 최신 버전만 노출한다 (F-214)
+  const documents = latestVersionsOnly(allDocuments).slice(0, 100);
 
   return (
     <>
@@ -41,7 +88,16 @@ export default async function GeneratorPage() {
       />
 
       <div className="flex-1 overflow-auto p-8">
-        <GeneratorForm libraryDocuments={documents} />
+        <GeneratorForm
+          libraryDocuments={documents}
+          templates={templates}
+          confirmedQuotes={confirmedQuotes}
+          initialTemplateId={
+            templateParam && templates.some((t) => t.id === templateParam)
+              ? templateParam
+              : null
+          }
+        />
       </div>
     </>
   );

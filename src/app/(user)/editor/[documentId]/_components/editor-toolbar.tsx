@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Send, Save, Eye, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AiReviseDialog } from "./ai-revise-dialog";
 
 type Props = {
   documentId: string;
@@ -13,6 +14,10 @@ type Props = {
   onAddPage: () => void;
   onRemovePage: () => void;
   onPreview: () => void;
+  /** 편집 중인 현재 본문 (AI 부분 재작성 입력) */
+  getContentJson: () => string;
+  /** AI 재작성으로 새 버전이 생겼을 때 이동 처리 */
+  onRevised: (documentId: string) => void;
 };
 
 export function EditorToolbar({
@@ -24,6 +29,8 @@ export function EditorToolbar({
   onAddPage,
   onRemovePage,
   onPreview,
+  getContentJson,
+  onRevised,
 }: Props) {
   return (
     <div className="flex w-full items-center gap-2">
@@ -57,6 +64,14 @@ export function EditorToolbar({
         <Eye className="size-4" />
         미리보기
       </Button>
+
+      {/* AI 부분 재작성 (F-215) — 결과는 새 버전으로 저장된다 */}
+      <AiReviseDialog
+        documentId={documentId}
+        getContentJson={getContentJson}
+        onRevised={onRevised}
+      />
+
 
       <div className="flex-1" />
 

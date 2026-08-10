@@ -47,6 +47,7 @@ import { EditorToolbar } from "./editor-toolbar";
 import { EditorPreview } from "./editor-preview";
 import { BlockInspector, ContentForm } from "./block-inspector";
 import { DocumentStatusControl } from "./document-status-control";
+import { DocumentVersionControl } from "./document-version-control";
 
 type Props = {
   documentId: string;
@@ -54,6 +55,10 @@ type Props = {
   initialStatus: string;
   initialDoc: EditorDoc;
   catalog: CatalogOption[];
+  /** 현재 문서의 버전 번호 (F-214) */
+  version: number;
+  /** 확정본 여부 (F-214) */
+  isConfirmed: boolean;
 };
 
 export function DocumentEditor({
@@ -62,6 +67,8 @@ export function DocumentEditor({
   initialStatus,
   initialDoc,
   catalog,
+  version,
+  isConfirmed,
 }: Props) {
   const [doc, setDoc] = useState<EditorDoc>(initialDoc);
   const [docTitle, setDocTitle] = useState(initialTitle);
@@ -356,6 +363,21 @@ export function DocumentEditor({
     }
   }, [doc, docTitle, documentId]);
 
+  /** AI 재작성·새 버전 저장 입력으로 쓰는 현재 본문 스냅샷 */
+  const getContentJson = useCallback(() => JSON.stringify(doc), [doc]);
+
+  /**
+   * 다른 버전(또는 새로 만든 버전)으로 이동한다.
+   * 새 버전에는 지금 편집 내용이 이미 담겨 있으므로 미저장 경고를 띄우지 않는다.
+   */
+  const goToVersion = useCallback(
+    (nextDocumentId: string) => {
+      setDirty(false);
+      router.push(`/editor/${nextDocumentId}`);
+    },
+    [router],
+  );
+
   // 미저장 이탈 경고 (정책 STATE_)
   useEffect(() => {
     function onBeforeUnload(e: BeforeUnloadEvent) {
@@ -468,6 +490,14 @@ export function DocumentEditor({
               placeholder="문서 제목"
               className="h-auto min-w-0 flex-1 border-transparent bg-transparent px-2 py-1 text-xl font-semibold tracking-tight shadow-none hover:border-input focus-visible:border-input"
             />
+            {/* 버전 이력·확정본 (F-214) */}
+            <DocumentVersionControl
+              documentId={documentId}
+              version={version}
+              isConfirmed={isConfirmed}
+              getContentJson={getContentJson}
+              onNavigate={goToVersion}
+            />
             <DocumentStatusControl
               documentId={documentId}
               status={initialStatus}
@@ -482,6 +512,8 @@ export function DocumentEditor({
             onAddPage={handleAddPage}
             onRemovePage={handleRemovePage}
             onPreview={() => setPreviewOpen(true)}
+            getContentJson={getContentJson}
+            onRevised={goToVersion}
           />
         </div>
         <EditorCanvas
