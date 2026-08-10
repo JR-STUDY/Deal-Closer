@@ -207,17 +207,38 @@ export default async function OpportunitiesPage({
         ) : (
           <>
             <div className="overflow-hidden rounded-lg border">
-              <Table>
+              {/*
+                컬럼 폭을 고정한다 (A-5). 표 기본값(table-layout: auto)은 그 페이지에 실제로 담긴
+                내용으로 폭을 다시 계산해서, 페이지를 넘기거나 필터를 걸 때마다 칸 경계가 옮겨간다.
+                `table-fixed` 는 **머리행에 적힌 폭만** 보므로 행 내용과 무관하게 같은 자리에 선다.
+
+                폭은 실제 값을 재서 잡았다. 남는 폭은 **기회명 한 칸만** 흡수한다(폭을 적지 않은
+                유일한 칸) — 행의 정체이자 가장 길고 들쭉날쭉한 값이라 여기에 몰아주는 편이 낫고,
+                나머지는 화면이 넓어져도 그대로라 시선 위치가 유지된다. 좁은 화면에서는 `min-w`
+                아래로 눌리는 대신 표 컨테이너(`overflow-x-auto`)가 가로로 스크롤된다.
+              */}
+              <Table className="min-w-[960px] table-fixed">
                 <TableHeader>
                   <TableRow>
+                    {/* 폭 미지정 = 남는 폭 전부. `min-w` 에서 최소 224px 를 보장받는다 */}
                     <TableHead>기회명</TableHead>
-                    <TableHead>거래처</TableHead>
-                    <TableHead>단계</TableHead>
-                    <TableHead className="text-right">예상 금액</TableHead>
-                    <TableHead className="text-right">예상 마감일</TableHead>
+                    {/* 208px: "(주)에이비씨 테크놀로지"·"Bluewave Systems Korea" 가 잘리지 않는 폭 */}
+                    <TableHead className="w-[208px]">거래처</TableHead>
+                    {/* 104px: 가장 긴 배지 "검토/협상" 기준. 배지 칸은 더 넓을 이유가 없다 */}
+                    <TableHead className="w-[104px]">단계</TableHead>
+                    {/* 144px: "₩1,800,000,000"(10억대)까지 한 줄로 들어가는 폭 */}
+                    <TableHead className="w-[144px] text-right">
+                      예상 금액
+                    </TableHead>
+                    {/* 112px: 값 "2026.08.15" 보다 머리글 "예상 마감일" 이 길어 머리글이 폭을 정한다 */}
+                    <TableHead className="w-[112px] text-right">
+                      예상 마감일
+                    </TableHead>
                     {/* 거래처 담당자와 헷갈리지 않게 못박는다 (기회-14) */}
-                    <TableHead>영업 담당자</TableHead>
-                    <TableHead className="w-12">
+                    {/* 112px: 이름(3~4자)보다 머리글이 길다 — 예상 마감일과 같은 폭으로 맞춘다 */}
+                    <TableHead className="w-[112px]">영업 담당자</TableHead>
+                    {/* 56px: ⋯ 버튼(32px) + 셀 좌우 여백(16px) */}
+                    <TableHead className="w-14">
                       <span className="sr-only">관리</span>
                     </TableHead>
                   </TableRow>
@@ -226,13 +247,24 @@ export default async function OpportunitiesPage({
                   {opportunities.map((opportunity) => (
                     // 행 어디를 눌러도 상세로 간다 (거래처-1 과 같은 규칙) — 덮개는 기회명 링크가 만든다
                     <TableRow key={opportunity.id} className={ROW_LINK_ROW}>
+                      {/* 말줄임·title 은 RowLink 안에서 처리된다 (덮개를 자르지 않는 자리) */}
                       <TableCell className="font-medium">
-                        <RowLink href={`/opportunities/${opportunity.id}`}>
+                        <RowLink
+                          href={`/opportunities/${opportunity.id}`}
+                          title={opportunity.name}
+                        >
                           {opportunity.name}
                         </RowLink>
                       </TableCell>
-                      {/* 거래처 링크는 덮개 위로 올려 자기 목적지(거래처 상세)를 지킨다 */}
-                      <TableCell className={ROW_LINK_ABOVE}>
+                      {/*
+                        거래처 링크는 덮개 위로 올려 자기 목적지(거래처 상세)를 지킨다.
+                        말줄임은 링크가 아니라 **칸**에 건다 — 잘린 자리(…)에 커서를 올려도
+                        title 이 뜨고, 링크에 overflow 를 걸지 않아 덮개와도 무관하다.
+                      */}
+                      <TableCell
+                        className={`truncate ${ROW_LINK_ABOVE}`}
+                        title={opportunity.account.companyName}
+                      >
                         <Link
                           href={`/accounts/${opportunity.accountId}`}
                           className="rounded text-muted-foreground transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
@@ -243,10 +275,11 @@ export default async function OpportunitiesPage({
                       <TableCell>
                         <StageBadge stage={opportunity.stage} />
                       </TableCell>
-                      <TableCell className="text-right">
+                      {/* 자릿수마다 글자폭이 같아야 칸을 고정한 보람이 있다 (tabular-nums) */}
+                      <TableCell className="text-right tabular-nums">
                         {formatKRW(opportunity.expectedAmount)}
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
                         {opportunity.expectedCloseDate ? (
                           formatDate(opportunity.expectedCloseDate)
                         ) : (
@@ -255,7 +288,9 @@ export default async function OpportunitiesPage({
                           </span>
                         )}
                       </TableCell>
-                      <TableCell>{opportunity.owner.name}</TableCell>
+                      <TableCell className="truncate" title={opportunity.owner.name}>
+                        {opportunity.owner.name}
+                      </TableCell>
                       {/* 덮개 위로 올려 메뉴 클릭이 상세로 새지 않게 한다 */}
                       <TableCell className={`text-right ${ROW_LINK_ABOVE}`}>
                         <OpportunityRowActions
