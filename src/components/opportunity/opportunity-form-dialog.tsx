@@ -229,10 +229,11 @@ export function OpportunityFormDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="opportunity-owner">담당자</Label>
+            {/* 거래처 담당자 입력란과 헷갈리지 않게 "영업 담당자" 로 못박는다 (기회-14) */}
+            <Label htmlFor="opportunity-owner">영업 담당자</Label>
             <Select value={ownerId} onValueChange={setOwnerId}>
               <SelectTrigger id="opportunity-owner" className="w-full">
-                <SelectValue placeholder="담당자를 선택해주세요" />
+                <SelectValue placeholder="영업 담당자를 선택해주세요" />
               </SelectTrigger>
               <SelectContent>
                 {owners.map((owner) => (

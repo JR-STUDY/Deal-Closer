@@ -116,5 +116,5 @@ export function stageChangeWarning(
   to: OpportunityStage,
 ): string | null {
   if (!isStageReversal(from, to)) return null;
-  return `‘${OPPORTUNITY_STAGE_LABELS[from]}’(으)로 마감된 기회를 ‘${OPPORTUNITY_STAGE_LABELS[to]}’ 단계로 되돌립니다. 마감 확정일과 실주 사유가 지워지며, 되돌린 기록은 타임라인에 남습니다.`;
+  return `‘${OPPORTUNITY_STAGE_LABELS[from]}’(으)로 마감된 기회를 ‘${OPPORTUNITY_STAGE_LABELS[to]}’ 단계로 되돌립니다. 마감 확정일과 실주 사유가 지워지며, 되돌린 기록은 이력에 남습니다.`;
 }

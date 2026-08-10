@@ -135,11 +135,11 @@ export function SenderOpportunityLink({
           <p className="text-xs text-muted-foreground">
             {targetStage
               ? `발송하시면 ‘${linked.name}’ 의 단계가 ‘${OPPORTUNITY_STAGE_LABELS[targetStage]}’ 로 이동합니다. 이미 그 단계를 지났다면 그대로 유지됩니다.`
-              : "이 문서 종류는 발송해도 단계가 바뀌지 않습니다. 발송 이력만 기회 타임라인에 쌓입니다."}
+              : "이 문서 종류는 발송해도 단계가 바뀌지 않습니다. 발송 기록만 기회 이력에 쌓입니다."}
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            기회를 연결하시면 발송 이력이 그 기회의 타임라인에 쌓이고, 단계도 자동으로
+            기회를 연결하시면 발송 기록이 그 기회의 이력에 쌓이고, 단계도 자동으로
             이동합니다.
           </p>
         )}

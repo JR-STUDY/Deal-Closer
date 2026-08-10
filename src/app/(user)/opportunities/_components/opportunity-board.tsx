@@ -277,7 +277,7 @@ const BoardCardItem = memo(function BoardCardItem({
         <div className="flex items-center gap-1.5">
           <dt className="flex items-center gap-1.5">
             <User className="size-3.5" aria-hidden="true" />
-            <span className="sr-only">담당자</span>
+            <span className="sr-only">영업 담당자</span>
           </dt>
           <dd>{card.ownerName}</dd>
         </div>

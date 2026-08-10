@@ -108,6 +108,14 @@ export function isClosedOpportunityStage(stage: OpportunityStage): boolean {
   );
 }
 
+// ── 목록 페이지네이션 (거래처-3 · 기회-18) ──
+/**
+ * 목록 한 페이지에 보여줄 행 수. 거래처·기회 목록이 같은 값을 쓴다
+ * (두 화면의 페이지 감각이 다르면 같은 컴포넌트를 쓴 의미가 없다).
+ * 기회 칸반 보기는 페이지네이션 대상이 아니다 — 전체가 보여야 파이프라인이 성립한다.
+ */
+export const LIST_PAGE_SIZE = 20;
+
 // ── 활동 이력 이벤트 유형 (PRD F-114) ──
 export const ACTIVITY_EVENT_TYPES = [
   "OPPORTUNITY_CREATED",

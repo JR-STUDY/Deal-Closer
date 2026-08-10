@@ -49,7 +49,7 @@ function text(
 
 /**
  * 수신자 요약 — 세미콜론 구분 목록을 "첫 주소 외 N명" 으로 줄인다.
- * 타임라인 한 줄에 주소가 길게 늘어지면 다른 정보가 밀린다.
+ * 이력 한 줄에 주소가 길게 늘어지면 다른 정보가 밀린다.
  */
 function summarizeRecipients(recipients: string): string {
   // 다듬기와 빈 값 제거를 한 번에 처리한다 (map + filter 로 두 번 돌지 않는다)
@@ -63,7 +63,7 @@ function summarizeRecipients(recipients: string): string {
 
 /**
  * 활동 이력의 `detail`(JSON 문자열)을 사람이 읽을 한 줄로 옮긴다 (F-114).
- * 형식이 깨졌거나 표시할 내용이 없으면 null 을 돌려 타임라인이 라벨만 보이게 한다.
+ * 형식이 깨졌거나 표시할 내용이 없으면 null 을 돌려 이력이 라벨만 보이게 한다.
  *
  * 문서 발송으로 단계가 바뀌면 detail 에 단계와 문서 정보가 함께 담긴다 →
  * "제안 → 검토/협상 · 계약서" 처럼 이어 붙인다.
@@ -105,7 +105,7 @@ function describeActivity(
 }
 
 /**
- * 영업 기회 상세 (F-111) — 기본 정보 + 수정·삭제 + 타임라인·연관 문서.
+ * 영업 기회 상세 (F-111) — 기본 정보 + 수정·삭제 + 이력·연관 문서.
  *
  * 현재 단계는 표시만 하고 변경 UI 는 두지 않는다 (F-112 는 Phase 3 범위).
  * 다섯 조회는 서로 독립이라 병렬로 실행하고, 전부 orgId 로 스코프한다.
@@ -127,7 +127,7 @@ export default async function OpportunityDetailPage({
         // 스테퍼가 실주 사유를 함께 보여주므로 그 필드만 더 읽는다 (F-117)
         select: { ...OPPORTUNITY_DTO_SELECT, lostReason: true },
       }),
-      // 타임라인은 최신 활동이 위에 오도록 시간 역순으로 읽는다
+      // 이력은 최신 활동이 위에 오도록 시간 역순으로 읽는다
       prisma.activityLog.findMany({
         where: { opportunityId, orgId: user.orgId },
         orderBy: { occurredAt: "desc" },
@@ -251,7 +251,8 @@ export default async function OpportunityDetailPage({
                     </span>
                   )}
                 </InfoRow>
-                <InfoRow label="담당자">{dto.ownerName}</InfoRow>
+                {/* 거래처 담당자와 헷갈리지 않도록 영업 담당자로 못박는다 (기회-14) */}
+                <InfoRow label="영업 담당자">{dto.ownerName}</InfoRow>
               </dl>
             </CardContent>
           </Card>

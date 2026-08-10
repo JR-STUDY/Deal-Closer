@@ -17,7 +17,7 @@ import type { ActivityEventType } from "@/lib/constants";
 import { formatDate, formatDateTime, formatKRW } from "@/lib/format";
 
 /**
- * 기회 상세의 타임라인·연관 문서 (F-111 · F-114).
+ * 기회 상세의 이력·연관 문서 (F-111 · F-114).
  *
  * 기회 생성·단계 변경·문서 연결·문서 발송·수주·실주가 한 줄기로 쌓인다. `detail` 파싱과
  * 라벨링·문서 링크 판정은 서버 컴포넌트가 마치고, 여기서는 표시만 한다.
@@ -80,7 +80,7 @@ const EVENT_STYLES: Record<
   },
 };
 
-/** 정의 밖 이벤트도 타임라인이 깨지지 않게 중립 표시로 받는다 */
+/** 정의 밖 이벤트도 이력 목록이 깨지지 않게 중립 표시로 받는다 */
 const FALLBACK_EVENT_STYLE = {
   icon: CircleDot,
   className: "bg-muted text-muted-foreground",
@@ -129,7 +129,7 @@ export function OpportunityDetailTabs({
     <Tabs defaultValue="timeline" className="gap-4">
       <TabsList>
         <TabsTrigger value="timeline">
-          <TabLabel label="타임라인" count={timeline.length} />
+          <TabLabel label="이력" count={timeline.length} />
         </TabsTrigger>
         <TabsTrigger value="documents">
           <TabLabel label="연관 문서" count={documents.length} />
@@ -140,43 +140,57 @@ export function OpportunityDetailTabs({
         {timeline.length === 0 ? (
           <EmptyPanel message="아직 기록된 활동이 없습니다. 단계를 바꾸거나 문서를 발송하시면 이력이 쌓입니다." />
         ) : (
-          <ol className="ml-3.5 space-y-5 border-l pl-7">
-            {timeline.map((entry) => {
+          // 아이콘 칸(1.75rem)과 본문 칸을 격자로 나눠 픽셀 보정 없이 정렬한다 (기회-10)
+          <ol className="space-y-5">
+            {timeline.map((entry, index) => {
               const { icon: Icon, className } = eventStyle(entry.eventType);
+              const isLast = index === timeline.length - 1;
               return (
-                <li key={entry.id} className="relative">
-                  {/* 아이콘 원이 세로선 위에 놓이도록 반지름(size-7 의 절반)만큼 왼쪽으로 뺀다 */}
+                <li
+                  key={entry.id}
+                  className="relative grid grid-cols-[1.75rem_1fr] gap-x-3"
+                >
+                  {/* 세로 연결선 — 아이콘 아래에서 다음 아이콘까지만 잇는다 (마지막 항목 뒤로는 끊는다) */}
+                  {isLast ? null : (
+                    <span
+                      aria-hidden="true"
+                      className="absolute top-7 -bottom-5 left-[0.875rem] w-px -translate-x-1/2 bg-border"
+                    />
+                  )}
                   <span
                     aria-hidden="true"
                     className={cn(
-                      "absolute -top-0.5 -left-[2.375rem] flex size-7 items-center justify-center rounded-full border-2 border-background",
+                      "flex size-7 items-center justify-center rounded-full",
                       className,
                     )}
                   >
                     <Icon className="size-3.5" />
                   </span>
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                    <p className="text-sm font-medium">{entry.label}</p>
-                    <time
-                      dateTime={entry.occurredAt.toISOString()}
-                      className="text-xs text-muted-foreground"
-                    >
-                      {formatDateTime(entry.occurredAt)}
-                    </time>
+                  {/* 아이콘 중심(0.875rem)에 제목 첫 줄 중심(text-sm 줄높이 1.25rem 의 절반)을 맞춘다 */}
+                  <div className="min-w-0 pt-1">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                      <p className="text-sm font-medium">{entry.label}</p>
+                      <time
+                        dateTime={entry.occurredAt.toISOString()}
+                        className="text-xs text-muted-foreground"
+                      >
+                        {formatDateTime(entry.occurredAt)}
+                      </time>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {entry.actorName}
+                      {entry.detailText ? ` · ${entry.detailText}` : ""}
+                    </p>
+                    {entry.documentHref ? (
+                      <Link
+                        href={entry.documentHref}
+                        className="mt-1 inline-flex items-center gap-1 rounded text-xs font-medium text-primary transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      >
+                        <FileText className="size-3.5" aria-hidden="true" />
+                        {entry.documentTitle ?? "문서 열기"}
+                      </Link>
+                    ) : null}
                   </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {entry.actorName}
-                    {entry.detailText ? ` · ${entry.detailText}` : ""}
-                  </p>
-                  {entry.documentHref ? (
-                    <Link
-                      href={entry.documentHref}
-                      className="mt-1 inline-flex items-center gap-1 rounded text-xs font-medium text-primary transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    >
-                      <FileText className="size-3.5" aria-hidden="true" />
-                      {entry.documentTitle ?? "문서 열기"}
-                    </Link>
-                  ) : null}
                 </li>
               );
             })}
