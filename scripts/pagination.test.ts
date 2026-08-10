@@ -54,6 +54,10 @@ check(
 );
 
 // ────────────────────── resolvePagination — 기본 경계 ──────────────────────
+/**
+ * 아래 경계 검증은 페이지 크기를 **명시**한다. 기본값(`LIST_PAGE_SIZE`)과 일부러 다른 값을 써서,
+ * 기본값이 바뀔 때 조용히 따라 흔들리는 기대값이 남아 있지 않은지 함께 잡는다.
+ */
 const SIZE = 20;
 
 // 빈 결과: 페이지는 1, 표시 범위는 0 (총 0건인데 "1–0" 이 뜨면 안 된다)
@@ -328,5 +332,55 @@ check(
   "q=abc&stage=WON&owner=u1",
   "같은 값으로 다시 눌러도 page 는 되돌린다 (판정은 키 기준)",
 );
+
+// ───────────── 페이지 크기 · 상시 노출 규칙 (기회-18 · 거래처-3 보완) ─────────────
+// 한 페이지 10건이다 — 20건은 한 화면이 길어 목록이 페이지로 나뉜다는 사실 자체가 드러나지 않았다.
+check(LIST_PAGE_SIZE, 10, "목록 페이지 크기는 10건");
+
+// 시드 기준 기회 12건 → 2페이지로 갈린다 (화면 확인 기준)
+const twelveFirst = resolvePagination({ totalCount: 12, requestedPage: 1 });
+check(twelveFirst.totalPages, 2, "12건 → 2페이지");
+check([twelveFirst.from, twelveFirst.to], [1, 10], "12건 1페이지: 1–10번째");
+check(twelveFirst.hasNext, true, "12건 1페이지: 다음 있음");
+const twelveSecond = resolvePagination({ totalCount: 12, requestedPage: 2 });
+check([twelveSecond.from, twelveSecond.to], [11, 12], "12건 2페이지: 11–12번째");
+check(twelveSecond.hasNext, false, "12건 2페이지: 다음 없음");
+check(twelveSecond.hasPrev, true, "12건 2페이지: 이전 있음");
+
+// 페이지 크기 경계 — 딱 한 페이지 / 한 건 넘김
+check(
+  resolvePagination({ totalCount: LIST_PAGE_SIZE, requestedPage: 1 }).totalPages,
+  1,
+  "10건 → 1페이지",
+);
+check(
+  resolvePagination({ totalCount: LIST_PAGE_SIZE + 1, requestedPage: 1 })
+    .totalPages,
+  2,
+  "11건 → 2페이지",
+);
+
+// 1페이지뿐이어도 UI 를 노출한다 → 그 상태 값이 "비활성 이전·다음" 으로 읽혀야 한다
+const onlyPage = resolvePagination({ totalCount: 5, requestedPage: 1 });
+check(
+  [onlyPage.hasPrev, onlyPage.hasNext],
+  [false, false],
+  "1페이지뿐: 이전·다음이 모두 비활성",
+);
+check(
+  pageItems(onlyPage.page, onlyPage.totalPages),
+  [1],
+  "1페이지뿐: 번호는 1 하나",
+);
+check(
+  [onlyPage.from, onlyPage.to],
+  [1, 5],
+  "1페이지뿐: 표시 범위가 총 건수와 같다",
+);
+
+// 결과 0건 — 페이지 UI 를 감추는 기준은 `totalCount` 다 (`totalPages` 는 빈 1페이지라 1이다)
+const noResult = resolvePagination({ totalCount: 0, requestedPage: 1 });
+check(noResult.totalCount, 0, "0건: 총 건수 0 — 페이지 UI 를 감추는 기준");
+check(noResult.totalPages, 1, "0건: 총 페이지는 여전히 1 (빈 1페이지)");
 
 console.log(`pagination: ${checks}건 검증 통과`);

@@ -14,6 +14,7 @@ import {
   type DocumentType,
 } from "@/lib/constants";
 import { formatDate, formatDateTime, formatKRW } from "@/lib/format";
+import type { StageHistoryEntry } from "@/lib/opportunity-progress";
 import { PageHeader } from "@/components/page-header";
 import { OpportunityStageStepper } from "@/components/opportunity/opportunity-stage-stepper";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -171,8 +172,24 @@ export default async function OpportunityDetailPage({
   // 여기 없는 id(삭제됐거나 연결이 끊긴 문서)는 링크하지 않는다 — 조직 밖 문서로 새지 않는다.
   const documentById = new Map(documents.map((document) => [document.id, document]));
 
-  const timeline: TimelineEntry[] = activityLogs.map((log) => {
-    const detail = parseDetail(log.detail);
+  // detail 은 JSON 문자열이라 한 번만 파싱해 이력 표시와 진행 단계 계산이 함께 쓴다.
+  const parsedLogs = activityLogs.map((log) => ({
+    log,
+    detail: parseDetail(log.detail),
+  }));
+
+  /**
+   * 진행 단계 스테퍼가 쓸 전이 이력. **이미 조회한 활동 이력에서 파생**하므로 쿼리가 늘지 않는다.
+   * 상단(진행 단계)과 하단(이력)이 같은 출처를 봐야 "제안에서 실주했는데 검토/협상까지
+   * 지나온 것으로 보이는" 어긋남이 구조적으로 생기지 않는다.
+   * 단계와 무관한 detail(문서 종류·수신자 등)은 순수 함수 쪽에서 무시한다.
+   */
+  const stageHistory: StageHistoryEntry[] = parsedLogs.map(({ detail }) => ({
+    from: text(detail, "from"),
+    to: text(detail, "to"),
+  }));
+
+  const timeline: TimelineEntry[] = parsedLogs.map(({ log, detail }) => {
     const linked = text(detail, "documentId");
     const document = linked ? documentById.get(linked) : undefined;
     return {
@@ -220,6 +237,7 @@ export default async function OpportunityDetailPage({
               <OpportunityStageStepper
                 stage={dto.stage}
                 lostReason={opportunity.lostReason}
+                history={stageHistory}
               />
             </CardContent>
           </Card>

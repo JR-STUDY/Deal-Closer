@@ -114,7 +114,7 @@ export function isClosedOpportunityStage(stage: OpportunityStage): boolean {
  * (두 화면의 페이지 감각이 다르면 같은 컴포넌트를 쓴 의미가 없다).
  * 기회 칸반 보기는 페이지네이션 대상이 아니다 — 전체가 보여야 파이프라인이 성립한다.
  */
-export const LIST_PAGE_SIZE = 20;
+export const LIST_PAGE_SIZE = 10;
 
 // ── 활동 이력 이벤트 유형 (PRD F-114) ──
 export const ACTIVITY_EVENT_TYPES = [

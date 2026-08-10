@@ -22,6 +22,7 @@ import { summarizeByStage } from "@/lib/pipeline";
 import { formatDate, formatKRW, formatNumber } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { StageBadge } from "@/components/status-badge";
+import { InfoHint } from "@/components/info-hint";
 import { ListPagination } from "@/components/list-pagination";
 import {
   ROW_LINK_ABOVE,
@@ -154,12 +155,20 @@ export default async function OpportunitiesPage({
           {/* 총 건수·합계는 검색란과 같은 줄 우측에 둔다 — 세로 공간을 아낀다 (기회-15) */}
           <OpportunitiesToolbar owners={owners}>
             {pagination.totalCount > 0 ? (
-              <p className="text-xs text-muted-foreground">
-                총 {formatNumber(pagination.totalCount)}건 · 예상 금액 합계{" "}
-                <span className="font-medium text-foreground">
-                  {formatKRW(summary.totalAmount)}
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span>
+                  총 {formatNumber(pagination.totalCount)}건 · 예상 금액 합계{" "}
+                  <span className="font-medium text-foreground">
+                    {formatKRW(summary.totalAmount)}
+                  </span>
                 </span>
-                {isFiltering ? " (필터를 적용한 결과 기준입니다)" : ""}
+                {/* 기준 안내는 폭이 고정된 ⓘ 로 접는다 — 문구로 붙이면 같은 줄 입력이 흔들린다 */}
+                {isFiltering ? (
+                  <InfoHint label="합계 기준 안내">
+                    검색·필터를 적용한 결과 전체를 기준으로 낸 건수와 합계입니다.
+                    현재 페이지에 보이는 행만 더한 값이 아닙니다.
+                  </InfoHint>
+                ) : null}
               </p>
             ) : null}
           </OpportunitiesToolbar>

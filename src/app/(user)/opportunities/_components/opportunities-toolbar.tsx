@@ -30,6 +30,11 @@ const BOARD_VIEW = "board";
  *
  * `children` 으로 총 건수·예상 금액 합계를 받아 **검색란과 같은 줄 우측**에 둔다 (기회-15).
  * 좁은 화면에서는 `flex-wrap` 으로 아래 줄로 내려가 겹치지 않는다.
+ *
+ * 검색란은 **폭이 고정**이다(`flex-1` 이 아니다). 늘어나게 두면 남는 폭을 검색란이 흡수해,
+ * 우측 합계가 길어질 때마다(필터 안내가 붙거나 금액 자릿수가 바뀔 때) 검색창·셀렉트의 폭까지
+ * 함께 움직인다 — 합계를 같은 줄에 올린 뒤 생긴 부작용이다 (A-5 보완).
+ * 이제 남는 폭은 가운데 빈 공간이 흡수하므로 좌측 입력은 조건과 무관하게 제자리에 있다.
  */
 export function OpportunitiesToolbar({
   owners,
@@ -72,7 +77,7 @@ export function OpportunitiesToolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-56 flex-1 sm:max-w-md">
+      <div className="relative w-full sm:w-72">
         <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="search"

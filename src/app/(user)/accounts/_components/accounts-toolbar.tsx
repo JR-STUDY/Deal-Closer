@@ -16,6 +16,9 @@ const LIST_HREF = "/accounts";
  *
  * `children` 으로 총 건수를 받아 **검색란과 같은 줄 우측**에 둔다 — 별도 줄을 쓰지 않아
  * 표가 위로 올라온다 (기회-15 와 같은 규칙).
+ *
+ * 검색란은 **폭이 고정**이다(`flex-1` 이 아니다). 늘어나게 두면 우측 건수 문구가 길어질 때마다
+ * 검색창 폭이 함께 움직인다 — 기회 목록과 같은 규칙으로 맞춘다 (A-5 보완).
  */
 export function AccountsToolbar({ children }: { children?: ReactNode }) {
   const router = useRouter();
@@ -43,7 +46,7 @@ export function AccountsToolbar({ children }: { children?: ReactNode }) {
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-      <div className="relative min-w-56 flex-1 sm:max-w-md">
+      <div className="relative w-full sm:w-72">
         <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="search"
