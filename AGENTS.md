@@ -69,7 +69,8 @@ src/
     (user)/            # 영업 담당자 포털 — 사이드바 공유 (에디터는 블록 캔버스, _components/ 에 co-locate)
     (admin)/           # 관리자 콘솔 — 사이드바 레이아웃 공유
     (auth)/            # 로그인 등 인증 화면 (사이드바 없음)
-    api/               # REST API Route Handlers (SQLite 조회 / 목업)
+    api/               # REST API Route Handlers (SQLite 조회 / Claude 호출 / 일부 목업)
+                     #  generate · templates · documents/[id]/{versions,revise} 는 실제 Claude API 호출
     layout.tsx         # 루트 레이아웃 (폰트·Toaster)
     page.tsx           # 랜딩 (콘솔 진입)
   components/
@@ -90,7 +91,20 @@ src/
     nav.ts             # 사이드바 네비게이션 정의 (user/admin)
     validation.ts      # 이메일 수신자 형식 검증·다중 파싱 (VAL_*)
     editor-schema.ts   # 블록 캔버스 문서 모델(contentJson) 파싱·총액/거래처 재도출·시드
-    attachments.ts     # AI 생성 첨부(엑셀/CSV) 텍스트 추출
+    attachments.ts     # 업로드 파일 검증 + 엑셀/CSV 텍스트 추출
+    template.ts        # 표준 양식 공용 select·DTO
+    document-version.ts # 문서 버전 묶음(rootId) 유틸·최신본 필터
+    ai/                # Claude API 문서 생성 레이어 (서버 전용)
+      config.ts        #  모델(AI_MODEL_GENERATE/BATCH)·토큰 상한·예외 타입
+      client.ts        #  Anthropic SDK 싱글톤 (키 없으면 AiNotConfiguredError)
+      invoke.ts        #  구조화 출력 호출 래퍼 (프롬프트 캐시·거절/파싱 오류 정규화)
+      prompts.ts       #  시스템 프롬프트 + 사용자 메시지 조립 (캐시 적중 위해 가변값 금지)
+      doc-spec.ts      #  응답 스펙(DocSpec) JSON Schema ↔ EditorDoc 변환
+      revision-spec.ts #  부분 재작성 diff 스펙·적용 (F-215)
+      describe.ts      #  EditorDoc → 프롬프트용 텍스트 요약
+      content.ts       #  파일 → Claude content 블록 (PDF·이미지 원본 전달)
+      generate-document.ts / setup-template.ts / revise-document.ts  # 서비스 진입점
+      http.ts          #  AI 예외 → 503/502 응답 매핑
     email-template.ts  # 메일 템플릿 치환 변수·검증·DTO
     signature.ts       # 메일 서명 HTML 판별·미리보기 문서·검증
     mail-domain.ts     # 팀 발신 도메인 검증·팀 주소 조합·발신 신원 해석
@@ -134,9 +148,24 @@ React 코드의 **보안·성능·정확성**을 [react-doctor](https://github.c
 - **게이트 강화 절차**: 도입 초기에는 워크플로우 `blocking: none`(advisory — 항상 통과)이다. 팀이 결과에 익숙해지면 `warning` → `error` 로 올려 CI 통과 조건으로 승격한다.
 - react-doctor 는 `.tsx`/`.jsx` 등 React 파일을 대상으로 한다. 규칙 상세는 위 저장소 참고.
 
+## AI 문서 생성 (Claude API)
+
+문서 생성·표준 양식 세팅·부분 재작성은 **실제 Claude API 를 직접 호출**한다. 목업 폴백은 없다.
+
+- **키 필수**: `.env` 의 `ANTHROPIC_API_KEY`. 없으면 관련 API 가 `503`, 호출 실패 시 `502` 를 반환한다.
+- **모델은 용도별 분리** (환경변수로 오버라이드): `AI_MODEL_GENERATE`(기본 `claude-opus-5`) = 문서 생성·양식 세팅·재작성,
+  `AI_MODEL_BATCH`(기본 `claude-sonnet-5`) = 변수 필드 추출 등 경량 작업.
+- **응답은 구조화 출력(JSON Schema)으로 고정한다.** Claude 가 좌표를 직접 만들지 않고
+  의미 기반 스펙(DocSpec)만 반환하며, 블록 배치는 `lib/ai/doc-spec.ts` 의 결정적 코드가 담당한다.
+  → 양식이 있으면 **양식 레이아웃·문구·공급자 정보를 보존**하고 거래처 필드·품목표만 채운다.
+- **금액은 항상 서버가 재계산한다** (수량×단가). 모델이 계산한 총액은 신뢰하지 않는다.
+- 시스템 프롬프트에는 날짜·사용자명 같은 **가변 값을 넣지 않는다** — 프롬프트 캐시 적중이 깨진다.
+- docx·hwp 는 변환기가 없어 업로드 단계에서 안내 후 거절한다 (PDF·이미지·엑셀·CSV 지원).
+
 ## MVP 범위 / 주의사항
 
 - **인증 없음**: `src/lib/session.ts` 가 데모 고정 사용자/조직을 반환한다. 실제 인증(NextAuth 등) 도입 시 이 모듈만 교체하면 된다.
 - 일부 쓰기 액션(폼 제출 등)은 `sonner` toast 목업이다. 실제 저장이 필요하면 `/api/*` 를 확장한다.
+- `/api/generate/batch`(폴더 일괄 변환)는 **여전히 데모 목업**이다 — 파일명만 받아 기준본을 복제한다.
 - 비밀정보는 `.env`(gitignore). 공유는 `.env.example` 로 한다.
 - Next.js 16 은 breaking changes 가 있다(상단 블록 참고). `params`·`searchParams` 는 **Promise** 이므로 `await` 한다.
