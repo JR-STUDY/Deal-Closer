@@ -126,15 +126,29 @@ export default async function AccountsPage({
         ) : (
           <>
             <div className="overflow-hidden rounded-lg border">
-              <Table>
+              {/*
+                컬럼 폭 고정 — 기회 목록과 **같은 규칙**이다 (A-5). 표 기본값은 그 페이지에 담긴
+                내용으로 폭을 다시 계산해 검색·페이지 이동 때마다 칸 경계가 옮겨간다.
+                남는 폭은 회사명 한 칸만 흡수하고(폭 미지정), 나머지는 실제 값을 재서 고정했다.
+                `min-w` 는 기회 목록과 같은 960px — 두 목록의 인상이 어긋나지 않아야 한다.
+              */}
+              <Table className="min-w-[960px] table-fixed">
                 <TableHeader>
                   <TableRow>
+                    {/* 폭 미지정 = 남는 폭 전부. `min-w` 에서 최소 248px 를 보장받는다 */}
                     <TableHead>회사명</TableHead>
-                    <TableHead>담당자</TableHead>
-                    <TableHead>연락처</TableHead>
-                    <TableHead className="text-right">기회</TableHead>
-                    <TableHead className="text-right">최근 수정일</TableHead>
-                    <TableHead className="w-12">
+                    {/* 208px: "한그레이스 · Sales Director"(이름+직함) 가 들어가는 폭 */}
+                    <TableHead className="w-[208px]">담당자</TableHead>
+                    {/* 232px: 전화(010-0000-0000)보다 메일이 길다 — 30자 주소 기준 */}
+                    <TableHead className="w-[232px]">연락처</TableHead>
+                    {/* 88px: "12건" 은 아주 짧다 — 머리글 "기회" 가 폭의 하한이다 */}
+                    <TableHead className="w-[88px] text-right">기회</TableHead>
+                    {/* 128px: 값 "2026.08.10" 보다 머리글 "최근 수정일" 이 길다 */}
+                    <TableHead className="w-[128px] text-right">
+                      최근 수정일
+                    </TableHead>
+                    {/* 56px: ⋯ 버튼(32px) + 셀 좌우 여백(16px) — 기회 목록과 같다 */}
+                    <TableHead className="w-14">
                       <span className="sr-only">관리</span>
                     </TableHead>
                   </TableRow>
@@ -143,14 +157,25 @@ export default async function AccountsPage({
                   {accounts.map((account) => (
                     // 행 어디를 눌러도 상세로 간다 (거래처-1) — 덮개는 회사명 링크가 만든다
                     <TableRow key={account.id} className={ROW_LINK_ROW}>
+                      {/* 말줄임·title 은 RowLink 안에서 처리된다 (덮개를 자르지 않는 자리) */}
                       <TableCell className="font-medium">
-                        <RowLink href={`/accounts/${account.id}`}>
+                        <RowLink
+                          href={`/accounts/${account.id}`}
+                          title={account.companyName}
+                        >
                           {account.companyName}
                         </RowLink>
                       </TableCell>
-                      <TableCell>
+                      {/* 이름+직함이 길면 잘린다 — 전체는 title 로 확인한다 */}
+                      <TableCell className="truncate">
                         {account.contactName ? (
-                          <span>
+                          <span
+                            title={
+                              account.position
+                                ? `${account.contactName} · ${account.position}`
+                                : account.contactName
+                            }
+                          >
                             {account.contactName}
                             {account.position ? (
                               <span className="text-muted-foreground">
@@ -163,12 +188,23 @@ export default async function AccountsPage({
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
+                      {/* 두 줄이라 말줄임은 줄마다 건다 (메일 주소가 특히 길다) */}
                       <TableCell className="text-sm">
                         {account.phone || account.email ? (
                           <div className="leading-tight">
-                            {account.phone ? <div>{account.phone}</div> : null}
+                            {account.phone ? (
+                              <div
+                                className="truncate tabular-nums"
+                                title={account.phone}
+                              >
+                                {account.phone}
+                              </div>
+                            ) : null}
                             {account.email ? (
-                              <div className="text-muted-foreground">
+                              <div
+                                className="truncate text-muted-foreground"
+                                title={account.email}
+                              >
                                 {account.email}
                               </div>
                             ) : null}
@@ -177,14 +213,15 @@ export default async function AccountsPage({
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
+                      {/* 자릿수마다 글자폭이 같아야 세로로 읽힌다 (tabular-nums) */}
+                      <TableCell className="text-right tabular-nums">
                         {account._count.opportunities > 0 ? (
                           `${formatNumber(account._count.opportunities)}건`
                         ) : (
                           <span className="text-muted-foreground">0건</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
                         {formatDate(account.updatedAt)}
                       </TableCell>
                       {/* 덮개 위로 올려 메뉴 클릭이 상세로 새지 않게 한다 */}
