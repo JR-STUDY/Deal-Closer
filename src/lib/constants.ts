@@ -48,6 +48,15 @@ export const ACTIVE_DOCUMENT_STATUSES = [
   "COMPLETED",
 ] as const satisfies readonly DocumentStatus[];
 
+// ── 표준 양식 범위 (PRD 4.2.1 · F-201) ──
+export const TEMPLATE_SCOPES = ["COMMON", "PERSONAL"] as const;
+export type TemplateScope = (typeof TEMPLATE_SCOPES)[number];
+
+export const TEMPLATE_SCOPE_LABELS: Record<TemplateScope, string> = {
+  COMMON: "공용 문서함",
+  PERSONAL: "내 문서함",
+};
+
 // ── 초대 상태 ──
 export const INVITE_STATUSES = ["PENDING", "ACCEPTED", "EXPIRED"] as const;
 export type InviteStatus = (typeof INVITE_STATUSES)[number];
@@ -80,6 +89,12 @@ export type GenerationStatus = (typeof GENERATION_STATUSES)[number];
 
 // ── AI 문서 1건 생성에 필요한 크레딧 ──
 export const CREDITS_PER_GENERATION = 10;
+
+/** 표준 양식 AI 세팅(F-203) 1회에 필요한 크레딧 */
+export const CREDITS_PER_TEMPLATE_SETUP = 10;
+
+/** AI 부분 재작성(F-215) 1회에 필요한 크레딧 */
+export const CREDITS_PER_REVISION = 5;
 
 // ── 메일 서명 최대 길이 (HTML 서명 수용을 위해 넉넉히) ──
 export const MAX_SIGNATURE_LENGTH = 20000;

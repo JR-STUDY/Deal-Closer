@@ -1,6 +1,14 @@
 import "server-only";
 import ExcelJS from "exceljs";
-import { attachmentKind, type AttachmentKind } from "@/lib/constants";
+import {
+  attachmentKind,
+  isAcceptedAttachment,
+  MAX_ATTACHMENTS,
+  MAX_ATTACHMENT_SIZE,
+  MAX_ATTACHMENTS_TOTAL_SIZE,
+  type AttachmentKind,
+} from "@/lib/constants";
+import { unsupportedSourceMessage } from "@/lib/ai/content";
 
 /**
  * AI 문서 생성 첨부 파일 처리 (서버 전용).
@@ -83,6 +91,52 @@ export async function extractAttachmentText(
     // 손상/암호화 파일 등 추출 실패는 치명적이지 않다 — 원본은 그대로 저장한다.
     return null;
   }
+}
+
+/** 바이트 크기를 사람이 읽는 형태로 (에러 메시지용) */
+export function formatSize(bytes: number): string {
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+/**
+ * 업로드 파일 목록을 검증한다 (정책 VAL_*).
+ * 문제가 있으면 사용자에게 보여줄 메시지와 HTTP 상태를, 없으면 null 을 반환한다.
+ * docx·hwp 처럼 변환기가 없는 형식은 대안(PDF 내보내기)을 안내한다.
+ */
+export function validateUploadFiles(
+  files: File[],
+  opts: { maxCount?: number } = {},
+): { message: string; status: number } | null {
+  const maxCount = opts.maxCount ?? MAX_ATTACHMENTS;
+  if (files.length > maxCount) {
+    return { message: `파일은 최대 ${maxCount}개까지 가능합니다.`, status: 400 };
+  }
+
+  let totalSize = 0;
+  for (const file of files) {
+    const unsupported = unsupportedSourceMessage(file.name);
+    if (unsupported) return { message: unsupported, status: 415 };
+    if (!isAcceptedAttachment(file.name, file.type)) {
+      return {
+        message: `지원하지 않는 파일 형식입니다: ${file.name} (PDF·이미지·엑셀·CSV만 가능)`,
+        status: 415,
+      };
+    }
+    if (file.size > MAX_ATTACHMENT_SIZE) {
+      return {
+        message: `파일이 너무 큽니다: ${file.name} (최대 ${formatSize(MAX_ATTACHMENT_SIZE)})`,
+        status: 413,
+      };
+    }
+    totalSize += file.size;
+  }
+  if (totalSize > MAX_ATTACHMENTS_TOTAL_SIZE) {
+    return {
+      message: `파일 합계가 너무 큽니다. (최대 ${formatSize(MAX_ATTACHMENTS_TOTAL_SIZE)})`,
+      status: 413,
+    };
+  }
+  return null;
 }
 
 /** 업로드된 File 을 DB 저장용 레코드로 변환 (검증은 호출부에서 수행) */
