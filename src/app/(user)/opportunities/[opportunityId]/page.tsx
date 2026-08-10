@@ -15,7 +15,7 @@ import {
 } from "@/lib/constants";
 import { formatDate, formatDateTime, formatKRW } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
-import { StageBadge } from "@/components/status-badge";
+import { OpportunityStageStepper } from "@/components/opportunity/opportunity-stage-stepper";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OpportunityDetailActions } from "./_components/opportunity-detail-actions";
 import {
@@ -91,7 +91,8 @@ export default async function OpportunityDetailPage({
     await Promise.all([
       prisma.opportunity.findFirst({
         where: { id: opportunityId, orgId: user.orgId },
-        select: OPPORTUNITY_DTO_SELECT,
+        // 스테퍼가 실주 사유를 함께 보여주므로 그 필드만 더 읽는다 (F-117)
+        select: { ...OPPORTUNITY_DTO_SELECT, lostReason: true },
       }),
       // 타임라인은 최신 활동이 위에 오도록 시간 역순으로 읽는다
       prisma.activityLog.findMany({
@@ -165,6 +166,18 @@ export default async function OpportunityDetailPage({
         <div className="mx-auto max-w-4xl space-y-6">
           <Card>
             <CardHeader>
+              <CardTitle className="text-base">진행 단계</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <OpportunityStageStepper
+                stage={dto.stage}
+                lostReason={opportunity.lostReason}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle className="text-base">기본 정보</CardTitle>
             </CardHeader>
             <CardContent>
@@ -177,9 +190,7 @@ export default async function OpportunityDetailPage({
                     {dto.accountName}
                   </Link>
                 </InfoRow>
-                <InfoRow label="단계">
-                  <StageBadge stage={dto.stage} />
-                </InfoRow>
+                {/* 단계는 위 스테퍼가 더 정확히(지나온·현재·남은·갈래) 보여주므로 여기서 뺀다 */}
                 <InfoRow label="예상 금액">
                   {formatKRW(dto.expectedAmount)}
                 </InfoRow>

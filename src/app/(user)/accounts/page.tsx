@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Building2, SearchX } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
-import { accountsWhere } from "@/lib/account";
+import { accountsWhere, toAccountDTO } from "@/lib/account";
 import { formatDate, formatNumber } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AccountsToolbar } from "./_components/accounts-toolbar";
+import { AccountRowActions } from "./_components/account-row-actions";
 import { NewAccountButton } from "./_components/new-account-button";
 
 /**
@@ -87,6 +88,9 @@ export default async function AccountsPage({
                     <TableHead>연락처</TableHead>
                     <TableHead className="text-right">기회</TableHead>
                     <TableHead className="text-right">최근 수정일</TableHead>
+                    <TableHead className="w-12">
+                      <span className="sr-only">관리</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -138,6 +142,14 @@ export default async function AccountsPage({
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
                         {formatDate(account.updatedAt)}
+                      </TableCell>
+                      {/* 회사명 링크와 영역을 분리해 메뉴 클릭이 상세로 새지 않게 한다 */}
+                      <TableCell className="text-right">
+                        <AccountRowActions
+                          account={toAccountDTO(account)}
+                          // 목록이 이미 읽은 건수를 재사용한다 (삭제 차단 안내용)
+                          opportunityCount={account._count.opportunities}
+                        />
                       </TableCell>
                     </TableRow>
                   ))}

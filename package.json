@@ -14,6 +14,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:mailer": "tsx --tsconfig tsconfig.scripts.json scripts/mailer.test.mts",
+    "test:opportunity-progress": "tsx --tsconfig tsconfig.scripts.json scripts/opportunity-progress.test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",

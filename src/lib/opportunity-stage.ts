@@ -3,8 +3,8 @@ import "server-only";
 import { prisma } from "./db";
 import type { Prisma } from "@/generated/prisma/client";
 import {
-  CLOSED_OPPORTUNITY_STAGES,
   OPEN_OPPORTUNITY_STAGES,
+  isClosedOpportunityStage,
   isOpportunityStage,
   type ActivityEventType,
   type DocumentType,
@@ -27,10 +27,8 @@ import {
 /** 진행 순서. 자동 전이는 이 순서를 앞으로만 이동한다. */
 const STAGE_PROGRESSION: readonly OpportunityStage[] = OPEN_OPPORTUNITY_STAGES;
 
-/** 마감 단계(WON·LOST)인지 */
-export function isClosedStage(stage: OpportunityStage): boolean {
-  return (CLOSED_OPPORTUNITY_STAGES as readonly OpportunityStage[]).includes(stage);
-}
+/** 마감 단계(WON·LOST)인지 — 판별 기준은 constants 하나뿐이다 (표시 모듈과 공유) */
+export const isClosedStage = isClosedOpportunityStage;
 
 /** 진행 순서상 위치. 마감 단계는 -1. */
 function progressionRank(stage: OpportunityStage): number {
