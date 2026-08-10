@@ -28,6 +28,7 @@ model Organization {
   users           User[]
   invites         Invite[]
   documents       Document[]
+  templates       Template[]
   folders         Folder[]
   catalogItems    CatalogItem[]
   branding        Branding?
@@ -56,6 +57,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   documents     Document[]
+  templates     Template[]
   emailAccounts EmailAccount[]
   emailLogs     EmailLog[]
   generations   GenerationRequest[]
@@ -101,6 +103,24 @@ model Document {
   folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
   // 팀 공통(공유) 베이스 문서 여부. 폴더 배치와 무관한 교차 분류이며 "공통 문서" 탭에서 모아 본다.
   isCommon    Boolean  @default(false)
+
+  // ───── 표준 양식 · 버전 이력 (PRD F-211 · F-213 · F-214) ─────
+  /// 이 문서를 생성할 때 소스로 사용한 표준 양식. 양식이 삭제되면 링크만 끊긴다.
+  templateId  String?
+  template    Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  /// 버전 번호(1부터). 같은 rootId 묶음 안에서 1씩 증가한다.
+  version     Int      @default(1)
+  /// 확정본 플래그 — 같은 묶음에서 여러 버전을 동시에 확정본으로 지정할 수 있다(F-214).
+  isConfirmed Boolean  @default(false)
+  /// 버전 묶음 키 = 최초 버전(v1) 문서의 id. null 이면 이 문서가 v1(묶음의 뿌리)이다.
+  rootId      String?
+  root        Document?  @relation("DocumentVersions", fields: [rootId], references: [id], onDelete: Cascade)
+  versions    Document[] @relation("DocumentVersions")
+  /// 계약서 생성 시 소스로 지정한 확정 견적서(F-213).
+  sourceDocumentId String?
+  sourceDocument   Document?  @relation("DocumentSource", fields: [sourceDocumentId], references: [id], onDelete: SetNull)
+  derivedDocuments Document[] @relation("DocumentSource")
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -113,7 +133,72 @@ model Document {
   @@index([authorId])
   @@index([status])
   @@index([folderId])
+  @@index([templateId])
+  @@index([rootId])
   @@map("documents")
+}
+
+// ===================== 표준 양식 (PRD 4.2.1) =====================
+
+/// 표준 양식 — 기존에 쓰던 양식 파일을 업로드하고(F-202), 자연어 프롬프트로
+/// AI 가 초기 표준 문서를 세팅한 결과(F-203)와 변수 필드 정의(F-204)를 담는다.
+/// 문서 생성 시 이 양식을 불러와 값만 채운다(F-211 · F-212).
+model Template {
+  id          String   @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+  name        String
+  type        String   @default("QUOTE")   // QUOTE | CONTRACT | NDA | PROPOSAL
+  /// COMMON = 공용 문서함(팀 표준 양식) | PERSONAL = 개인 문서함 양식
+  scope       String   @default("COMMON")
+  description String?
+  /// AI 세팅 결과 — 에디터 블록 캔버스 문서(EditorDoc JSON 직렬화)
+  contentJson String?
+  /// 세팅에 사용한 자연어 프롬프트 (재세팅·감사 추적용)
+  prompt      String?
+  /// 업로드한 원본 양식 파일 (F-202) — 다시 내려받거나 재세팅할 때 사용
+  sourceFileName String?
+  sourceMimeType String?
+  sourceSize     Int?
+  sourceData     Bytes?
+  /// 공용 양식을 개인 문서함으로 복제(Fork)한 경우의 원본 양식 (5장 F-522 대비)
+  forkedFromId String?
+  forkedFrom   Template?  @relation("TemplateFork", fields: [forkedFromId], references: [id], onDelete: SetNull)
+  forks        Template[] @relation("TemplateFork")
+
+  variables TemplateVariable[]
+  documents Document[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([type])
+  @@index([forkedFromId])
+  @@map("templates")
+}
+
+/// 양식별 변수 필드 정의 (F-204) — 고객사명·담당자명·품목·단가·계약기간 등
+/// 문서 생성 시 AI 가 채워야 하는 값의 목록. key 는 양식 안에서 고유하다.
+model TemplateVariable {
+  id         String   @id @default(cuid())
+  templateId String
+  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  /// 치환 키 (예: 고객사명, 담당자명, 계약기간)
+  key        String
+  /// 화면 표시 라벨
+  label      String
+  /// 예시값 (AI 프롬프트 힌트 · 입력 placeholder)
+  sample     String?
+  /// 필수 여부 — 비어 있으면 생성 결과에 경고를 표시한다
+  required   Boolean  @default(false)
+  sortOrder  Int      @default(0)
+
+  @@unique([templateId, key])
+  @@index([templateId])
+  @@map("template_variables")
 }
 
 /// 문서 라인 아이템 (견적 항목)

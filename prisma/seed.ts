@@ -395,6 +395,8 @@ async function main() {
   await prisma.generationRequest.deleteMany();
   await prisma.documentItem.deleteMany();
   await prisma.document.deleteMany();
+  // TemplateVariable 은 Template 삭제 시 Cascade 로 함께 지워진다
+  await prisma.template.deleteMany();
   await prisma.emailTemplate.deleteMany();
   await prisma.folder.deleteMany();
   await prisma.emailAccount.deleteMany();
@@ -977,6 +979,51 @@ async function main() {
           clientName: null,
           items: f.items,
         }),
+      },
+    });
+  }
+
+  // 8-6-1) 표준 양식(Template) — PRD 4.2.1 의 "표준 양식" 엔티티
+  //  같은 양식 본문을 Template 으로도 등록해, AI 문서 생성 화면에서 "양식 불러오기"(F-211)와
+  //  변수 필드(F-204)를 API 키 없이도 바로 확인할 수 있게 한다.
+  //  실제 운영 흐름은 /library/templates 에서 파일을 올려 AI 가 세팅하는 것이다(F-203).
+  const quoteVariables = [
+    { key: "고객사명", label: "고객사명", sample: "(주)글로벌커머스", required: true },
+    { key: "수신자", label: "수신자", sample: "김레인 책임", required: false },
+    { key: "견적일", label: "견적일", sample: "2026. 08. 07", required: false },
+    { key: "유효기간", label: "유효기간", sample: "견적일로부터 1개월", required: false },
+    { key: "품목", label: "품목", sample: "메일보안 솔루션 구축", required: true },
+    { key: "수량", label: "수량", sample: "50", required: true },
+    { key: "단가", label: "단가", sample: "120000", required: true },
+  ];
+  const contractVariables = [
+    { key: "고객사명", label: "고객사명", sample: "(주)글로벌커머스", required: true },
+    { key: "수신자", label: "수신자", sample: "김레인 책임", required: false },
+    { key: "계약기간", label: "계약기간", sample: "2026. 09. 01 ~ 2027. 08. 31", required: true },
+    { key: "계약금액", label: "계약금액", sample: "45000000", required: true },
+    { key: "결제조건", label: "결제조건", sample: "납품 후 30일 이내", required: false },
+  ];
+
+  for (const f of standardForms) {
+    const variables = f.type === "CONTRACT" ? contractVariables : quoteVariables;
+    await prisma.template.create({
+      data: {
+        orgId: org.id,
+        authorId: rep.id,
+        name: f.title,
+        type: f.type,
+        scope: "COMMON",
+        description: "팀 공용 표준 양식 — 문서 생성 시 값만 채워 씁니다.",
+        prompt: "기존에 쓰던 양식을 팀 표준 양식으로 세팅",
+        createdAt: new Date(f.createdAt),
+        contentJson: buildStandardForm({
+          type: f.type,
+          clientName: null,
+          items: f.items,
+        }),
+        variables: {
+          create: variables.map((v, index) => ({ ...v, sortOrder: index })),
+        },
       },
     });
   }
