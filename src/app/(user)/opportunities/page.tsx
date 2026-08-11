@@ -147,7 +147,9 @@ export default async function OpportunitiesPage({
         }
       />
 
-      <div className="flex-1 space-y-4 overflow-auto p-8">
+      {/* scrollbar-gutter: 스크롤바가 생겼다 사라지며 본문 폭이 통째로 흔들리는 것을 막는다.
+          표 폭을 고정해도 이 컨테이너가 좁아지면 잔여 폭을 흡수하는 칸이 따라 움직인다. */}
+      <div className="flex-1 space-y-4 overflow-auto p-8 [scrollbar-gutter:stable]">
         {/* 단계가 몇 개인지·어떤 순서인지 목록에서 바로 보이도록 흐름을 먼저 안내한다 */}
         <StageFlowGuide />
 

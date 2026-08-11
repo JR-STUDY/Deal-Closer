@@ -79,7 +79,9 @@ export default async function AccountsPage({
         actions={<NewAccountButton />}
       />
 
-      <div className="flex-1 space-y-4 overflow-auto p-8">
+      {/* scrollbar-gutter: 스크롤바가 생겼다 사라지며 본문 폭이 통째로 흔들리는 것을 막는다.
+          표 폭을 고정해도 이 컨테이너가 좁아지면 잔여 폭을 흡수하는 칸이 따라 움직인다. */}
+      <div className="flex-1 space-y-4 overflow-auto p-8 [scrollbar-gutter:stable]">
         <Suspense fallback={<div className="h-9" />}>
           {/* 총 건수는 검색란과 같은 줄 우측에 둔다 — 세로 공간을 아낀다 (기회-15 와 같은 규칙) */}
           <AccountsToolbar>
