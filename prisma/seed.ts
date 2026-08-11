@@ -1076,54 +1076,156 @@ async function main() {
       {
         orgId: org.id,
         companyName: "(주)에이비씨 테크놀로지",
-        contactName: "이서준",
-        position: "구매팀 과장",
-        phone: "010-2345-6789",
-        email: "seojun.lee@abctech.example.com",
         bizRegNo: "123-45-67890",
         memo: "그룹웨어 도입 검토 중. 견적 재발송 이력 있음(2026-07). 결재 라인은 팀장 → 본부장 2단계.",
       },
       {
         orgId: org.id,
         companyName: "글로벌커머스(주)",
-        contactName: "박지훈",
-        position: "IT기획팀 팀장",
-        phone: "010-3456-7890",
-        email: "jihoon.park@globalcommerce.example.com",
         bizRegNo: "211-86-01234",
         memo: "통합 계약 체결 완료. 연간 유지보수 갱신 시점은 매년 4월.",
       },
       {
         orgId: org.id,
         companyName: "세종테크",
-        contactName: "최유진",
-        position: "정보보안팀 대리",
-        phone: "010-4567-8901",
-        email: "yujin.choi@sejongtech.example.com",
         bizRegNo: "305-81-45678",
         memo: null,
       },
       {
         orgId: org.id,
         companyName: "다올테크",
-        contactName: "정민석",
-        position: "인프라팀 차장",
-        phone: "010-5678-9012",
-        email: null,
         bizRegNo: null,
         memo: "인프라 증설 견적 검토 중. 메일보다 전화 연락을 선호.",
       },
       {
         orgId: org.id,
         companyName: "Bluewave Systems Korea",
-        contactName: "한그레이스",
-        position: "Sales Director",
-        phone: null,
-        email: "grace.han@bluewave.example.com",
         bizRegNo: "412-88-90123",
         memo: "본사 승인 절차가 있어 계약까지 6주 이상 소요된다.",
       },
     ],
+  });
+
+  // 10-1-1) 거래처 담당자(Contact) — 거래처당 2~3명 (거래처-8)
+  //   **배열의 맨 앞이 대표**다. 대표는 거래처당 한 명뿐이며 목록 화면에 노출되는 사람이고,
+  //   나머지는 상세의 담당자 카드에서 본다. 실무처럼 결재선(현업 → 구매 → 임원)이 섞이도록
+  //   담당자를 여러 명 두어야 "대표만 목록에 나온다"는 규칙이 화면에서 확인된다.
+  //   연락처가 비어 있는 담당자도 섞어 둔다(선택 항목이라는 사실이 드러나야 한다).
+  const accountIdByCompanyName = new Map(
+    (
+      await prisma.account.findMany({
+        where: { orgId: org.id },
+        select: { id: true, companyName: true },
+      })
+    ).map((account) => [account.companyName, account.id] as const),
+  );
+
+  const contactsByCompanyName: Record<
+    string,
+    Array<{
+      name: string;
+      position: string | null;
+      phone: string | null;
+      email: string | null;
+    }>
+  > = {
+    "(주)에이비씨 테크놀로지": [
+      {
+        name: "이서준",
+        position: "구매팀 과장",
+        phone: "010-2345-6789",
+        email: "seojun.lee@abctech.example.com",
+      },
+      {
+        name: "오하늘",
+        position: "정보시스템팀 대리",
+        phone: "010-2345-1122",
+        email: "haneul.oh@abctech.example.com",
+      },
+      {
+        name: "강동원",
+        position: "경영지원본부 본부장",
+        phone: null,
+        email: "dongwon.kang@abctech.example.com",
+      },
+    ],
+    "글로벌커머스(주)": [
+      {
+        name: "박지훈",
+        position: "IT기획팀 팀장",
+        phone: "010-3456-7890",
+        email: "jihoon.park@globalcommerce.example.com",
+      },
+      {
+        name: "윤소라",
+        position: "구매팀 사원",
+        phone: "010-3456-4455",
+        email: "sora.yoon@globalcommerce.example.com",
+      },
+    ],
+    세종테크: [
+      {
+        name: "최유진",
+        position: "정보보안팀 대리",
+        phone: "010-4567-8901",
+        email: "yujin.choi@sejongtech.example.com",
+      },
+      {
+        name: "임재현",
+        position: "정보보안팀 팀장",
+        phone: "010-4567-3300",
+        email: "jaehyun.lim@sejongtech.example.com",
+      },
+      {
+        name: "서가온",
+        position: "총무팀 주임",
+        phone: "010-4567-7788",
+        email: null,
+      },
+    ],
+    다올테크: [
+      {
+        name: "정민석",
+        position: "인프라팀 차장",
+        phone: "010-5678-9012",
+        email: null,
+      },
+      {
+        name: "노지완",
+        position: "구매팀 과장",
+        phone: "010-5678-2244",
+        email: "jiwan.noh@daoltech.example.com",
+      },
+    ],
+    "Bluewave Systems Korea": [
+      {
+        name: "한그레이스",
+        position: "Sales Director",
+        phone: null,
+        email: "grace.han@bluewave.example.com",
+      },
+      {
+        name: "Daniel Cho",
+        position: "Procurement Manager",
+        phone: "010-6789-1234",
+        email: "daniel.cho@bluewave.example.com",
+      },
+    ],
+  };
+
+  await prisma.contact.createMany({
+    data: Object.entries(contactsByCompanyName).flatMap(
+      ([companyName, people]) => {
+        const accountId = accountIdByCompanyName.get(companyName);
+        if (!accountId) return [];
+        return people.map((person, index) => ({
+          orgId: org.id,
+          accountId,
+          ...person,
+          isPrimary: index === 0, // 맨 앞 한 명만 대표 (거래처당 1명 규칙)
+        }));
+      },
+    ),
   });
 
   // 10-2) 영업 기회(Opportunity) + 활동 이력(ActivityLog) — 파이프라인 데모 (F-111 · F-114)
@@ -1501,6 +1603,7 @@ async function main() {
     조직: await prisma.organization.count(),
     사용자: await prisma.user.count(),
     거래처: await prisma.account.count(),
+    담당자: await prisma.contact.count(),
     기회: await prisma.opportunity.count(),
     활동이력: await prisma.activityLog.count(),
     문서: await prisma.document.count(),

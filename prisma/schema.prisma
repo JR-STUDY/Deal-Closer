@@ -36,6 +36,7 @@ model Organization {
   emailTemplates  EmailTemplate[]
   teamMailDomains TeamMailDomain[]
   accounts        Account[]
+  contacts        Contact[]
   opportunities   Opportunity[]
   activityLogs    ActivityLog[]
 
@@ -88,25 +89,51 @@ model Invite {
 // ===================== CRM (거래처 · 기회) =====================
 
 /// 거래처(Account) — 영업 대상 회사. 조직 공용 자산이며 Owner 를 두지 않는다. (F-101~103)
+/// 담당자는 단일 필드가 아니라 Contact 관계로 갖는다 — 한 회사에 여러 명이 붙는다 (거래처-8).
 model Account {
   id           String   @id @default(cuid())
   orgId        String
   org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   companyName  String   // 회사명
-  contactName  String?  // 담당자명
-  position     String?  // 직책
-  phone        String?  // 핸드폰 번호
-  email        String?  // 담당자 이메일
   bizRegNo     String?  // 사업자등록번호
   memo         String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  contacts      Contact[]
   opportunities Opportunity[]
 
   @@index([orgId])
   @@index([companyName])
   @@map("accounts")
+}
+
+/// 거래처 담당자(Contact) — 한 거래처에 여러 명. 목록에는 대표 1명만 노출한다 (거래처-8).
+/// - 담당자 0명을 허용한다. 거래처를 먼저 등록하고 담당자를 나중에 넣는 흐름이 자연스럽다.
+/// - isPrimary(대표)는 **거래처당 최대 1명**이지만 DB 제약을 두지 않는다.
+///   `@@unique([accountId, isPrimary])` 는 "비대표도 1명뿐"이 되어 쓸 수 없고,
+///   SQLite 의 부분 유니크 인덱스는 Prisma 스키마로 표현되지 않는다.
+///   그래서 규칙은 앱 레벨이다 — 판정은 src/lib/contact.ts 순수 함수, 저장은 한 트랜잭션이다
+///   (대표 지정과 기존 대표 해제를 두 번의 update 로 나누면 중간에 대표가 2명이 된다).
+/// - orgId 는 Account 를 거치지 않고도 조직 스코프로 조회하기 위한 것이며,
+///   다른 모델과 같이 Organization FK 를 건다(값이 떠도는 문자열이 되지 않게).
+model Contact {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name      String   // 담당자명
+  position  String?  // 직책
+  phone     String?  // 핸드폰 번호
+  email     String?  // 담당자 이메일
+  isPrimary Boolean  @default(false) // 대표 담당자 (목록 노출 대상)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([accountId])
+  @@map("contacts")
 }
 
 /// 영업 기회(Opportunity) — 파이프라인의 단위. (F-111~117)

@@ -1,16 +1,16 @@
 /**
  * 거래처(Account) — 검증·정규화·DTO 헬퍼 (PRD F-101 · F-102 · F-103).
  * server-only 을 import 하지 않으므로 API 라우트·서버 컴포넌트·클라이언트 폼에서 모두 사용한다.
+ *
+ * 담당자는 이 모듈이 다루지 않는다 — 한 거래처에 여러 명이 붙으므로 별도 모델·모듈이다
+ * (`src/lib/contact.ts`, 거래처-8). 이 파일은 회사 자체의 정보만 본다.
  */
 
-import { isEmail } from "./validation";
+import type { ContactDTO } from "./contact";
 
 // ── 저장 제약 (정책 VAL_*) ──
 export const ACCOUNT_COMPANY_NAME_MAX = 100;
-export const ACCOUNT_CONTACT_NAME_MAX = 60;
-export const ACCOUNT_POSITION_MAX = 60;
-export const ACCOUNT_PHONE_MAX = 30;
-export const ACCOUNT_EMAIL_MAX = 200;
+export const ACCOUNT_BIZ_REG_NO_MAX = 20;
 export const ACCOUNT_MEMO_MAX = 2000;
 
 /** 사업자등록번호 표기 형식 — 화면 안내·placeholder 에 함께 쓴다 */
@@ -40,29 +40,28 @@ export function isBizRegNo(value: string): boolean {
 export type AccountDTO = {
   id: string;
   companyName: string;
-  contactName: string | null;
-  position: string | null;
-  phone: string | null;
-  email: string | null;
   bizRegNo: string | null;
   memo: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-/** 목록 행 (F-102: 회사명 · 담당자명 · 연락처 · 기회 수 · 최근 수정일) */
+/**
+ * 목록 행 (F-102: 회사명 · 담당자 · 연락처 · 기회 수 · 최근 수정일).
+ * 담당자는 **대표 1명만** 싣는다 (거래처-8). 총원은 "외 N명" 표기의 근거다.
+ */
 export type AccountListItem = AccountDTO & {
-  /** 연관 영업 기회 수 — Phase 2 이후 채워진다 */
+  /** 연관 영업 기회 수 */
   opportunityCount: number;
+  /** 담당자 총원 (0명을 허용한다) */
+  contactCount: number;
+  /** 목록에 노출하는 대표 담당자. 담당자가 없으면 null */
+  primaryContact: ContactDTO | null;
 };
 
 /** 생성·수정 폼의 편집 값 (선택 항목은 빈 문자열로 다룬다) */
 export type AccountFormValues = {
   companyName: string;
-  contactName: string;
-  position: string;
-  phone: string;
-  email: string;
   bizRegNo: string;
   memo: string;
 };
@@ -70,10 +69,6 @@ export type AccountFormValues = {
 /** 빈 폼 초기값 */
 export const EMPTY_ACCOUNT_FORM: AccountFormValues = {
   companyName: "",
-  contactName: "",
-  position: "",
-  phone: "",
-  email: "",
   bizRegNo: "",
   memo: "",
 };
@@ -82,10 +77,6 @@ export const EMPTY_ACCOUNT_FORM: AccountFormValues = {
 export function toAccountDTO(record: {
   id: string;
   companyName: string;
-  contactName: string | null;
-  position: string | null;
-  phone: string | null;
-  email: string | null;
   bizRegNo: string | null;
   memo: string | null;
   createdAt: Date;
@@ -94,10 +85,6 @@ export function toAccountDTO(record: {
   return {
     id: record.id,
     companyName: record.companyName,
-    contactName: record.contactName,
-    position: record.position,
-    phone: record.phone,
-    email: record.email,
     bizRegNo: record.bizRegNo,
     memo: record.memo,
     createdAt: record.createdAt.toISOString(),
@@ -109,10 +96,6 @@ export function toAccountDTO(record: {
 export function toAccountFormValues(account: AccountDTO): AccountFormValues {
   return {
     companyName: account.companyName,
-    contactName: account.contactName ?? "",
-    position: account.position ?? "",
-    phone: account.phone ?? "",
-    email: account.email ?? "",
     bizRegNo: account.bizRegNo ?? "",
     memo: account.memo ?? "",
   };
@@ -121,10 +104,6 @@ export function toAccountFormValues(account: AccountDTO): AccountFormValues {
 /** 검증을 통과한 거래처 입력값 (선택 항목은 빈 값이면 null) */
 export type AccountInput = {
   companyName: string;
-  contactName: string | null;
-  position: string | null;
-  phone: string | null;
-  email: string | null;
   bizRegNo: string | null;
   memo: string | null;
 };
@@ -146,10 +125,6 @@ export function parseAccountInput(
     typeof body[key] === "string" ? (body[key] as string).trim() : "";
 
   const companyName = text("companyName");
-  const contactName = text("contactName");
-  const position = text("position");
-  const phone = text("phone");
-  const email = text("email");
   const memo = text("memo");
   const bizRegNo = normalizeBizRegNo(text("bizRegNo"));
 
@@ -157,17 +132,10 @@ export function parseAccountInput(
 
   const lengthError =
     tooLong("회사명", companyName, ACCOUNT_COMPANY_NAME_MAX) ??
-    tooLong("담당자명", contactName, ACCOUNT_CONTACT_NAME_MAX) ??
-    tooLong("직책", position, ACCOUNT_POSITION_MAX) ??
-    tooLong("핸드폰 번호", phone, ACCOUNT_PHONE_MAX) ??
-    tooLong("담당자 이메일", email, ACCOUNT_EMAIL_MAX) ??
     tooLong("메모", memo, ACCOUNT_MEMO_MAX);
   if (lengthError) return { error: lengthError };
 
-  // 이메일·사업자등록번호는 빈 값을 허용하고, 값이 있을 때만 형식을 본다 (정책 VAL_*).
-  if (email && !isEmail(email)) {
-    return { error: "담당자 이메일 형식이 올바르지 않습니다." };
-  }
+  // 사업자등록번호는 빈 값을 허용하고, 값이 있을 때만 형식을 본다 (정책 VAL_*).
   if (bizRegNo && !isBizRegNo(bizRegNo)) {
     return {
       error: `사업자등록번호는 ${BIZ_REG_NO_FORMAT} 형식으로 입력해주세요.`,
@@ -176,10 +144,6 @@ export function parseAccountInput(
 
   return {
     companyName,
-    contactName: contactName || null,
-    position: position || null,
-    phone: phone || null,
-    email: email || null,
     bizRegNo: bizRegNo || null,
     memo: memo || null,
   };
@@ -188,6 +152,8 @@ export function parseAccountInput(
 /**
  * 거래처 목록 조회의 Prisma where 조건 (F-102).
  * orgId 스코프는 항상 걸고, 검색어가 있으면 회사명·담당자명 부분 일치를 더한다.
+ * 담당자는 별도 테이블이므로 **소속 담당자 중 한 명이라도** 이름이 걸리면 그 거래처가 나온다
+ * (대표만 보는 것이 아니다 — "김대리가 있는 회사"를 찾는 것이 검색의 쓰임이다).
  * SQLite 의 LIKE 는 ASCII 대소문자를 구분하지 않으므로 `contains` 만으로 대소문자 무시가 된다.
  * 인가·검색 규칙을 한 곳에 모아 목록 API 와 페이지가 같은 조건을 쓰게 한다.
  */
@@ -196,6 +162,9 @@ export function accountsWhere(orgId: string, query: string) {
   if (!q) return { orgId };
   return {
     orgId,
-    OR: [{ companyName: { contains: q } }, { contactName: { contains: q } }],
+    OR: [
+      { companyName: { contains: q } },
+      { contacts: { some: { name: { contains: q } } } },
+    ],
   };
 }

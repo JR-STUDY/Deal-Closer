@@ -4,6 +4,7 @@ import { Building2, SearchX } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { accountsWhere, toAccountDTO } from "@/lib/account";
+import { primaryContact } from "@/lib/contact";
 import {
   pageHref,
   pageQueryRange,
@@ -59,7 +60,12 @@ export default async function AccountsPage({
       orderBy: { updatedAt: "desc" },
       skip,
       take,
-      include: { _count: { select: { opportunities: true } } },
+      include: {
+        _count: { select: { opportunities: true, contacts: true } },
+        // 목록에 노출하는 담당자는 **대표 1명뿐**이다 (거래처-8).
+        // 전원을 실어 오면 행마다 조회량이 담당자 수만큼 늘고, 보여줄 곳도 없다.
+        contacts: { where: { isPrimary: true } },
+      },
     }),
   ]);
 
@@ -156,7 +162,22 @@ export default async function AccountsPage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {accounts.map((account) => (
+                  {accounts.map((account) => {
+                    // 대표 담당자 1명만 노출한다 (거래처-8). 나머지는 "외 N명" 으로만 알린다 —
+                    // 담당자를 여러 명 넣었는데 목록에 한 명만 보이면 나머지가 사라진 것처럼 읽힌다.
+                    const primary = primaryContact(account.contacts);
+                    const otherCount = Math.max(
+                      account._count.contacts - (primary ? 1 : 0),
+                      0,
+                    );
+                    const contactTitle = primary
+                      ? [primary.name, primary.position]
+                          .filter(Boolean)
+                          .join(" · ") +
+                        (otherCount > 0 ? ` 외 ${otherCount}명` : "")
+                      : undefined;
+
+                    return (
                     // 행 어디를 눌러도 상세로 간다 (거래처-1) — 덮개는 회사명 링크가 만든다
                     <TableRow key={account.id} className={ROW_LINK_ROW}>
                       {/* 말줄임·title 은 RowLink 안에서 처리된다 (덮개를 자르지 않는 자리) */}
@@ -170,19 +191,19 @@ export default async function AccountsPage({
                       </TableCell>
                       {/* 이름+직함이 길면 잘린다 — 전체는 title 로 확인한다 */}
                       <TableCell className="truncate">
-                        {account.contactName ? (
-                          <span
-                            title={
-                              account.position
-                                ? `${account.contactName} · ${account.position}`
-                                : account.contactName
-                            }
-                          >
-                            {account.contactName}
-                            {account.position ? (
+                        {primary ? (
+                          <span title={contactTitle}>
+                            {primary.name}
+                            {primary.position ? (
                               <span className="text-muted-foreground">
                                 {" "}
-                                · {account.position}
+                                · {primary.position}
+                              </span>
+                            ) : null}
+                            {otherCount > 0 ? (
+                              <span className="text-muted-foreground">
+                                {" "}
+                                외 {otherCount}명
                               </span>
                             ) : null}
                           </span>
@@ -192,22 +213,22 @@ export default async function AccountsPage({
                       </TableCell>
                       {/* 두 줄이라 말줄임은 줄마다 건다 (메일 주소가 특히 길다) */}
                       <TableCell className="text-sm">
-                        {account.phone || account.email ? (
+                        {primary?.phone || primary?.email ? (
                           <div className="leading-tight">
-                            {account.phone ? (
+                            {primary.phone ? (
                               <div
                                 className="truncate tabular-nums"
-                                title={account.phone}
+                                title={primary.phone}
                               >
-                                {account.phone}
+                                {primary.phone}
                               </div>
                             ) : null}
-                            {account.email ? (
+                            {primary.email ? (
                               <div
                                 className="truncate text-muted-foreground"
-                                title={account.email}
+                                title={primary.email}
                               >
-                                {account.email}
+                                {primary.email}
                               </div>
                             ) : null}
                           </div>
@@ -235,7 +256,8 @@ export default async function AccountsPage({
                         />
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

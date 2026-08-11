@@ -15,12 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  ACCOUNT_BIZ_REG_NO_MAX,
   ACCOUNT_COMPANY_NAME_MAX,
-  ACCOUNT_CONTACT_NAME_MAX,
-  ACCOUNT_EMAIL_MAX,
   ACCOUNT_MEMO_MAX,
-  ACCOUNT_PHONE_MAX,
-  ACCOUNT_POSITION_MAX,
   BIZ_REG_NO_FORMAT,
   type AccountDTO,
   type AccountFormValues,
@@ -91,8 +88,11 @@ function Field({
 
 /**
  * 거래처 생성·수정 다이얼로그 (F-101 · F-103).
- * 회사명만 필수이고 나머지는 선택이다. 형식 검증(이메일·사업자등록번호)은
+ * 회사명만 필수이고 나머지는 선택이다. 형식 검증(사업자등록번호)은
  * 서버(`parseAccountInput`)가 단일 기준이며, 실패 메시지를 toast 로 보여준다.
+ *
+ * **담당자는 여기서 다루지 않는다** — 여러 명이 붙고 대표를 지정해야 하므로
+ * 거래처 상세의 담당자 카드에서 관리한다 (거래처-8).
  *
  * 부모는 열고 싶을 때만 이 컴포넌트를 마운트한다. `key` 를 함께 주면 열 때마다
  * initial 로 새로 초기화된다 (파생 state 없이 리마운트로 해결).
@@ -106,10 +106,6 @@ export function AccountFormDialog({
   onClose,
 }: AccountFormDialogProps) {
   const [companyName, setCompanyName] = useState(() => initial.companyName);
-  const [contactName, setContactName] = useState(() => initial.contactName);
-  const [position, setPosition] = useState(() => initial.position);
-  const [phone, setPhone] = useState(() => initial.phone);
-  const [email, setEmail] = useState(() => initial.email);
   const [bizRegNo, setBizRegNo] = useState(() => initial.bizRegNo);
   const [memo, setMemo] = useState(() => initial.memo);
   const [isSaving, setIsSaving] = useState(false);
@@ -124,15 +120,7 @@ export function AccountFormDialog({
         {
           method: accountId ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            companyName,
-            contactName,
-            position,
-            phone,
-            email,
-            bizRegNo,
-            memo,
-          }),
+          body: JSON.stringify({ companyName, bizRegNo, memo }),
         },
       );
       const json = await res.json().catch(() => null);
@@ -184,52 +172,12 @@ export function AccountFormDialog({
             placeholder="예: (주)에이비씨 테크놀로지"
           />
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              id="account-contact-name"
-              label="담당자명"
-              value={contactName}
-              onChange={setContactName}
-              maxLength={ACCOUNT_CONTACT_NAME_MAX}
-              placeholder="예: 이서준"
-            />
-            <Field
-              id="account-position"
-              label="직책"
-              value={position}
-              onChange={setPosition}
-              maxLength={ACCOUNT_POSITION_MAX}
-              placeholder="예: 구매팀 과장"
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              id="account-phone"
-              label="핸드폰 번호"
-              type="tel"
-              value={phone}
-              onChange={setPhone}
-              maxLength={ACCOUNT_PHONE_MAX}
-              placeholder="예: 010-1234-5678"
-            />
-            <Field
-              id="account-email"
-              label="담당자 이메일"
-              type="email"
-              value={email}
-              onChange={setEmail}
-              maxLength={ACCOUNT_EMAIL_MAX}
-              placeholder="예: buyer@example.com"
-            />
-          </div>
-
           <Field
             id="account-biz-reg-no"
             label="사업자등록번호"
             value={bizRegNo}
             onChange={setBizRegNo}
-            maxLength={ACCOUNT_PHONE_MAX}
+            maxLength={ACCOUNT_BIZ_REG_NO_MAX}
             placeholder={BIZ_REG_NO_FORMAT}
             hint={`${BIZ_REG_NO_FORMAT} 형식으로 입력하시거나, 숫자 10자리만 입력하셔도 자동으로 정리됩니다.`}
           />
@@ -245,6 +193,16 @@ export function AccountFormDialog({
               onChange={(e) => setMemo(e.target.value)}
             />
           </div>
+
+          {/*
+            담당자는 이 폼에서 받지 않는다 — 한 거래처에 여러 명이 붙고 대표를 지정해야 해서
+            등록 폼에 넣으면 "첫 한 명"만 특별해진다 (거래처-8). 담당자 0명을 허용하므로
+            거래처를 먼저 만들고 상세에서 필요한 만큼 추가하는 흐름으로 안내한다.
+          */}
+          <p className="rounded-md bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground">
+            담당자는 거래처를 저장하신 뒤 상세 화면에서 여러 명 등록하실 수
+            있습니다. 목록에는 대표 담당자 한 분만 표시됩니다.
+          </p>
         </form>
 
         <DialogFooter>
