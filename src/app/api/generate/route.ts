@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 import { toAttachmentRecord } from "@/lib/attachments";
 import { seedTemplate } from "@/lib/editor-schema";
+import { applyDocumentLinked } from "@/lib/opportunity-stage";
 import {
   CREDITS_PER_GENERATION,
   MAX_ATTACHMENTS,
@@ -154,6 +155,18 @@ export async function POST(req: NextRequest) {
   // 공통 문서(팀 공용 기준 문서)로 저장할지 여부
   const saveAsCommon = String(form.get("saveAsCommon") ?? "") === "true";
 
+  // ── 연결할 영업 기회 (기회 상세의 "문서 작성"으로 들어온 경우, 기회-2) ──
+  // 요청 값은 조작될 수 있으므로 **현재 조직 소속인지** 확인한다. 찾지 못하면 조용히 넘기지
+  // 않고 실패시킨다 — 연결될 줄 알았는데 안 붙은 문서가 생기면 화면과 데이터가 어긋난다.
+  const opportunityId = String(form.get("opportunityId") ?? "").trim();
+  if (opportunityId) {
+    const opportunity = await prisma.opportunity.findFirst({
+      where: { id: opportunityId, orgId: user.orgId },
+      select: { id: true },
+    });
+    if (!opportunity) return fail("영업 기회를 찾을 수 없습니다.", 404);
+  }
+
   // ── 첨부 파일 검증 (정책 VAL_*) ──
   const files = form.getAll("files").filter((f): f is File => f instanceof File);
 
@@ -274,6 +287,9 @@ export async function POST(req: NextRequest) {
           creditsUsed: CREDITS_PER_GENERATION,
           attachments: attachmentsSummary,
           referenceIds,
+          // 이 흐름은 **이미 있는 공용 기준 양식**을 열어줄 뿐 새 문서를 만들지 않는다.
+          // 팀 공용 문서를 특정 기회에 묶어버리면 안 되므로 연결하지 않고 그 사실을 알린다.
+          opportunityId: null,
         },
         { status: 201 },
       );
@@ -307,6 +323,7 @@ export async function POST(req: NextRequest) {
           clientName,
           amount: total,
           contentJson,
+          opportunityId: opportunityId || null,
         },
       });
       await tx.creditWallet.update({
@@ -332,6 +349,20 @@ export async function POST(req: NextRequest) {
           references: { create: referencesCreate },
         },
       });
+      // 기회에 붙였다면 그 기회의 타임라인에도 남긴다 — 연결과 이력은 한 트랜잭션이다 (F-114)
+      if (opportunityId) {
+        await applyDocumentLinked(
+          {
+            opportunityId,
+            orgId: user.orgId,
+            actorId: user.id,
+            documentId: created.id,
+            documentType: "QUOTE",
+            documentTitle: created.title,
+          },
+          tx,
+        );
+      }
       return created;
     });
 
@@ -341,6 +372,7 @@ export async function POST(req: NextRequest) {
         creditsUsed: CREDITS_PER_GENERATION,
         attachments: attachmentsSummary,
         referenceIds,
+        opportunityId: opportunityId || null,
       },
       { status: 201 },
     );
@@ -362,6 +394,7 @@ export async function POST(req: NextRequest) {
         type,
         status: "DRAFT",
         isCommon: saveAsCommon,
+        opportunityId: opportunityId || null,
         amount: 0,
         items: {
           create: [
@@ -402,6 +435,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // 기회에 붙였다면 그 기회의 타임라인에도 남긴다 — 연결과 이력은 한 트랜잭션이다 (F-114)
+    if (opportunityId) {
+      await applyDocumentLinked(
+        {
+          opportunityId,
+          orgId: user.orgId,
+          actorId: user.id,
+          documentId: created.id,
+          documentType: type,
+          documentTitle: created.title,
+        },
+        tx,
+      );
+    }
+
     return created;
   });
 
@@ -411,6 +459,7 @@ export async function POST(req: NextRequest) {
       creditsUsed: CREDITS_PER_GENERATION,
       attachments: attachmentsSummary,
       referenceIds,
+      opportunityId: opportunityId || null,
     },
     { status: 201 },
   );

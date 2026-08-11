@@ -1,38 +1,36 @@
-import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { FilePlus2 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { OPPORTUNITY_DTO_SELECT, toOpportunityDTO } from "@/lib/opportunity";
 import { parseDetail } from "@/lib/opportunity-stage";
 import {
   ACTIVITY_EVENT_LABELS,
-  DOCUMENT_TYPE_LABELS,
   OPPORTUNITY_STAGE_LABELS,
   isOpportunityStage,
   type ActivityEventType,
-  type DocumentType,
 } from "@/lib/constants";
 import { formatDate, formatDateTime, formatKRW } from "@/lib/format";
 import type { StageHistoryEntry } from "@/lib/opportunity-progress";
 import { PageHeader } from "@/components/page-header";
-import { OpportunityStageStepper } from "@/components/opportunity/opportunity-stage-stepper";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { OpportunityStageStepper } from "@/components/opportunity/opportunity-stage-stepper";
 import { OpportunityDetailActions } from "./_components/opportunity-detail-actions";
+import { OpportunityInlineFields } from "./_components/opportunity-inline-fields";
 import {
   OpportunityDetailTabs,
   type TimelineEntry,
 } from "./_components/opportunity-detail-tabs";
 
-/** 기본 정보 한 줄 */
-function InfoRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[8rem_1fr] items-center gap-3 py-2.5">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="text-sm break-words">{children}</dd>
-    </div>
-  );
-}
+/** 이력 한 줄에 붙일 문서 요약 (기회-13) */
+type TimelineDocumentInfo = {
+  id: string;
+  title: string;
+  type: string;
+  amount: number;
+};
 
 /** 단계 문자열 → 라벨 (정의 밖 값이면 원문 그대로) */
 function stageLabel(stage: string): string {
@@ -66,8 +64,8 @@ function summarizeRecipients(recipients: string): string {
  * 활동 이력의 `detail`(JSON 문자열)을 사람이 읽을 한 줄로 옮긴다 (F-114).
  * 형식이 깨졌거나 표시할 내용이 없으면 null 을 돌려 이력이 라벨만 보이게 한다.
  *
- * 문서 발송으로 단계가 바뀌면 detail 에 단계와 문서 정보가 함께 담긴다 →
- * "제안 → 검토/협상 · 계약서" 처럼 이어 붙인다.
+ * **문서 정보(제목·종류·금액)는 여기서 다루지 않는다** — 아래 문서 요약 줄이 배지와 함께
+ * 보여주므로 같은 내용을 두 줄에 겹쳐 적지 않는다 (기회-13).
  */
 function describeActivity(
   eventType: string,
@@ -84,13 +82,6 @@ function describeActivity(
   const lostReason = text(detail, "lostReason");
   if (lostReason) parts.push(`사유 ${lostReason}`);
 
-  const documentType = text(detail, "documentType");
-  if (documentType) {
-    parts.push(
-      DOCUMENT_TYPE_LABELS[documentType as DocumentType] ?? documentType,
-    );
-  }
-
   const recipients = text(detail, "recipients");
   if (recipients) parts.push(`수신 ${summarizeRecipients(recipients)}`);
 
@@ -106,9 +97,12 @@ function describeActivity(
 }
 
 /**
- * 영업 기회 상세 (F-111) — 기본 정보 + 수정·삭제 + 이력·연관 문서.
+ * 영업 기회 상세 (F-111 · F-112 · F-114) — 진행 단계 · 기본 정보 · 메모 · 이력 · 연관 문서.
  *
- * 현재 단계는 표시만 하고 변경 UI 는 두지 않는다 (F-112 는 Phase 3 범위).
+ * **2단 레이아웃**이다 (기회-4) — 좌측은 이 기회가 "무엇인지"(단계·기본 정보·메모),
+ * 우측은 "무슨 일이 있었는지"(이력·연관 문서)다. 좁은 화면에서는 좌 → 우 순서로 쌓인다.
+ * 값은 좌측에서 인라인으로 바로 고치고(기회-7), 단계는 스테퍼 노드를 눌러 옮긴다(기회-1).
+ *
  * 다섯 조회는 서로 독립이라 병렬로 실행하고, 전부 orgId 로 스코프한다.
  */
 export default async function OpportunityDetailPage({
@@ -168,15 +162,37 @@ export default async function OpportunityDetailPage({
 
   const dto = toOpportunityDTO(opportunity);
 
-  // 이력의 documentId 를 실제 문서와 맞춰 링크를 건다. 이 목록은 이미 orgId 로 좁혀 조회했으므로
-  // 여기 없는 id(삭제됐거나 연결이 끊긴 문서)는 링크하지 않는다 — 조직 밖 문서로 새지 않는다.
-  const documentById = new Map(documents.map((document) => [document.id, document]));
+  // 이력의 documentId 를 실제 문서와 맞춰 링크·요약을 만든다. 이 목록은 이미 orgId 로 좁혀
+  // 조회했고, 여기 없는 id 도 아래에서 orgId 로 다시 확인한다 — 조직 밖 문서로 새지 않는다.
+  const documentById = new Map<string, TimelineDocumentInfo>(
+    documents.map((document) => [document.id, document]),
+  );
 
   // detail 은 JSON 문자열이라 한 번만 파싱해 이력 표시와 진행 단계 계산이 함께 쓴다.
   const parsedLogs = activityLogs.map((log) => ({
     log,
     detail: parseDetail(log.detail),
   }));
+
+  /**
+   * 이력이 가리키지만 지금은 이 기회에 붙어 있지 않은 문서 (연결이 끊긴 경우).
+   * 이력 줄마다 조회하면 N+1 이 되므로 **모아서 한 번에** 읽고, 없으면 조회를 건너뛴다.
+   */
+  const detachedIds = [
+    ...new Set(
+      parsedLogs.flatMap(({ detail }) => {
+        const id = text(detail, "documentId");
+        return id && !documentById.has(id) ? [id] : [];
+      }),
+    ),
+  ];
+  if (detachedIds.length > 0) {
+    const detached = await prisma.document.findMany({
+      where: { id: { in: detachedIds }, orgId: user.orgId },
+      select: { id: true, title: true, type: true, amount: true },
+    });
+    for (const document of detached) documentById.set(document.id, document);
+  }
 
   /**
    * 진행 단계 스테퍼가 쓸 전이 이력. **이미 조회한 활동 이력에서 파생**하므로 쿼리가 늘지 않는다.
@@ -190,8 +206,8 @@ export default async function OpportunityDetailPage({
   }));
 
   const timeline: TimelineEntry[] = parsedLogs.map(({ log, detail }) => {
-    const linked = text(detail, "documentId");
-    const document = linked ? documentById.get(linked) : undefined;
+    const linkedId = text(detail, "documentId");
+    const document = linkedId ? documentById.get(linkedId) : undefined;
     return {
       id: log.id,
       eventType: log.eventType,
@@ -202,98 +218,83 @@ export default async function OpportunityDetailPage({
       occurredAt: log.occurredAt,
       detailText: describeActivity(log.eventType, detail),
       documentHref: document ? `/editor/${document.id}` : null,
-      // 제목은 현재 문서 값을 우선 쓰고, 없으면 이력에 남긴 당시 제목을 보여준다
+      // 제목·종류는 현재 문서 값을 우선 쓰고, 없으면 이력에 남긴 당시 값을 보여준다 (기회-13)
       documentTitle: document?.title ?? text(detail, "documentTitle"),
+      documentType: document?.type ?? text(detail, "documentType"),
+      // 금액은 이력에 남지 않으므로 문서를 찾은 경우에만 채운다 (0원과 "모름"은 다르다)
+      documentAmount: document?.amount ?? null,
     };
   });
+
+  const newDocumentHref = `/generator?opportunityId=${encodeURIComponent(dto.id)}`;
 
   return (
     <>
       <PageHeader
         title={dto.name}
-        backHref="/opportunities"
+        // 브레드크럼이 거래처를 상위로 두므로 되돌아갈 기본 위치도 그 거래처로 맞춘다
+        backHref={`/accounts/${dto.accountId}`}
         breadcrumb={[
-          { label: "영업 기회", href: "/opportunities" },
+          { label: "거래처", href: "/accounts" },
+          { label: dto.accountName, href: `/accounts/${dto.accountId}` },
           { label: dto.name },
         ]}
         description={`${formatDate(opportunity.createdAt)} 등록 · ${formatDateTime(opportunity.updatedAt)} 최근 수정`}
         actions={
-          <OpportunityDetailActions
-            opportunity={dto}
-            accounts={accounts}
-            owners={owners}
-            documentCount={documents.length}
-          />
+          <>
+            {/* 이 기회에 연결될 새 문서를 만들러 가는 동선 (기회-2) */}
+            <Button variant="outline" asChild>
+              <Link href={newDocumentHref}>
+                <FilePlus2 className="size-4" aria-hidden="true" />
+                문서 작성
+              </Link>
+            </Button>
+            <OpportunityDetailActions
+              opportunityId={dto.id}
+              opportunityName={dto.name}
+              documentCount={documents.length}
+            />
+          </>
         }
       />
 
       <div className="flex-1 overflow-auto p-8">
-        <div className="mx-auto max-w-4xl space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">진행 단계</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <OpportunityStageStepper
-                stage={dto.stage}
-                lostReason={opportunity.lostReason}
-                history={stageHistory}
-              />
-            </CardContent>
-          </Card>
+        {/*
+          2단 레이아웃 (기회-4) — 좌: 이 기회가 무엇인지 / 우: 무슨 일이 있었는지.
+          lg 미만에서는 한 단으로 쌓여 좌측(단계·기본 정보·메모)이 먼저 보인다.
+        */}
+        <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-6 lg:grid-cols-2">
+          <div className="min-w-0 space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">진행 단계</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <OpportunityStageStepper
+                  stage={dto.stage}
+                  lostReason={opportunity.lostReason}
+                  history={stageHistory}
+                  // 노드를 눌러 단계를 옮긴다 (기회-1) — 저장은 stage 전용 라우트만 경유한다
+                  action={{ opportunityId: dto.id, name: dto.name }}
+                />
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">기본 정보</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <dl className="divide-y">
-                <InfoRow label="거래처">
-                  <Link
-                    href={`/accounts/${dto.accountId}`}
-                    className="rounded transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  >
-                    {dto.accountName}
-                  </Link>
-                </InfoRow>
-                {/* 단계는 위 스테퍼가 더 정확히(지나온·현재·남은·갈래) 보여주므로 여기서 뺀다 */}
-                <InfoRow label="예상 금액">
-                  {formatKRW(dto.expectedAmount)}
-                </InfoRow>
-                <InfoRow label="예상 마감일">
-                  {dto.expectedCloseDate ? (
-                    formatDate(dto.expectedCloseDate)
-                  ) : (
-                    <span className="text-muted-foreground">
-                      아직 정하지 않았습니다.
-                    </span>
-                  )}
-                </InfoRow>
-                {/* 거래처 담당자와 헷갈리지 않도록 영업 담당자로 못박는다 (기회-14) */}
-                <InfoRow label="영업 담당자">{dto.ownerName}</InfoRow>
-              </dl>
-            </CardContent>
-          </Card>
+            {/* 기본 정보·메모는 인라인으로 바로 고친다 (기회-7) */}
+            <OpportunityInlineFields
+              opportunity={dto}
+              accounts={accounts}
+              owners={owners}
+            />
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">메모</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {dto.memo ? (
-                <p className="text-sm leading-relaxed whitespace-pre-line">
-                  {dto.memo}
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  아직 메모가 없습니다. 수정에서 상담 내용·경쟁사·결재 라인을
-                  남겨두시면 팀원이 함께 볼 수 있습니다.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <OpportunityDetailTabs timeline={timeline} documents={documents} />
+          <div className="min-w-0">
+            <OpportunityDetailTabs
+              timeline={timeline}
+              documents={documents}
+              opportunityId={dto.id}
+            />
+          </div>
         </div>
       </div>
     </>

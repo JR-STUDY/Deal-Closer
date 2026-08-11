@@ -11,6 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { StatusBadge, DocTypeBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
 import type { ActivityEventType } from "@/lib/constants";
@@ -39,6 +40,10 @@ export type TimelineEntry = {
   /** 관련 문서로 가는 링크. 문서가 지워졌거나 연결이 끊겼으면 null. */
   documentHref: string | null;
   documentTitle: string | null;
+  /** 문서 종류 (원본 값 — 배지가 라벨로 옮긴다). 알 수 없으면 null. */
+  documentType: string | null;
+  /** 문서 금액 (KRW 정수). 알 수 없으면 null — 0원과 구분해야 하므로 null 로 둔다. */
+  documentAmount: number | null;
 };
 
 /**
@@ -99,12 +104,64 @@ export type LinkedDocument = {
   createdAt: Date;
 };
 
-/** 탭 안의 빈 상태 안내 */
-function EmptyPanel({ message }: { message: string }) {
+/** 탭 안의 빈 상태 안내 — 다음에 할 일이 있으면 버튼으로 함께 안내한다 (기회-3) */
+function EmptyPanel({
+  message,
+  action,
+}: {
+  message: string;
+  action?: { href: string; label: string };
+}) {
   return (
-    <p className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-      {message}
-    </p>
+    <div className="rounded-md border border-dashed p-8 text-center">
+      <p className="text-sm text-muted-foreground">{message}</p>
+      {action ? (
+        <Button asChild className="mt-4">
+          <Link href={action.href}>
+            <FilePlus2 className="size-4" aria-hidden="true" />
+            {action.label}
+          </Link>
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * 이력 한 줄에 붙는 문서 요약 — 제목 · 종류 · 금액 (기회-13).
+ * 이력만 보고도 "무슨 문서였는지"를 알 수 있어야 문서를 열어보지 않아도 흐름이 읽힌다.
+ * 금액은 아는 경우에만 보여준다 (0원과 "모름"은 다르다).
+ */
+function TimelineDocument({ entry }: { entry: TimelineEntry }) {
+  const title = entry.documentTitle ?? "문서 열기";
+  const summary = (
+    <>
+      <FileText className="size-3.5 shrink-0" aria-hidden="true" />
+      <span className="truncate">{title}</span>
+      {entry.documentType ? <DocTypeBadge type={entry.documentType} /> : null}
+      {entry.documentAmount === null ? null : (
+        <span className="shrink-0 tabular-nums text-muted-foreground">
+          {formatKRW(entry.documentAmount)}
+        </span>
+      )}
+    </>
+  );
+
+  // 문서가 지워졌거나 연결이 끊겼으면 링크 없이 남은 정보만 보여준다
+  if (!entry.documentHref) {
+    return (
+      <span className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+        {summary}
+      </span>
+    );
+  }
+  return (
+    <Link
+      href={entry.documentHref}
+      className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded text-xs font-medium text-primary transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      {summary}
+    </Link>
   );
 }
 
@@ -121,10 +178,15 @@ function TabLabel({ label, count }: { label: string; count: number }) {
 export function OpportunityDetailTabs({
   timeline,
   documents,
+  opportunityId,
 }: {
   timeline: TimelineEntry[];
   documents: LinkedDocument[];
+  /** 빈 상태에서 이 기회에 연결된 문서를 만들러 갈 때 쓴다 (기회-2 · 기회-3) */
+  opportunityId: string;
 }) {
+  const newDocumentHref = `/generator?opportunityId=${encodeURIComponent(opportunityId)}`;
+
   return (
     <Tabs defaultValue="timeline" className="gap-4">
       <TabsList>
@@ -181,14 +243,10 @@ export function OpportunityDetailTabs({
                       {entry.actorName}
                       {entry.detailText ? ` · ${entry.detailText}` : ""}
                     </p>
-                    {entry.documentHref ? (
-                      <Link
-                        href={entry.documentHref}
-                        className="mt-1 inline-flex items-center gap-1 rounded text-xs font-medium text-primary transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                      >
-                        <FileText className="size-3.5" aria-hidden="true" />
-                        {entry.documentTitle ?? "문서 열기"}
-                      </Link>
+                    {entry.documentHref ||
+                    entry.documentTitle ||
+                    entry.documentType ? (
+                      <TimelineDocument entry={entry} />
                     ) : null}
                   </div>
                 </li>
@@ -200,7 +258,10 @@ export function OpportunityDetailTabs({
 
       <TabsContent value="documents">
         {documents.length === 0 ? (
-          <EmptyPanel message="이 기회에 연결된 문서가 아직 없습니다. 견적서·계약서를 만들면 여기에 모입니다." />
+          <EmptyPanel
+            message="이 기회에 연결된 문서가 아직 없습니다. 견적서·계약서를 만드시면 여기에 모이고, 발송하시면 단계도 함께 옮겨집니다."
+            action={{ href: newDocumentHref, label: "문서 생성으로 이동" }}
+          />
         ) : (
           <ul className="divide-y rounded-md border">
             {documents.map((document) => (

@@ -1,15 +1,33 @@
-import { Fragment } from "react";
+"use client";
+
+import { Fragment, useState } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import type { OpportunityStage } from "@/lib/constants";
+import {
+  CLOSED_OPPORTUNITY_STAGES,
+  OPPORTUNITY_STAGE_LABELS,
+  type OpportunityStage,
+} from "@/lib/constants";
 import {
   opportunityProgress,
   stageGuidance,
   type ProgressNode,
   type StageHistoryEntry,
 } from "@/lib/opportunity-progress";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  StageChangeConfirmDialog,
+  useStageChange,
+} from "@/components/opportunity/stage-change";
 
 /**
- * 영업 기회 진행 표시 — 스테퍼 (상세 상단, F-111 · F-112 안내).
+ * 영업 기회 진행 표시 — 스테퍼 (상세 상단, F-111 · F-112).
  *
  * 가로 한 줄(초기 ─ 제안 ─ 검토/협상 ─ 마감)이다. 마지막 마감 노드는 **항상 하나**이며,
  * 진행 중이면 회색 `수주/실주`(앞으로 갈 곳), 마감되면 실제 결과 하나가 채워진다.
@@ -20,10 +38,19 @@ import {
  * **활동 이력에만** 남는다. 그래서 상세 페이지가 이미 조회한 이력을 그대로 받아 넘긴다.
  * 상단(진행 단계)과 하단(이력)이 같은 출처를 보므로 둘이 어긋날 수 없다.
  *
- * **표시 전용**이다 — 여기서 단계를 바꾸지 않는다 (수동 변경은 Phase 3 F-112 범위).
- * 상호작용이 없으므로 서버 컴포넌트이며, 상태 계산은 `@/lib/opportunity-progress` 의
- * 순수 함수 하나에 모아 목록 안내와 기준을 공유한다.
+ * `action` 을 주면 **노드를 눌러 그 단계로 전이**한다 (기회-1 · 기회-7). 이때도 이 파일은
+ * 규칙을 스스로 판단하지 않는다 — 허용 판정·경고 문구는 `@/lib/opportunity-transition`,
+ * 저장은 `POST /api/opportunities/:id/stage` → `@/lib/opportunity-stage` 트랜잭션이 맡는다.
+ * 칸반 ⋯ 메뉴와 같은 `useStageChange` 훅을 쓰므로 두 화면의 확인창·안내가 어긋나지 않는다.
+ * 상태 계산(`@/lib/opportunity-progress`)은 **읽기 전용**이며 전이에 관여하지 않는다.
  */
+
+/** 노드를 눌러 단계를 바꿀 수 있게 하는 대상 (없으면 표시 전용) */
+export type StageStepperAction = {
+  opportunityId: string;
+  /** 되돌리기 확인창에 쓸 기회명 */
+  name: string;
+};
 
 /**
  * 마감 단계의 강조 색. `StageBadge` 의 수주=emerald / 실주=rose 와 같은 계열을 써서
@@ -115,34 +142,82 @@ function Connector({ into }: { into: ProgressNode }) {
   );
 }
 
-/**
- * 노드 한 칸 (점 + 아래 라벨).
- * 라벨은 absolute 라 줄 높이를 밀지 않는다. 양 끝 노드의 라벨을 가운데 정렬하면 좌우로
- * 넘치므로 안쪽으로 붙인다.
- */
-function StageMark({
+type MarkAlign = "start" | "center" | "end";
+
+/** 노드 라벨 (점 아래). absolute 라 줄 높이를 밀지 않는다. */
+function StageMarkLabel({
   node,
   align,
 }: {
   node: ProgressNode;
-  align: "start" | "center" | "end";
+  align: MarkAlign;
 }) {
+  return (
+    <span
+      className={cn(
+        "absolute top-full mt-2 text-xs whitespace-nowrap",
+        align === "start" && "left-0",
+        align === "center" && "left-1/2 -translate-x-1/2",
+        align === "end" && "right-0",
+        stageLabelClass(node),
+      )}
+    >
+      {node.label}
+      <span className="sr-only">{statusHint(node)}</span>
+    </span>
+  );
+}
+
+/**
+ * 노드 한 칸 (점 + 아래 라벨) — 표시 전용.
+ * 양 끝 노드의 라벨을 가운데 정렬하면 좌우로 넘치므로 안쪽으로 붙인다.
+ */
+function StageMark({ node, align }: { node: ProgressNode; align: MarkAlign }) {
   return (
     <div className="relative flex flex-col items-center">
       <StageDot node={node} />
-      <span
-        className={cn(
-          "absolute top-full mt-2 text-xs whitespace-nowrap",
-          align === "start" && "left-0",
-          align === "center" && "left-1/2 -translate-x-1/2",
-          align === "end" && "right-0",
-          stageLabelClass(node),
-        )}
-      >
-        {node.label}
-        <span className="sr-only">{statusHint(node)}</span>
-      </span>
+      <StageMarkLabel node={node} align={align} />
     </div>
+  );
+}
+
+/**
+ * 누를 수 있는 노드 — 클릭·Enter·Space 로 그 단계로 전이한다 (기회-1, 정책 ACC_*).
+ * 점(0.875rem)만으로는 누르기 어려우므로 padding 으로 히트 영역을 넓히고 라벨도 버튼 안에 둔다.
+ * 음수 margin 으로 넓힌 만큼 되돌려 트랙 간격은 표시 전용일 때와 같게 유지한다.
+ *
+ * 드롭다운 트리거로도 쓰이므로 나머지 props(onClick 등)를 그대로 넘겨받는다.
+ */
+function StageMarkButton({
+  node,
+  align,
+  label,
+  disabled,
+  isCurrent,
+  ...rest
+}: {
+  node: ProgressNode;
+  align: MarkAlign;
+  label: string;
+  disabled: boolean;
+  isCurrent: boolean;
+} & React.ComponentPropsWithoutRef<"button">) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-current={isCurrent ? "step" : undefined}
+      disabled={disabled}
+      {...rest}
+      className={cn(
+        "relative -m-2 flex flex-col items-center rounded-full p-2 transition-colors",
+        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        disabled ? "cursor-default" : "cursor-pointer hover:bg-muted",
+      )}
+    >
+      <StageDot node={node} />
+      <StageMarkLabel node={node} align={align} />
+    </button>
   );
 }
 
@@ -150,6 +225,7 @@ export function OpportunityStageStepper({
   stage,
   lostReason,
   history,
+  action,
 }: {
   stage: OpportunityStage;
   /** 실주 사유 (F-117). LOST 가 아니거나 비어 있으면 null. */
@@ -159,36 +235,131 @@ export function OpportunityStageStepper({
    * 마감된 기회가 **어디까지 갔었는지**는 이력만 알고 있다 — 없으면 초기까지만 지나온으로 본다.
    */
   history: readonly StageHistoryEntry[];
+  /** 주면 노드를 눌러 단계를 바꿀 수 있다. 없으면 표시 전용이다. */
+  action?: StageStepperAction;
 }) {
-  const progress = opportunityProgress(stage, history);
+  const router = useRouter();
+  /**
+   * 낙관적으로 반영한 단계 (저장이 끝나기 전에 화면에 먼저 보여줄 값).
+   * 실패·취소하면 rollback 이 비워 서버 값(props)으로 되돌아간다 — 칸반 드래그와 같은 방식이다.
+   */
+  const [optimisticStage, setOptimisticStage] =
+    useState<OpportunityStage | null>(null);
+  const stageChange = useStageChange({ onChanged: () => router.refresh() });
+
+  const currentStage = optimisticStage ?? stage;
+  /**
+   * 낙관 반영 중에는 방금 고른 전이도 이력에 얹어 계산한다 — 그래야 지나온 구간이 실제 이동과
+   * 어긋나지 않는다. 저장이 끝나면 서버가 같은 내용을 이력으로 채운다.
+   */
+  const effectiveHistory: readonly StageHistoryEntry[] = optimisticStage
+    ? [...history, { from: stage, to: optimisticStage }]
+    : history;
+  const progress = opportunityProgress(currentStage, effectiveHistory);
+
+  const selectStage = (toStage: OpportunityStage) => {
+    if (!action || toStage === currentStage) return;
+    setOptimisticStage(toStage);
+    stageChange.request({
+      target: {
+        id: action.opportunityId,
+        name: action.name,
+        stage: currentStage,
+      },
+      toStage,
+      rollback: () => setOptimisticStage(null),
+    });
+  };
 
   return (
     <div>
       {/* 라벨이 absolute 라 pb 로 라벨 자리를 확보한다 */}
       <div className="flex items-center px-1 pb-8">
-        {progress.track.map((node, index) => (
-          <Fragment key={node.stage}>
-            {index > 0 ? <Connector into={node} /> : null}
-            {/* 트랙 끝에 마감 노드가 항상 붙으므로 마지막 트랙 노드도 가운데 정렬이다 */}
-            <StageMark node={node} align={index === 0 ? "start" : "center"} />
-          </Fragment>
-        ))}
+        {progress.track.map((node, index) => {
+          const align: MarkAlign = index === 0 ? "start" : "center";
+          const isCurrent = node.stage === currentStage;
+          return (
+            <Fragment key={node.stage}>
+              {index > 0 ? <Connector into={node} /> : null}
+              {/* 트랙 끝에 마감 노드가 항상 붙으므로 마지막 트랙 노드도 가운데 정렬이다 */}
+              {action ? (
+                <StageMarkButton
+                  node={node}
+                  align={align}
+                  isCurrent={isCurrent}
+                  disabled={isCurrent || stageChange.isSaving}
+                  label={
+                    isCurrent
+                      ? `${node.label} — 현재 단계`
+                      : `${node.label} 단계로 변경`
+                  }
+                  onClick={() => selectStage(node.stage)}
+                />
+              ) : (
+                <StageMark node={node} align={align} />
+              )}
+            </Fragment>
+          );
+        })}
 
         {/*
           마감 노드 하나 — 진행 중이면 회색 `수주/실주`(앞으로 갈 곳), 마감이면 실제 결과다.
           갈래로 벌리지 않는다 (기회-11). 회색 여부는 노드 status 가 정하므로 여기서 분기하지 않는다.
+          누를 때는 어느 결과인지 정해야 하므로 수주·실주를 메뉴로 고른다.
         */}
         <Connector into={progress.outcome} />
-        <StageMark node={progress.outcome} align="end" />
+        {action ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild disabled={stageChange.isSaving}>
+              <StageMarkButton
+                node={progress.outcome}
+                align="end"
+                isCurrent={progress.isClosed}
+                disabled={stageChange.isSaving}
+                label="마감 처리 — 수주 또는 실주 선택"
+              />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>마감 처리</DropdownMenuLabel>
+              {CLOSED_OPPORTUNITY_STAGES.map((closedStage) => (
+                <DropdownMenuItem
+                  key={closedStage}
+                  disabled={closedStage === currentStage}
+                  onSelect={() => selectStage(closedStage)}
+                >
+                  {OPPORTUNITY_STAGE_LABELS[closedStage]}(으)로 마감
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <StageMark node={progress.outcome} align="end" />
+        )}
       </div>
 
-      <p className="text-sm text-muted-foreground">{stageGuidance(stage)}</p>
-      {lostReason ? (
+      <p className="text-sm text-muted-foreground">
+        {stageGuidance(currentStage)}
+      </p>
+      {/* 낙관 반영으로 마감을 풀었다면 사유도 함께 감춘다 (서버 저장이 끝나면 실제로 지워진다) */}
+      {lostReason && currentStage === "LOST" ? (
         <p className="mt-1.5 text-sm">
           <span className="text-muted-foreground">실주 사유</span>{" "}
           <span className="font-medium">{lostReason}</span>
         </p>
       ) : null}
+      {action ? (
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          단계를 누르시면 그 단계로 옮깁니다. 마감을 되돌리실 때는 먼저 확인을
+          여쭙습니다.
+        </p>
+      ) : null}
+
+      <StageChangeConfirmDialog
+        pending={stageChange.pending}
+        isSaving={stageChange.isSaving}
+        onCancel={stageChange.cancel}
+        onConfirm={stageChange.confirm}
+      />
     </div>
   );
 }
