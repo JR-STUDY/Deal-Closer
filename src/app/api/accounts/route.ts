@@ -8,6 +8,7 @@ import {
   toAccountDTO,
   type AccountListItem,
 } from "@/lib/account";
+import { primaryContact, toContactDTO } from "@/lib/contact";
 
 /**
  * GET /api/accounts — 현재 조직의 거래처 목록 (F-102).
@@ -21,13 +22,22 @@ export async function GET(req: NextRequest) {
   const accounts = await prisma.account.findMany({
     where: accountsWhere(org.id, query),
     orderBy: { updatedAt: "desc" },
-    include: { _count: { select: { opportunities: true } } },
+    include: {
+      _count: { select: { opportunities: true, contacts: true } },
+      // 목록에 싣는 담당자는 **대표 1명뿐**이다 (거래처-8). 나머지는 상세에서 본다.
+      contacts: { where: { isPrimary: true } },
+    },
   });
 
-  const items: AccountListItem[] = accounts.map((account) => ({
-    ...toAccountDTO(account),
-    opportunityCount: account._count.opportunities,
-  }));
+  const items: AccountListItem[] = accounts.map((account) => {
+    const primary = primaryContact(account.contacts);
+    return {
+      ...toAccountDTO(account),
+      opportunityCount: account._count.opportunities,
+      contactCount: account._count.contacts,
+      primaryContact: primary ? toContactDTO(primary) : null,
+    };
+  });
   return ok(items);
 }
 

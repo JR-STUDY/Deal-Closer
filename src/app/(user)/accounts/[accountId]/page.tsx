@@ -2,10 +2,12 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { toAccountDTO } from "@/lib/account";
+import { toContactDTO } from "@/lib/contact";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { NewOpportunityButton } from "@/components/opportunity/new-opportunity-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AccountContacts } from "./_components/account-contacts";
 import { AccountDetailActions } from "./_components/account-detail-actions";
 import { AccountRelatedTabs } from "./_components/account-related-tabs";
 
@@ -36,9 +38,15 @@ export default async function AccountDetailPage({
 }) {
   const [{ accountId }, user] = await Promise.all([params, getCurrentUser()]);
 
-  const [account, opportunities, documents, emailLogs, owners] =
+  const [account, contacts, opportunities, documents, emailLogs, owners] =
     await Promise.all([
       prisma.account.findFirst({ where: { id: accountId, orgId: user.orgId } }),
+      // 상세에서는 담당자 **전원**을 다룬다 (목록은 대표 1명만 본다 — 거래처-8).
+      // 정렬은 화면이 `sortContacts` 로 맞추므로 여기서는 조회 순서를 고정만 해 둔다.
+      prisma.contact.findMany({
+        where: { accountId, orgId: user.orgId },
+        orderBy: { createdAt: "asc" },
+      }),
       prisma.opportunity.findMany({
         where: { accountId, orgId: user.orgId },
         orderBy: { updatedAt: "desc" },
@@ -128,14 +136,17 @@ export default async function AccountDetailPage({
             <CardContent>
               <dl className="divide-y">
                 <InfoRow label="회사명" value={account.companyName} />
-                <InfoRow label="담당자명" value={account.contactName} />
-                <InfoRow label="직책" value={account.position} />
-                <InfoRow label="핸드폰 번호" value={account.phone} />
-                <InfoRow label="담당자 이메일" value={account.email} />
                 <InfoRow label="사업자등록번호" value={account.bizRegNo} />
               </dl>
             </CardContent>
           </Card>
+
+          {/* 담당자는 여러 명이므로 기본 정보 밖으로 뺀다 — 여기서 전원을 관리한다 (거래처-8) */}
+          <AccountContacts
+            accountId={account.id}
+            companyName={account.companyName}
+            contacts={contacts.map(toContactDTO)}
+          />
 
           <Card>
             <CardHeader>
