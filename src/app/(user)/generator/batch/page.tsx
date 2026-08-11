@@ -20,7 +20,7 @@ export default function BatchConvertPage() {
         }
       />
 
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
         <BatchConvertClient />
       </div>
     </>

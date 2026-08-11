@@ -39,7 +39,7 @@ export default async function EmailSettingsPage() {
         description="Gmail, Outlook 계정을 연결하면 서비스 내에서 바로 견적서 발송이 가능합니다."
       />
 
-      <div className="flex-1 space-y-8 overflow-auto p-8">
+      <div className="flex-1 space-y-8 overflow-auto p-8 [scrollbar-gutter:stable]">
         {/* 섹션1: 연결된 계정 */}
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground">

@@ -24,7 +24,7 @@ export default async function MailDomainSettingsPage() {
         description="팀이 공통으로 사용할 발신 메일 도메인을 등록하고 인증합니다. 인증된 도메인은 담당자가 발신 주소로 선택할 수 있습니다."
       />
 
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
         <div className="mx-auto max-w-3xl">
           <MailDomainManager initialDomains={domains.map(toMailDomainDTO)} />
         </div>

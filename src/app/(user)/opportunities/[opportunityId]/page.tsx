@@ -258,7 +258,7 @@ export default async function OpportunityDetailPage({
         }
       />
 
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
         {/*
           2단 레이아웃 (기회-4) — 좌: 이 기회가 무엇인지 / 우: 무슨 일이 있었는지.
           lg 미만에서는 한 단으로 쌓여 좌측(단계·기본 정보·메모)이 먼저 보인다.

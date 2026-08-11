@@ -65,7 +65,7 @@ export default async function GeneratorPage({
         }
       />
 
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
         <GeneratorForm
           libraryDocuments={documents}
           // 클라이언트로는 직렬화 가능한 값만 넘긴다 (REACT_BEST_PRACTICES ③)

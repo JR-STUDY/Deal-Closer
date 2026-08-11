@@ -17,7 +17,7 @@ export default async function BrandingSettingsPage() {
         description="발송 문서와 콘솔에 적용될 브랜드 요소를 설정합니다."
       />
 
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
         <BrandingForm
           initialCompanyName={branding?.companyName ?? org.name}
           initialLogoUrl={branding?.logoUrl ?? null}

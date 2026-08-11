@@ -119,7 +119,7 @@ export default async function AccountDetailPage({
         }
       />
 
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
         <div className="mx-auto max-w-4xl space-y-6">
           <Card>
             <CardHeader>
