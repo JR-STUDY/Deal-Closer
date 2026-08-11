@@ -6,6 +6,7 @@ import {
   OPPORTUNITY_DTO_SELECT,
   parseOpportunityInput,
   toOpportunityDTO,
+  withOpportunityDefaults,
 } from "@/lib/opportunity";
 import { findRefScopeError } from "../_scope";
 
@@ -14,19 +15,33 @@ type Params = { params: Promise<{ id: string }> };
 /**
  * 조직 스코프 안에서 기회를 찾는다.
  * 다른 조직의 id 가 들어와도 404 로 끝나야 하므로 findUnique 를 쓰지 않는다.
+ *
+ * 부분 수정(인라인)이 빠진 필드를 현재 값으로 채울 수 있도록 편집 대상 필드를 함께 읽는다.
  */
 async function findScopedOpportunity(id: string, orgId: string) {
   return prisma.opportunity.findFirst({
     where: { id, orgId },
-    select: { id: true, name: true },
+    select: {
+      id: true,
+      accountId: true,
+      ownerId: true,
+      name: true,
+      expectedAmount: true,
+      expectedCloseDate: true,
+      memo: true,
+    },
   });
 }
 
 /**
  * PATCH /api/opportunities/:id — 기회 수정 (F-111).
  *
+ * **부분 수정을 지원한다** (기회-7 인라인 수정) — 본문에 담긴 필드만 바뀌고 나머지는 현재 값을
+ * 유지한다. 상세에서 한 필드만 고쳐 보내도 다른 필드가 지워지지 않아야 하기 때문이다.
+ * 검증은 여전히 `parseOpportunityInput()` 한 곳을 통과하므로 다이얼로그 저장과 제약이 같다.
+ *
  * `stage` 는 받지 않는다 — 단계 전이는 활동 이력과 한 트랜잭션이어야 하므로
- * `@/lib/opportunity-stage` 전용 경로로만 처리한다 (F-112, Phase 3).
+ * `@/lib/opportunity-stage` 전용 경로(`POST /api/opportunities/:id/stage`)로만 처리한다.
  */
 export async function PATCH(req: NextRequest, { params }: Params) {
   const [{ id }, user] = await Promise.all([params, getCurrentUser()]);
@@ -41,7 +56,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return fail("잘못된 요청 본문입니다.");
   }
 
-  const parsed = parseOpportunityInput(body);
+  const parsed = parseOpportunityInput(withOpportunityDefaults(body, existing));
   if ("error" in parsed) return fail(parsed.error);
 
   const scopeError = await findRefScopeError(user.orgId, parsed);

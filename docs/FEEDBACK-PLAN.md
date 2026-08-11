@@ -149,6 +149,47 @@ A·B 반영본을 화면에서 보고 나온 재지시다. **B-1(행 전체 클�
 ```
 현재 기회 상세는 `영업 기회 > 기회명` 이다. **거래처를 상위로 두는 구조**로 바꾼다.
 
+> ✅ **C 그룹 완료** (7건) — 브랜치 `isaac9711/crm-detail-rebuild`
+> 거래처 상세는 이미 `거래처 > 회사명` 이라 그대로 두고, 기회 상세만 3단으로 바꿨다.
+> 새 검증 **25건**(`pnpm test:opportunity-patch`) 추가, 기존 검증(103·156·382·mailer) 유지.
+
+### C 반영 결과와 설계 근거
+
+| # | 조치 | 대상 |
+|---|---|---|
+| 공통 | 기회 상세 브레드크럼 `거래처 > 회사명 > 기회명`, `backHref` 도 그 거래처로 | `[opportunityId]/page.tsx` |
+| 기회-4 | 2단 레이아웃 — 좌: 진행 단계·기본 정보·메모 / 우: 이력·연관 문서. `lg` 미만 1단 | `[opportunityId]/page.tsx` |
+| 기회-7 | 수정 다이얼로그 제거 → 인라인 편집(6개 필드). 낙관 반영 + 실패 롤백 + toast | `_components/opportunity-inline-fields.tsx` · `api/opportunities/[id]/route.ts` |
+| 기회-1 | 스테퍼 노드 클릭 전이. 마감 노드는 수주·실주 드롭다운 | `opportunity-stage-stepper.tsx` |
+| 기회-2 | 헤더 `문서 작성` → `/generator?opportunityId=` · 생성 문서 자동 연결 | `page.tsx` · `generator/*` · `api/generate/route.ts` |
+| 기회-3 | 연관 문서 0건 빈 상태에 `문서 생성으로 이동` CTA | `opportunity-detail-tabs.tsx` |
+| 기회-13 | 이력에 문서 제목·종류 배지·금액 요약 | `opportunity-detail-tabs.tsx` · `page.tsx` |
+
+**부분 수정 병합(기회-7)** — 인라인은 고친 필드 하나만 보낸다. 검증 규칙을 두 벌로 나누는 대신
+`withOpportunityDefaults()` 가 빠진 필드를 현재 값으로 채워 기존 `parseOpportunityInput()` 을
+그대로 통과시킨다. **빈 문자열은 "비움"** 이므로 키 존재 여부로만 판단한다 — 값의 참·거짓으로
+판단하면 마감일·메모를 지울 수 없다. 이 경계를 `scripts/opportunity-patch.test.ts` 가 지킨다.
+
+**스테퍼 전이(기회-1)** — 스테퍼는 규칙을 스스로 판단하지 않는다. 허용 판정·경고 문구는
+`@/lib/opportunity-transition`, 저장은 `POST /api/opportunities/:id/stage` → `opportunity-stage`
+트랜잭션이며, 칸반과 같은 `useStageChange` 훅을 공유한다. `@/lib/opportunity-progress` 는
+**읽기 전용 표시 모듈**로 남겨 전이 로직을 넣지 않았고, 진행 단계는 계속 이력 기반
+(`opportunityProgress(stage, history)`)으로 도출한다 — 상단과 하단이 어긋나지 않아야 한다.
+낙관 반영 중에는 방금 고른 전이를 이력에 얹어 계산해 지나온 구간이 흔들리지 않게 했다.
+
+**마감 노드를 갈래로 벌리지 않았다** — 진행 중에는 수주·실주 중 어느 쪽인지 정해지지 않았으므로
+노드 하나를 두고, 누르면 드롭다운으로 결과를 고른다(기회-11 결정 유지).
+
+**문서 연결(기회-2)** — "양식화" 시나리오는 **이미 있는 공용 기준 양식을 열어줄 뿐**이라 연결하지
+않는다(팀 공용 문서가 특정 기회에 묶이면 안 된다). 새로 만드는 두 경로만 `Document.opportunityId`
+연결 + `DOCUMENT_CREATED` 이력을 **한 트랜잭션**으로 남긴다. 기회 id 는 서버가 orgId 로 다시
+확인하고, 찾지 못하면 조용히 넘기지 않고 404 로 끊는다.
+
+**이력 문서 요약(기회-13)** — 금액은 `ActivityLog.detail` 에 없으므로 문서에서 가져온다. 이력 줄마다
+조회하면 N+1 이 되므로, 이 기회에 붙은 문서 목록(이미 조회함)으로 먼저 채우고 **연결이 끊긴
+문서만 모아 한 번** 더 읽는다(없으면 조회 자체를 건너뛴다). 끝내 못 찾으면 금액은 비운다 —
+0원과 "모름"은 다르다.
+
 ---
 
 ## D. 거래처 담당자 다중화 (1건) — 스키마 변경

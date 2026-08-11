@@ -177,6 +177,46 @@ export type OpportunityInput = {
   memo: string | null;
 };
 
+/** 부분 수정(PATCH)에서 빠진 필드를 채울 현재 값 */
+export type OpportunityCurrentValues = {
+  accountId: string;
+  ownerId: string;
+  name: string;
+  expectedAmount: number;
+  expectedCloseDate: Date | null;
+  memo: string | null;
+};
+
+/**
+ * 부분 수정 본문에 **빠진 필드를 현재 값으로 채운다** (기회-7 인라인 수정).
+ *
+ * 인라인 수정은 고친 한 필드만 보낸다. 검증 규칙을 두 벌로 나누는 대신 여기서 전체 모양을
+ * 만들어 `parseOpportunityInput()` 한 곳을 그대로 통과시킨다 — 규칙이 갈라지면 다이얼로그로
+ * 저장한 값과 인라인으로 저장한 값의 제약이 달라진다.
+ *
+ * 보내지 않은 필드는 건드리지 않는다(현재 값 유지). 빈 문자열은 "비움"이라는 뜻이므로
+ * 키가 있는지(`in`)로만 판단하고 값의 참·거짓으로 판단하지 않는다.
+ */
+export function withOpportunityDefaults(
+  body: Record<string, unknown>,
+  current: OpportunityCurrentValues,
+): Record<string, unknown> {
+  const pick = (key: keyof OpportunityFormValues, fallback: unknown): unknown =>
+    key in body ? body[key] : fallback;
+
+  return {
+    accountId: pick("accountId", current.accountId),
+    ownerId: pick("ownerId", current.ownerId),
+    name: pick("name", current.name),
+    expectedAmount: pick("expectedAmount", current.expectedAmount),
+    expectedCloseDate: pick(
+      "expectedCloseDate",
+      toDateInputValue(current.expectedCloseDate),
+    ),
+    memo: pick("memo", current.memo ?? ""),
+  };
+}
+
 /**
  * API 요청 본문을 검증·정규화한다 (POST · PATCH 공용).
  * 거래처·담당자·기회명이 필수이고 금액·마감일·메모는 선택이다.

@@ -48,6 +48,7 @@ pnpm lint           # ESLint
 pnpm test:mailer    # 메일 전송 어댑터 검증 (네트워크 없이 fetch 스텁으로 실행)
 pnpm test:opportunity-progress  # 기회 단계 진행 표시 순수 함수 검증 (DB 없이 실행)
 pnpm test:opportunity-transition # 기회 단계 전이 규칙 순수 함수 검증 (DB 없이 실행)
+pnpm test:opportunity-patch     # 기회 부분 수정(인라인) 병합 순수 함수 검증 (DB 없이 실행)
 pnpm test:pagination # 목록 페이지네이션 순수 함수 검증 (DB 없이 실행)
 
 pnpm db:migrate     # 스키마 변경 → 마이그레이션 생성·적용
@@ -80,8 +81,9 @@ src/
     ui/                # shadcn/ui (직접 수정 지양, CLI 로 관리)
     account/           # 프로필/계정 공용 폼 (profile-form·password-form·profile-tabs, user·admin 공유)
     email-template/    # 메일 템플릿 공용 폼 다이얼로그 (관리 페이지·발송폼 재사용)
-    opportunity/       # 기회 공용 — 등록 버튼·폼 다이얼로그, 단계 흐름 안내·진행 스테퍼(표시 전용),
-                       #   stage-change(칸반·목록 공용 단계 변경 메뉴·확인창, 키보드 대체 수단)
+    opportunity/       # 기회 공용 — 등록 버튼·폼 다이얼로그(목록 전용), 단계 흐름 안내,
+                       #   opportunity-stage-stepper(진행 스테퍼 — action 을 주면 노드 클릭으로 전이),
+                       #   stage-change(칸반·목록·스테퍼 공용 단계 변경 훅·메뉴·확인창)
     list-pagination.tsx / list-row-link.tsx  # 목록 공용 — 페이지 이동 UI, 행 전체 클릭 링크
     info-hint.tsx        # ⓘ 툴팁 — 조건부 안내 문구를 접어 같은 줄 입력의 폭이 흔들리지 않게 한다
     app-sidebar.tsx    # 공용 사이드바
@@ -107,7 +109,8 @@ src/
     pdf-html.ts          # PDF 인쇄용 HTML 생성 — 블록 좌표 재현·브랜딩·이스케이프
     pdf.ts               # contentJson → PDF 바이트(server-only, puppeteer-core) → docs/PDF-RENDERING.md
     account.ts           # 거래처 검증·정규화(사업자번호)·DTO·목록 조회 조건 (F-101·102·103)
-    opportunity.ts       # 기회 검증·금액/날짜 입력 변환·DTO·목록 조회 조건·정렬 (F-111)
+    opportunity.ts       # 기회 검증·금액/날짜 입력 변환·DTO·목록 조회 조건·정렬 (F-111),
+                         #   withOpportunityDefaults — 부분 수정(인라인)에서 빠진 필드를 현재 값으로 채움
     pipeline.ts          # 파이프라인 집계 순수 함수 — 단계별 합계·기간 필터·월 마감 요약 (F-402·404·406·302)
     opportunity-transition.ts # 단계 전이 **규칙** 순수 함수 — 전진만·되돌리기 판정·문서별 목표 단계 (F-112·113)
     opportunity-stage.ts # 기회 생성·단계 전이 + 활동 이력 기록 (한 트랜잭션, 서버 전용, F-111·113)
@@ -131,7 +134,10 @@ src/
 - 포맷은 `@/lib/format`(formatKRW/formatDate/formatDateTime)만 사용한다.
 - **기회 생성·단계 전이는 `@/lib/opportunity-stage` 를 경유한다.** 라우트·컴포넌트가 `stage` 를 직접 `update` 하거나 `opportunity.create()` 를 직접 호출하지 않는다 — 생성/전이와 활동 이력(ActivityLog)이 한 트랜잭션이어야 상태 정합성이 깨지지 않는다.
 - **전이 허용 규칙은 `@/lib/opportunity-transition` 의 순수 함수가 단일 기준이다.** 서버(`opportunity-stage`)와 칸반 클라이언트가 같은 판정을 공유해야 화면 안내와 실제 저장 결과가 어긋나지 않는다. server-only 를 import 하지 않으므로 클라이언트·`tsx` 테스트에서도 쓴다. 자동 전이(문서 발송)는 **앞으로만**, 수동 전이(칸반 드래그·⋯ 메뉴)는 **어느 단계로든** 이동하며 마감 해제 시 확인창을 띄운다.
-- **단계 변경 UI 는 드래그 전용으로 만들지 않는다.** 칸반 카드와 목록 행이 `@/components/opportunity/stage-change` 의 ⋯ 메뉴를 공유해 키보드로도 단계를 바꿀 수 있어야 한다 (정책 ACC_*).
+- **단계 변경 UI 는 드래그 전용으로 만들지 않는다.** 칸반 카드와 목록 행이 `@/components/opportunity/stage-change` 의 ⋯ 메뉴를 공유해 키보드로도 단계를 바꿀 수 있어야 한다 (정책 ACC_*). 기회 상세의 **진행 스테퍼도 같은 훅(`useStageChange`)을 쓴다** — `action` 을 넘기면 노드가 버튼이 되어 그 단계로 전이한다. 노드는 `<button>` 이라 Tab·Enter 로 닿고, 마감 노드는 수주·실주를 드롭다운으로 고른다(진행 중에는 어느 결과인지 정해지지 않았으므로). 스테퍼가 규칙을 스스로 판단하지 않는다 — 허용 판정·경고 문구는 `@/lib/opportunity-transition`, 저장은 `POST /api/opportunities/:id/stage` 하나뿐이다.
+- **기회 상세의 값은 인라인으로 고친다 — 수정 다이얼로그를 다시 만들지 않는다** (기회-7). 표시 상태가 `<button>` 이라 클릭·Enter 로 편집에 들어가고, blur·Enter 로 저장하며 Esc 로 되돌린다(메모는 여러 줄이라 ⌘/Ctrl+Enter). 저장은 **고친 필드 하나만** `PATCH /api/opportunities/:id` 로 보내고, 서버가 `withOpportunityDefaults()` 로 나머지를 현재 값으로 채워 `parseOpportunityInput()` 한 곳을 통과시킨다 — 검증 규칙이 갈라지면 다이얼로그 저장과 인라인 저장의 제약이 달라진다. 화면에는 먼저 반영하고 실패 시 이전 값으로 롤백한다(칸반 전이와 같은 방식). 목록의 등록·행 수정은 계속 `opportunity-form-dialog` 를 쓴다.
+- **상세 화면의 브레드크럼은 소속을 위로 둔다.** 기회 상세는 `거래처 > {회사명} > {기회명}`, 거래처 상세는 `거래처 > {회사명}` 이다 — 기회는 거래처에 속하므로 목록(`영업 기회`)이 아니라 그 거래처가 상위다. `backHref` 도 브레드크럼 상위와 같은 곳을 가리킨다.
+- **상세 화면은 2단으로 나눈다** (기회-4). 좌측은 "이것이 무엇인지"(진행 단계·기본 정보·메모), 우측은 "무슨 일이 있었는지"(이력·연관 문서)다. `lg` 미만에서는 한 단으로 쌓여 좌측이 먼저 온다. 이력·연관 문서를 본문 아래로 길게 늘어놓지 않는다 — 좌우 공간이 남고 스크롤만 길어진다.
 - **파이프라인·매출 집계는 `@/lib/pipeline` 의 순수 함수를 쓴다.** 대시보드와 캘린더가 같은 계산을 공유해야 화면끼리 숫자가 어긋나지 않는다.
 - **단계 진행 표시(스테퍼·흐름 안내)는 `@/lib/opportunity-progress` 의 순수 함수를 쓴다.** 목록과 상세가 같은 계산을 공유해야 표현이 어긋나지 않는다. 이 모듈은 읽기 전용이며 단계를 바꾸지 않는다. 트랙 끝의 **마감 노드는 항상 1개**다 — 진행 중이면 회색 `수주/실주`(앞으로 갈 곳), 마감되면 실제 결과 하나가 채워진다. 수주·실주를 **갈래(2step)로 벌리지 않는다** — 둘을 나란히 띄우면 화면이 "둘 중 하나를 고르는 단계"처럼 읽힌다.
 - **지나온 구간은 `stage` 하나로 단정하지 않는다.** 마감된 기회는 어느 단계에서 마감했는지가 활동 이력(ActivityLog)에만 남으므로, `opportunityProgress(stage, history)` 에 이력의 `from`/`to` 를 넘겨 도달 지점을 도출한다(`reachedOpenStage`). 상단(진행 단계)과 하단(이력)이 같은 출처를 봐야 "제안에서 실주했는데 검토/협상까지 지나온 것으로 보이는" 어긋남이 생기지 않는다. 이력을 **새로 조회하지 말고** 화면이 이미 읽은 것을 재사용한다. 이력이 없으면 초기까지만 지나온 것으로 본다(모르면 덜 주장한다).
