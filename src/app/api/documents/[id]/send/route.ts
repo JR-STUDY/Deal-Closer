@@ -9,6 +9,7 @@ import {
 } from "@/lib/constants";
 import { parseRecipients } from "@/lib/validation";
 import { applyDocumentSent } from "@/lib/opportunity-stage";
+import { syncOpportunityAmount } from "@/lib/opportunity-amount";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     return fail("폐기된 문서는 발송할 수 없습니다.");
   }
 
-  const { log, transition } = await prisma.$transaction(async (tx) => {
+  const { log, transition, amountSync } = await prisma.$transaction(async (tx) => {
     const created = await tx.emailLog.create({
       data: {
         documentId: doc.id,
@@ -111,28 +112,41 @@ export async function POST(req: NextRequest, { params }: Params) {
       data: { status: doc.status === "DRAFT" ? "SENT" : doc.status },
     });
 
-    // 기회에 연결되지 않은 문서는 전이 대상이 아니다 — 오류가 아니라 조용히 통과한다.
-    if (!doc.opportunityId || !isDocumentType(doc.type)) {
-      return { log: created, transition: null };
+    // 기회에 연결되지 않은 문서는 전이·재판정 대상이 아니다 — 오류가 아니라 조용히 통과한다.
+    if (!doc.opportunityId) {
+      return { log: created, transition: null, amountSync: null };
     }
 
-    const result = await applyDocumentSent(
-      {
-        opportunityId: doc.opportunityId,
-        orgId: user.orgId,
-        actorId: user.id,
-        documentId: doc.id,
-        documentType: doc.type,
-        documentTitle: doc.title,
-        recipients,
-      },
+    const result = isDocumentType(doc.type)
+      ? await applyDocumentSent(
+          {
+            opportunityId: doc.opportunityId,
+            orgId: user.orgId,
+            actorId: user.id,
+            documentId: doc.id,
+            documentType: doc.type,
+            documentTitle: doc.title,
+            recipients,
+          },
+          tx,
+        )
+      : null;
+
+    /*
+     * 발송은 문서 상태를 초안 → 발송완료로 올리므로 **확정 문서 재판정 시점**이다 (기회-6 ①).
+     * 같은 트랜잭션에 넣어야 "메일은 나갔는데 예상 금액은 옛 초안 기준" 이 되지 않는다.
+     * 종류를 모르는 문서(전이 규칙이 없는 경우)도 상태는 바뀌었으므로 재판정은 그대로 돈다.
+     */
+    const amountSync = await syncOpportunityAmount(
+      { opportunityId: doc.opportunityId, orgId: user.orgId },
       tx,
     );
-    return { log: created, transition: result };
+
+    return { log: created, transition: result, amountSync };
   });
 
   return ok(
-    { log, stage: describeTransition(transition, doc.type) },
+    { log, stage: describeTransition(transition, doc.type), amountSync },
     { status: 201 },
   );
 }

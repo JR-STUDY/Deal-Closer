@@ -226,6 +226,24 @@ export default async function OpportunityDetailPage({
     };
   });
 
+  /**
+   * 연관 문서 — 클라이언트 컴포넌트로 넘기므로 `Date` 를 문자열로 바꾼다
+   * (REACT_BEST_PRACTICES: 직렬화 불가한 값을 클라이언트에 넘기지 않는다).
+   */
+  const linkedDocuments = documents.map((document) => ({
+    ...document,
+    createdAt: document.createdAt.toISOString(),
+  }));
+
+  /**
+   * 예상 금액의 근거가 된 확정 문서 (기회-6).
+   * **이미 읽은 문서 목록에서 찾는다** — 확정 문서는 반드시 이 기회에 붙은 문서 중 하나라
+   * 다시 조회할 이유가 없다.
+   */
+  const confirmedDocument =
+    documents.find((document) => document.id === dto.confirmedDocumentId) ??
+    null;
+
   const newDocumentHref = `/generator?opportunityId=${encodeURIComponent(dto.id)}`;
 
   return (
@@ -280,19 +298,21 @@ export default async function OpportunityDetailPage({
               </CardContent>
             </Card>
 
-            {/* 기본 정보·메모는 인라인으로 바로 고친다 (기회-7) */}
+            {/* 기본 정보·메모는 인라인으로 바로 고친다 (기회-7) — 예상 금액만 읽기 전용이다 */}
             <OpportunityInlineFields
               opportunity={dto}
               accounts={accounts}
               owners={owners}
+              confirmedDocument={confirmedDocument}
             />
           </div>
 
           <div className="min-w-0">
             <OpportunityDetailTabs
               timeline={timeline}
-              documents={documents}
+              documents={linkedDocuments}
               opportunityId={dto.id}
+              confirmedDocumentId={dto.confirmedDocumentId}
             />
           </div>
         </div>

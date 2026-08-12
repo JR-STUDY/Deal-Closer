@@ -55,6 +55,8 @@ export default async function AccountDetailPage({
           name: true,
           stage: true,
           expectedAmount: true,
+          // 0 원인 이유(확정 문서 없음)를 목록에서 구분하기 위해 함께 읽는다 (기회-6 ④)
+          confirmedDocumentId: true,
           expectedCloseDate: true,
           owner: { select: { name: true } },
         },
@@ -111,10 +113,10 @@ export default async function AccountDetailPage({
         actions={
           <>
             <NewOpportunityButton
-              // 이 화면에서는 거래처가 정해져 있으므로 후보를 이 한 곳으로 좁힌다
-              accounts={[{ id: account.id, companyName: account.companyName }]}
+              // 이 화면에서는 거래처가 정해져 있으므로 자동완성에 미리 채워 연다
               owners={owners}
               defaultAccountId={account.id}
+              defaultAccountName={account.companyName}
               defaultOwnerId={user.id}
               label="새 기회"
               variant="outline"

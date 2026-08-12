@@ -51,6 +51,7 @@ pnpm test:opportunity-transition # 기회 단계 전이 규칙 순수 함수 검
 pnpm test:opportunity-patch     # 기회 부분 수정(인라인) 병합 순수 함수 검증 (DB 없이 실행)
 pnpm test:pagination # 목록 페이지네이션 순수 함수 검증 (DB 없이 실행)
 pnpm test:contact   # 거래처 담당자 대표 규칙 순수 함수 검증 (DB 없이 실행)
+pnpm test:confirmed-document # 확정 문서 판정 순수 함수 검증 (DB 없이 실행)
 
 pnpm db:migrate     # 스키마 변경 → 마이그레이션 생성·적용
 pnpm db:seed        # 데모 데이터 시드
@@ -82,7 +83,11 @@ src/
     ui/                # shadcn/ui (직접 수정 지양, CLI 로 관리)
     account/           # 프로필/계정 공용 폼 (profile-form·password-form·profile-tabs, user·admin 공유)
     email-template/    # 메일 템플릿 공용 폼 다이얼로그 (관리 페이지·발송폼 재사용)
+    document/          # 문서 공용 — linkable-document-picker(기회에 연결할 보관함 문서 선택),
+                       #   document-preview-dialog(미리보기 iframe + 편집 화면으로 이동)
     opportunity/       # 기회 공용 — 등록 버튼·폼 다이얼로그(목록 전용), 단계 흐름 안내,
+                       #   account-combobox(거래처 자동완성 + 인라인 생성),
+                       #   confirmed-document-actions(확정 문서 지정·해제 훅 + 변경 toast),
                        #   opportunity-stage-stepper(진행 스테퍼 — action 을 주면 노드 클릭으로 전이),
                        #   stage-change(칸반·목록·스테퍼 공용 단계 변경 훅·메뉴·확인창)
     list-pagination.tsx / list-row-link.tsx  # 목록 공용 — 페이지 이동 UI, 행 전체 클릭 링크
@@ -111,6 +116,12 @@ src/
     pdf.ts               # contentJson → PDF 바이트(server-only, puppeteer-core) → docs/PDF-RENDERING.md
     account.ts           # 거래처 검증·정규화(사업자번호)·DTO·목록 조회 조건 (F-101·102·103)
                          #   담당자는 다루지 않는다 — contact.ts 로 분리했다 (거래처-8)
+    confirmed-document.ts # 확정 문서 판정 **규칙** 순수 함수 (기회-6) — 우선순위(계약완료>발송완료>초안)·
+                         #   VOID 제외·동순위 최근 수정·수동 잠금. resolveConfirmedDocument /
+                         #   pinConfirmedDocument / unpinConfirmedDocument
+    opportunity-amount.ts # 확정 문서 재판정 → 예상 금액 **저장** (server-only, 기회-6).
+                         #   expectedAmount 를 쓰는 유일한 곳이다
+    document-link.ts     # 보관함 문서를 기회에 연결 (server-only, 기회-5·17) — 후보 규칙·이력 기록
     contact.ts           # 거래처 담당자 검증·DTO + **대표 담당자 규칙** 순수 함수 (거래처-8)
                          #   resolveCreateIsPrimary / resolveUpdateIsPrimary /
                          #   demotionTargetIds / resolveDeletion / primaryContact / sortContacts
@@ -141,6 +152,28 @@ src/
 - **전이 허용 규칙은 `@/lib/opportunity-transition` 의 순수 함수가 단일 기준이다.** 서버(`opportunity-stage`)와 칸반 클라이언트가 같은 판정을 공유해야 화면 안내와 실제 저장 결과가 어긋나지 않는다. server-only 를 import 하지 않으므로 클라이언트·`tsx` 테스트에서도 쓴다. 자동 전이(문서 발송)는 **앞으로만**, 수동 전이(칸반 드래그·⋯ 메뉴)는 **어느 단계로든** 이동하며 마감 해제 시 확인창을 띄운다.
 - **단계 변경 UI 는 드래그 전용으로 만들지 않는다.** 칸반 카드와 목록 행이 `@/components/opportunity/stage-change` 의 ⋯ 메뉴를 공유해 키보드로도 단계를 바꿀 수 있어야 한다 (정책 ACC_*). 기회 상세의 **진행 스테퍼도 같은 훅(`useStageChange`)을 쓴다** — `action` 을 넘기면 노드가 버튼이 되어 그 단계로 전이한다. 노드는 `<button>` 이라 Tab·Enter 로 닿고, 마감 노드는 수주·실주를 드롭다운으로 고른다(진행 중에는 어느 결과인지 정해지지 않았으므로). 스테퍼가 규칙을 스스로 판단하지 않는다 — 허용 판정·경고 문구는 `@/lib/opportunity-transition`, 저장은 `POST /api/opportunities/:id/stage` 하나뿐이다.
 - **기회 상세의 값은 인라인으로 고친다 — 수정 다이얼로그를 다시 만들지 않는다** (기회-7). 표시 상태가 `<button>` 이라 클릭·Enter 로 편집에 들어가고, blur·Enter 로 저장하며 Esc 로 되돌린다(메모는 여러 줄이라 ⌘/Ctrl+Enter). 저장은 **고친 필드 하나만** `PATCH /api/opportunities/:id` 로 보내고, 서버가 `withOpportunityDefaults()` 로 나머지를 현재 값으로 채워 `parseOpportunityInput()` 한 곳을 통과시킨다 — 검증 규칙이 갈라지면 다이얼로그 저장과 인라인 저장의 제약이 달라진다. 화면에는 먼저 반영하고 실패 시 이전 값으로 롤백한다(칸반 전이와 같은 방식). 목록의 등록·행 수정은 계속 `opportunity-form-dialog` 를 쓴다.
+- **기회의 예상 금액은 입력값이 아니라 확정 문서에서 파생된다** (기회-6).
+  `Opportunity.expectedAmount` 는 **확정 문서(`confirmedDocumentId`)의 금액을 복제한 캐시**이고,
+  확정 문서가 없으면 0 이다. 화면은 `₩0 · 확정 문서 없음` 으로 안내하고 문서를 연결하도록 유도한다 —
+  **수동 입력을 어디에도 열어 주지 않는다**(폼·인라인 수정·PATCH 본문 모두). 손으로 고칠 길이 하나라도
+  남으면 문서와 기회가 서로 다른 금액을 주장한다.
+  판정 규칙은 `@/lib/confirmed-document` **순수 함수가 단일 기준**이고(계약완료 > 발송완료 > 초안,
+  폐기 제외, 동순위는 최근 수정, 그다음 id), 쓰기는 `@/lib/opportunity-amount` **한 곳뿐**이다.
+  라우트·컴포넌트가 `expectedAmount` 를 직접 update 하지 않는다. 시드도 같은 순수 함수를 쓴다.
+  **재판정 시점은 세 가지다 — 문서 연결(해제·삭제) · 문서 상태 변경 · 문서 금액 변경.**
+  이 셋을 일으키는 라우트는 같은 트랜잭션에서 `syncOpportunityAmount()` 를 부른다(중간 상태 노출 방지).
+  문서를 기회 A → B 로 옮길 때는 **놓아주는 쪽을 먼저** 재판정한다 — `confirmedDocumentId` 가
+  UNIQUE 라 순서가 뒤집히면 제약에 걸린다.
+  확정 문서가 자동 판정으로 바뀌면 **toast 로 알리고 [되돌리기]를 준다**(모달이 아니다 — 작업 흐름을
+  막지 않는다). 되돌리기는 이전 문서로 **수동 고정**하는 동작이며, 고정된 기회는 자동 판정에서
+  제외되고 상세의 "자동 판정으로 되돌리기" 로 푼다. **잠금 상태 자체가 자동/수동 스위치**다.
+- **한 문서는 최대 한 기회에만 붙는다.** 연결 후보(`GET /api/documents?linkable=1`)에서 이미 다른
+  기회에 붙은 문서와 폐기 문서를 뺀다 — 한 문서가 두 기회의 금액을 동시에 좌우할 수 없다.
+  기회 등록 팝업(기회-17)과 기회 상세의 "기존 문서 연결"(기회-5)은 `@/lib/document-link` 의
+  같은 후보 규칙을 쓴다. 연결은 **복제가 아니다** — 복제하면 어느 쪽을 고쳐야 금액이 바뀌는지 알 수 없다.
+- **문서 미리보기는 `@/lib/pdf-html` 을 재사용한다** (기회-19). 서버가 만든 인쇄용 HTML 을
+  `GET /api/documents/:id/preview` 로 내려 `sandbox` iframe 에 띄운다 — 미리보기용 렌더러를 따로 만들면
+  실제 PDF 와 다르게 보이기 시작한다.
 - **거래처 담당자(Contact)는 여러 명이고, 대표 규칙은 `@/lib/contact` 순수 함수가 단일 기준이다** (거래처-8).
   거래처당 대표는 **최대 1명**이지만 DB 제약으로 막을 수 없어(SQLite 부분 유니크 인덱스는
   Prisma 스키마로 표현되지 않는다) 앱이 지킨다. 지켜야 할 불변식은 하나다 —

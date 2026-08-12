@@ -30,7 +30,6 @@ import {
 } from "@/components/opportunity/stage-change";
 import {
   toOpportunityFormValues,
-  type OpportunityAccountOption,
   type OpportunityDTO,
   type OpportunityOwnerOption,
 } from "@/lib/opportunity";
@@ -45,15 +44,14 @@ import {
  *
  * 기회 삭제에는 거래처처럼 차단 조건이 없다. 대신 활동 이력이 함께 사라진다는 사실과
  * 문서는 보관함에 남는다는 사실을 **누르기 전에** 알린다.
- * 거래처·담당자 후보는 목록 페이지가 이미 조회한 값을 그대로 받는다 (중복 쿼리 없음).
+ * 담당자 후보는 목록 페이지가 이미 조회한 값을 그대로 받는다 (중복 쿼리 없음).
+ * 거래처는 받지 않는다 — 다이얼로그의 자동완성이 필요할 때만 검색한다 (기회-16).
  */
 export function OpportunityRowActions({
   opportunity,
-  accounts,
   owners,
 }: {
   opportunity: OpportunityDTO;
-  accounts: OpportunityAccountOption[];
   owners: OpportunityOwnerOption[];
 }) {
   const router = useRouter();
@@ -139,7 +137,7 @@ export function OpportunityRowActions({
           key={opportunity.updatedAt}
           opportunityId={opportunity.id}
           initial={toOpportunityFormValues(opportunity)}
-          accounts={accounts}
+          initialAccountName={opportunity.accountName}
           owners={owners}
           title="영업 기회 수정"
           description={`"${opportunity.name}" 의 정보를 수정합니다.`}

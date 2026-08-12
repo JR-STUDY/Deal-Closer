@@ -46,6 +46,14 @@ export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
 };
 
 /**
+ * DB 의 `status` 컬럼은 String 이므로, 읽어온 값을 좁힐 때 사용한다.
+ * 확정 문서 판정(`confirmed-document.ts`)이 폐기 문서를 후보에서 빼기 전에 통과시킨다.
+ */
+export function isDocumentStatus(value: string): value is DocumentStatus {
+  return (DOCUMENT_STATUSES as readonly string[]).includes(value);
+}
+
+/**
  * 폐기(VOID)를 제외한 진행 중 상태.
  * 라이브러리 "전체" 탭·대시보드·통계 집계는 폐기 문서를 제외한다
  * (폐기 문서는 라이브러리의 "폐기" 탭에서만 노출·복원 가능).

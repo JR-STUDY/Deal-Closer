@@ -26,7 +26,6 @@ async function findScopedOpportunity(id: string, orgId: string) {
       accountId: true,
       ownerId: true,
       name: true,
-      expectedAmount: true,
       expectedCloseDate: true,
       memo: true,
     },
@@ -42,6 +41,9 @@ async function findScopedOpportunity(id: string, orgId: string) {
  *
  * `stage` 는 받지 않는다 — 단계 전이는 활동 이력과 한 트랜잭션이어야 하므로
  * `@/lib/opportunity-stage` 전용 경로(`POST /api/opportunities/:id/stage`)로만 처리한다.
+ *
+ * `expectedAmount` 도 받지 않는다 (기회-6) — 예상 금액은 확정 문서가 정한다.
+ * 근거 문서를 바꾸려면 `PUT/DELETE /api/opportunities/:id/confirmed-document` 를 쓴다.
  */
 export async function PATCH(req: NextRequest, { params }: Params) {
   const [{ id }, user] = await Promise.all([params, getCurrentUser()]);
