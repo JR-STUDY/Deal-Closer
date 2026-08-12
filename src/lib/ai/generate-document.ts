@@ -25,6 +25,8 @@ import { documentDate } from "./today";
 export type GenerateDocumentInput = Omit<GenerateContentInput, "today"> & {
   /** 브랜딩 로고 (양식이 없을 때 새로 조립하는 문서에 사용) */
   logoUrl?: string | null;
+  /** 사용자가 UI 에서 고른 모델. 없으면 기본값(AI_MODEL_GENERATE) */
+  model?: string | null;
 };
 
 export type GeneratedDocument = {
@@ -48,7 +50,7 @@ export async function generateDocument(
   input: GenerateDocumentInput,
 ): Promise<GeneratedDocument> {
   const result = await callStructured({
-    model: AI_MODEL_GENERATE,
+    model: input.model?.trim() || AI_MODEL_GENERATE,
     system: SYSTEM_GENERATE,
     content: buildGenerateContent({ ...input, today: documentDate() }),
     schema: DOC_SPEC_SCHEMA,

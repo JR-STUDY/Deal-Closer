@@ -6,6 +6,7 @@ import { rootIdOf, versionGroupWhere } from "@/lib/document-version";
 import { extractClientName, parseContentJson } from "@/lib/editor-schema";
 import { reviseDocument } from "@/lib/ai/revise-document";
 import { aiErrorResponse } from "@/lib/ai/http";
+import { resolveRequestedModel } from "@/lib/ai/model-access";
 import { CREDITS_PER_REVISION } from "@/lib/constants";
 
 type Params = { params: Promise<{ id: string }> };
@@ -18,6 +19,7 @@ const MAX_INSTRUCTION = 1_000;
  * body:
  *  - instruction: 자연어 수정 지시 (필수) — 예: "결제조건을 30일로 변경"
  *  - contentJson: 에디터에서 편집 중인 현재 내용 (선택). 없으면 저장된 내용을 기준으로 한다.
+ *  - model: 사용자가 고른 AI 모델 id (선택 — 카탈로그에 있는 값만 허용)
  *
  * 결과는 **새 버전 문서**로 저장한다 (F-214). 바뀐 내용이 없으면 저장하지 않고
  * changed:false 로 알려준다 — 이때는 크레딧도 차감하지 않는다.
@@ -36,6 +38,10 @@ export async function POST(req: NextRequest, { params }: Params) {
     .trim()
     .slice(0, MAX_INSTRUCTION);
   if (!instruction) return fail("어떤 부분을 어떻게 바꿀지 입력해주세요.");
+
+  // ── 모델 선택 검증 (임의 모델 호출 차단) ──
+  const resolved = resolveRequestedModel(body.model);
+  if ("problem" in resolved) return fail(resolved.problem, resolved.status);
 
   const source = await prisma.document.findFirst({
     where: { id, orgId: user.orgId },
@@ -77,6 +83,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       documentTitle: source.title,
       documentType: source.type,
       doc,
+      model: resolved.model,
     });
   } catch (error) {
     const response = aiErrorResponse(error);

@@ -4,6 +4,7 @@ import { getCurrentOrg } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { latestVersionsOnly } from "@/lib/document-version";
+import { availableModels } from "@/lib/ai/model-access";
 import { GeneratorForm } from "./_components/generator-form";
 
 export default async function GeneratorPage({
@@ -16,6 +17,9 @@ export default async function GeneratorPage({
     searchParams,
     getCurrentOrg(),
   ]);
+
+  // 선택 가능한 AI 모델 — 키가 설정된 프로바이더만 내려간다 (환경변수만 읽으므로 동기)
+  const { models, defaultModel, mock } = availableModels();
 
   // 독립 조회는 병렬화 (REACT_BEST_PRACTICES ①)
   const [wallet, allDocuments, templates, confirmedQuotes] = await Promise.all([
@@ -97,6 +101,9 @@ export default async function GeneratorPage({
               ? templateParam
               : null
           }
+          models={models}
+          defaultModel={defaultModel}
+          mockProvider={mock}
         />
       </div>
     </>

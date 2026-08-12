@@ -48,6 +48,8 @@ function callProvider(call: StructuredCall): Promise<StructuredResult> {
   switch (providerOf(call.model)) {
     case "openai":
       return import("./providers/openai").then((m) => m.callOpenAI(call));
+    case "google":
+      return import("./providers/google").then((m) => m.callGoogle(call));
     case "mock":
       return import("./providers/mock").then((m) => m.callMock(call));
     default:

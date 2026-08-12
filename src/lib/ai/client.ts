@@ -9,11 +9,9 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import {
-  AiNotConfiguredError,
-  type AiLiveProvider,
-  type AiProvider,
-} from "./config";
+import { GoogleGenAI } from "@google/genai";
+import { AiNotConfiguredError } from "./config";
+import { PROVIDER_KEY_ENV, type AiLiveProvider, type AiProvider } from "./models";
 
 /** 문서 생성은 수십 초까지 걸릴 수 있다 (ms) */
 const REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
@@ -26,6 +24,8 @@ const globalForAi = globalThis as unknown as {
   anthropicKey?: string;
   openai?: OpenAI;
   openaiKey?: string;
+  google?: GoogleGenAI;
+  googleKey?: string;
 };
 
 // ===================== 키 형식 검사 =====================
@@ -56,32 +56,46 @@ function openaiKeyProblem(apiKey: string): string | null {
   return null;
 }
 
-/** 프로바이더별 환경변수 이름 (안내 문구용) */
-const KEY_ENV_NAME: Record<AiLiveProvider, string> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
+/** Google AI Studio 키인지 확인한다 (AIza… 로 시작한다) */
+function googleKeyProblem(apiKey: string): string | null {
+  if (apiKey.startsWith("sk-")) {
+    return "GEMINI_API_KEY 에 OpenAI/Anthropic 키(sk-…)가 들어가 있습니다. Google AI Studio 에서 발급한 키(AIza…)로 교체해주세요.";
+  }
+  if (!apiKey.startsWith("AIza")) {
+    return "GEMINI_API_KEY 형식이 올바르지 않습니다. Google AI Studio 에서 발급한 키(AIza…)인지 확인해주세요.";
+  }
+  return null;
+}
+
+const KEY_PROBLEM: Record<AiLiveProvider, (apiKey: string) => string | null> = {
+  anthropic: anthropicKeyProblem,
+  openai: openaiKeyProblem,
+  google: googleKeyProblem,
 };
 
 function readKey(provider: AiLiveProvider): { key: string } | { problem: string } {
-  const envName = KEY_ENV_NAME[provider];
+  const envName = PROVIDER_KEY_ENV[provider];
   const apiKey = process.env[envName]?.trim();
   if (!apiKey) {
     return {
       problem: `AI 연동이 설정되지 않았습니다. 관리자에게 ${envName} 설정을 요청해주세요.`,
     };
   }
-  const problem =
-    provider === "anthropic"
-      ? anthropicKeyProblem(apiKey)
-      : openaiKeyProblem(apiKey);
+  const problem = KEY_PROBLEM[provider](apiKey);
   return problem ? { problem } : { key: apiKey };
 }
 
-/** 해당 프로바이더로 문서 생성이 가능한 상태인지 (UI 안내·사전 검사용) */
+/** 해당 프로바이더로 문서 생성이 가능한 상태인지 (선택기 노출·사전 검사용) */
 export function isAiConfigured(provider: AiProvider): boolean {
   // mock 은 키가 필요 없다 (단, 프로덕션에서는 어댑터가 거부한다)
   if (provider === "mock") return process.env.NODE_ENV !== "production";
   return "key" in readKey(provider);
+}
+
+/** 설정되지 않은 이유 (선택기 안내 문구용). 정상이면 null */
+export function aiConfigProblem(provider: AiLiveProvider): string | null {
+  const result = readKey(provider);
+  return "problem" in result ? result.problem : null;
 }
 
 // ===================== 클라이언트 =====================
@@ -120,4 +134,19 @@ export function getOpenAI(): OpenAI {
     globalForAi.openaiKey = result.key;
   }
   return globalForAi.openai;
+}
+
+/** Gemini 클라이언트. 키가 없거나 형식이 맞지 않으면 AiNotConfiguredError. */
+export function getGoogle(): GoogleGenAI {
+  const result = readKey("google");
+  if ("problem" in result) throw new AiNotConfiguredError(result.problem);
+
+  if (!globalForAi.google || globalForAi.googleKey !== result.key) {
+    globalForAi.google = new GoogleGenAI({
+      apiKey: result.key,
+      httpOptions: { timeout: REQUEST_TIMEOUT_MS },
+    });
+    globalForAi.googleKey = result.key;
+  }
+  return globalForAi.google;
 }

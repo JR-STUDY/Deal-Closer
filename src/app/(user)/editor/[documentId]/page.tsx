@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { parseContentJson, seedTemplate } from "@/lib/editor-schema";
 import { DocumentEditorLoader } from "./_components/document-editor-loader";
+import { availableModels } from "@/lib/ai/model-access";
 
 export default async function EditorPage({
   params,
@@ -46,6 +47,9 @@ export default async function EditorPage({
       items: document.items,
     });
 
+  // AI 부분 재작성(F-215)에 쓸 모델 선택 목록 (환경변수만 읽으므로 동기)
+  const { models, defaultModel, mock } = availableModels();
+
   return (
     <DocumentEditorLoader
       documentId={document.id}
@@ -55,6 +59,9 @@ export default async function EditorPage({
       catalog={catalog}
       version={document.version}
       isConfirmed={document.isConfirmed}
+      models={models}
+      defaultModel={defaultModel}
+      mockProvider={mock}
     />
   );
 }

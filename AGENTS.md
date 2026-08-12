@@ -69,8 +69,9 @@ src/
     (user)/            # 영업 담당자 포털 — 사이드바 공유 (에디터는 블록 캔버스, _components/ 에 co-locate)
     (admin)/           # 관리자 콘솔 — 사이드바 레이아웃 공유
     (auth)/            # 로그인 등 인증 화면 (사이드바 없음)
-    api/               # REST API Route Handlers (SQLite 조회 / Claude 호출 / 일부 목업)
-                     #  generate · templates · documents/[id]/{versions,revise} 는 실제 Claude API 호출
+    api/               # REST API Route Handlers (SQLite 조회 / LLM 호출 / 일부 목업)
+                     #  generate · templates · documents/[id]/{versions,revise} 는 실제 LLM 호출
+                     #  (모델은 사용자가 화면에서 선택 — 서버가 카탈로그로 검증)
     layout.tsx         # 루트 레이아웃 (폰트·Toaster)
     page.tsx           # 랜딩 (콘솔 진입)
   components/
@@ -94,14 +95,17 @@ src/
     attachments.ts     # 업로드 파일 검증 + 엑셀/CSV 텍스트 추출
     template.ts        # 표준 양식 공용 select·DTO
     document-version.ts # 문서 버전 묶음(rootId) 유틸·최신본 필터
-    ai/                # AI 문서 생성 레이어 (서버 전용, Claude·GPT 공용)
-      config.ts        #  프로바이더 판별·모델(AI_MODEL_GENERATE/BATCH)·토큰 상한·예외 타입
-      client.ts        #  Anthropic·OpenAI SDK 싱글톤 + 키 형식 검사
+    ai/                # AI 문서 생성 레이어 (Claude·GPT·Gemini 공용)
+      models.ts        #  선택 가능한 모델 카탈로그 (순수 모듈 — 선택기 UI 가 import)
+      config.ts        #  프로바이더 판별·기본 모델·토큰 상한·예외 타입 (서버 전용)
+      model-access.ts  #  선택기 노출 목록·요청 모델 검증 (서버 전용)
+      client.ts        #  Anthropic·OpenAI·Google SDK 싱글톤 + 키 형식 검사
       blocks.ts        #  프로바이더 중립 메시지 블록 (text·image·pdf)
       invoke.ts        #  callStructured — 모델명으로 어댑터 선택 + JSON 파싱·예외 정규화
       providers/       #  프로바이더 어댑터 (요청 형식 변환은 여기서만)
         anthropic.ts   #   Claude Messages API (system 캐시 breakpoint · output_config)
         openai.ts      #   GPT Responses API (instructions · text.format strict · input_file)
+        google.ts      #   Gemini generateContent (systemInstruction · responseJsonSchema)
         mock.ts        #   로컬 검증용 (실제 호출 없음, 프로덕션에서 거부)
       prompts.ts       #  시스템 프롬프트 + 사용자 메시지 조립 (캐시 적중 위해 가변값 금지)
       doc-spec.ts      #  응답 스펙(DocSpec) JSON Schema ↔ EditorDoc 변환
@@ -153,30 +157,45 @@ React 코드의 **보안·성능·정확성**을 [react-doctor](https://github.c
 - **게이트 강화 절차**: 도입 초기에는 워크플로우 `blocking: none`(advisory — 항상 통과)이다. 팀이 결과에 익숙해지면 `warning` → `error` 로 올려 CI 통과 조건으로 승격한다.
 - react-doctor 는 `.tsx`/`.jsx` 등 React 파일을 대상으로 한다. 규칙 상세는 위 저장소 참고.
 
-## AI 문서 생성 (Claude / GPT)
+## AI 문서 생성 (Claude / GPT / Gemini)
 
 문서 생성·표준 양식 세팅·부분 재작성은 **실제 LLM API 를 직접 호출**한다. 목업 폴백은 없다.
 
 ### 프로바이더
 
-Claude(Anthropic Messages API)와 GPT(OpenAI Responses API)를 **둘 다 지원**한다. 선택 순서:
+Claude(Anthropic Messages API) · GPT(OpenAI Responses API) · Gemini(Google generateContent)
+**셋을 모두 지원하고, 사용자가 화면에서 모델을 고른다.**
 
-1. `AI_PROVIDER`(`anthropic` | `openai` | `mock`) 를 명시하면 그대로 따른다.
-2. `AI_MODEL_GENERATE` 모델명으로 판별한다 (`claude*`→anthropic, `gpt*`·`o1/o3/o4*`→openai).
-3. 쓸 수 있는 키가 한쪽만 있으면 그쪽을 쓴다. 그래도 모르면 anthropic.
+- **선택 목록은 서버가 정한다** — `lib/ai/models.ts` 의 `AI_MODEL_CATALOG` 가 단일 소스.
+  모델 세대가 바뀌면 이 배열만 갱신한다 (호출 코드는 건드리지 않는다).
+- **키가 설정된 프로바이더의 모델만 노출한다** (`lib/ai/model-access.ts` 의 `availableModels`).
+- **요청으로 들어온 모델 id 는 반드시 검증한다** (`resolveRequestedModel`).
+  카탈로그 밖 모델은 `400`, 키 없는 프로바이더는 `503`.
+  → 클라이언트가 보낸 임의 문자열을 그대로 호출하면 비용·오류를 통제할 수 없다.
+- 선택기가 붙는 곳: **문서 생성 · 표준 양식 AI 세팅 · AI 부분 재작성**.
+  변수 필드 추출(F-204)은 경량 경로라 선택기 없이 `AI_MODEL_BATCH` 를 쓴다.
+- 크레딧은 **모델 등급과 무관하게 동일**하다 (생성 10 / 양식세팅 10 / 재작성 5).
 
-**로컬 검증용 목 프로바이더**: `AI_PROVIDER=mock` 으로 켜면 실제 LLM 을 호출하지 않고
+사용자가 고르지 않았을 때의 기본 프로바이더 판별 순서:
+
+1. `AI_PROVIDER`(`anthropic` | `openai` | `google` | `mock`) 를 명시하면 그대로 따른다.
+2. `AI_MODEL_GENERATE` 모델명으로 판별한다
+   (`claude*`→anthropic, `gpt*`·`o1/o3/o4*`→openai, `gemini*`→google).
+3. 쓸 수 있는 키가 하나뿐이면 그 프로바이더를 쓴다. 그래도 모르면 anthropic.
+
+**로컬 검증용 목 프로바이더**: `AI_PROVIDER=mock` 으로 켜면 **화면에서 어떤 모델을 골라도**
+실제 LLM 을 호출하지 않고
 스키마에 맞는 응답을 즉시 돌려준다. 키·비용 없이 생성→에디터→버전→크레딧 경로를
 결정적으로 확인할 때 쓴다. **문장 품질·추론 정확도는 검증되지 않는다.**
 자동 선택되지 않으며(명시해야 켜짐), `NODE_ENV=production` 에서는 어댑터가 거부한다
 — 가짜 견적서가 고객에게 발송되는 사고를 코드로 차단한다.
 
-- **키 필수**: Claude 는 `ANTHROPIC_API_KEY`, GPT 는 `OPENAI_API_KEY`.
+- **키 필수**: `ANTHROPIC_API_KEY` · `OPENAI_API_KEY` · `GEMINI_API_KEY`.
   없거나 형식이 틀리면 `503`, 호출 실패 시 `502` 를 반환한다.
-  `sk-ant-oat…`(Claude Code 로그인 토큰)은 Messages API 에 쓸 수 없어 호출 전에 걸러낸다.
-- **모델은 용도별 분리** (환경변수로 오버라이드): `AI_MODEL_GENERATE` = 문서 생성·양식 세팅·재작성,
+  키 형식을 호출 전에 검사해 원인을 알려준다 — 특히 `sk-ant-oat…`(Claude Code 로그인 토큰)은
+  Messages API 에 쓸 수 없으므로 "키가 없다"가 아니라 무엇을 넣어야 하는지 안내한다.
+- **모델은 용도별 분리** (환경변수로 오버라이드): `AI_MODEL_GENERATE` = 선택기 기본값,
   `AI_MODEL_BATCH` = 변수 필드 추출 등 경량 작업.
-  기본값은 Claude `claude-opus-5`/`claude-sonnet-5`, GPT `gpt-5.6-sol`/`gpt-5.6-terra`.
 - **프로바이더별 코드는 `lib/ai/providers/` 안에만 둔다.** 프롬프트 조립부는
   `lib/ai/blocks.ts` 의 중립 블록(`text`·`image`·`pdf`)만 만들고, 요청 형식 변환은 어댑터가 한다.
   → 프로바이더를 추가할 때 프롬프트·스펙 코드를 건드리지 않는다.
@@ -186,8 +205,11 @@ Claude(Anthropic Messages API)와 GPT(OpenAI Responses API)를 **둘 다 지원*
 - **응답은 구조화 출력(JSON Schema)으로 고정한다.** 모델이 좌표를 직접 만들지 않고
   의미 기반 스펙(DocSpec)만 반환하며, 블록 배치는 `lib/ai/doc-spec.ts` 의 결정적 코드가 담당한다.
   → 양식이 있으면 **양식 레이아웃·문구·공급자 정보를 보존**하고 거래처 필드·품목표만 채운다.
-- 스키마는 **OpenAI strict 모드 제약을 지킨다**: 모든 object 에 `additionalProperties:false`,
-  전 속성을 `required` 에 넣고, `allOf`·`not`·`if/then/else` 를 쓰지 않는다. (Claude 도 동일 제약)
+- 스키마는 **3사 공통 제약을 지킨다**: 모든 object 에 `additionalProperties:false`,
+  전 속성을 `required` 에 넣고(OpenAI strict), `allOf`·`not`·`if/then/else` 를 쓰지 않는다.
+  Gemini `responseJsonSchema` 가 지원하는 키워드만 사용한다
+  (`type` `properties` `required` `additionalProperties` `enum` `items` `anyOf` `minimum/maximum`
+  `minItems/maxItems` `title` `description` `$ref`/`$defs`).
 - **금액은 항상 서버가 재계산한다** (수량×단가). 모델이 계산한 총액은 신뢰하지 않는다.
 - 시스템 프롬프트에는 날짜·사용자명 같은 **가변 값을 넣지 않는다** — 프롬프트 캐시 적중이 깨진다
   (Claude 는 `cache_control`, GPT 는 `instructions` 프리픽스 자동 캐시).

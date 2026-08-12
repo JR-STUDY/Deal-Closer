@@ -4,9 +4,14 @@ import Link from "next/link";
 import { Send, Save, Eye, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AiReviseDialog } from "./ai-revise-dialog";
+import type { AiModelOption } from "@/lib/ai/models";
 
 type Props = {
   documentId: string;
+  /** 선택 가능한 AI 모델 (AI 부분 재작성용) */
+  models: AiModelOption[];
+  defaultModel: string;
+  mockProvider: boolean;
   dirty: boolean;
   saving: boolean;
   onSave: () => void;
@@ -31,6 +36,9 @@ export function EditorToolbar({
   onPreview,
   getContentJson,
   onRevised,
+  models,
+  defaultModel,
+  mockProvider,
 }: Props) {
   return (
     <div className="flex w-full items-center gap-2">
@@ -70,6 +78,9 @@ export function EditorToolbar({
         documentId={documentId}
         getContentJson={getContentJson}
         onRevised={onRevised}
+        models={models}
+        defaultModel={defaultModel}
+        mockProvider={mockProvider}
       />
 
 

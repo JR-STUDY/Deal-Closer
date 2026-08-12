@@ -14,6 +14,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { AiModelSelect } from "@/components/ai-model-select";
+import type { AiModelOption } from "@/lib/ai/models";
 
 const MAX_LENGTH = 1000;
 
@@ -27,6 +29,10 @@ const EXAMPLES = [
 
 type Props = {
   documentId: string;
+  /** 선택 가능한 AI 모델 (AI 부분 재작성용) */
+  models: AiModelOption[];
+  defaultModel: string;
+  mockProvider: boolean;
   /** 편집 중인 현재 본문 (저장 전 상태를 기준으로 수정하기 위해) */
   getContentJson: () => string;
   /** 새 버전이 만들어졌을 때 — 부모가 dirty 를 해제하고 새 버전으로 이동한다 */
@@ -37,9 +43,17 @@ type Props = {
  * AI 부분 재작성 (PRD F-215).
  * 결과는 새 버전 문서로 저장되며(F-214) 성공 시 그 버전으로 이동한다.
  */
-export function AiReviseDialog({ documentId, getContentJson, onRevised }: Props) {
+export function AiReviseDialog({
+  documentId,
+  getContentJson,
+  onRevised,
+  models,
+  defaultModel,
+  mockProvider,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [instruction, setInstruction] = useState("");
+  const [model, setModel] = useState<string>(defaultModel);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
@@ -51,7 +65,11 @@ export function AiReviseDialog({ documentId, getContentJson, onRevised }: Props)
       const res = await fetch(`/api/documents/${documentId}/revise`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ instruction: value, contentJson: getContentJson() }),
+        body: JSON.stringify({
+          instruction: value,
+          contentJson: getContentJson(),
+          model,
+        }),
       });
       const json = await res.json().catch(() => null);
 
@@ -113,6 +131,16 @@ export function AiReviseDialog({ documentId, getContentJson, onRevised }: Props)
           disabled={submitting}
           placeholder="예: 결제조건을 30일로 변경해주세요"
           className="min-h-28 resize-none"
+        />
+
+        <AiModelSelect
+          id="revise-model"
+          models={models}
+          value={model}
+          onChange={setModel}
+          disabled={submitting}
+          mock={mockProvider}
+          compact
         />
 
         <div className="flex flex-wrap gap-1.5">

@@ -39,9 +39,11 @@ export async function reviseDocument(input: {
   documentTitle: string;
   documentType: string;
   doc: EditorDoc;
+  /** 사용자가 UI 에서 고른 모델. 없으면 기본값(AI_MODEL_GENERATE) */
+  model?: string | null;
 }): Promise<ReviseDocumentResult> {
   const result = await callStructured({
-    model: AI_MODEL_GENERATE,
+    model: input.model?.trim() || AI_MODEL_GENERATE,
     system: SYSTEM_REVISE,
     content: buildReviseContent({
       instruction: input.instruction,

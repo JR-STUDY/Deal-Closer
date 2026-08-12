@@ -5,6 +5,7 @@ import { ok, fail } from "@/lib/api";
 import { toAttachmentRecord, validateUploadFiles } from "@/lib/attachments";
 import { setupTemplate } from "@/lib/ai/setup-template";
 import { aiErrorResponse } from "@/lib/ai/http";
+import { resolveRequestedModel } from "@/lib/ai/model-access";
 import { TEMPLATE_SELECT } from "@/lib/template";
 import {
   CREDITS_PER_TEMPLATE_SETUP,
@@ -90,6 +91,10 @@ export async function POST(req: NextRequest) {
     : "";
   const name = (String(form.get("name") ?? "").trim() || fallbackName).slice(0, 80);
 
+  // ── 모델 선택 검증 (임의 모델 호출 차단) ──
+  const resolved = resolveRequestedModel(form.get("model"));
+  if ("problem" in resolved) return fail(resolved.problem, resolved.status);
+
   // ── 크레딧 확인 (AI 호출 전에 먼저 막는다) ──
   const wallet = await prisma.creditWallet.findUnique({
     where: { orgId: user.orgId },
@@ -111,6 +116,7 @@ export async function POST(req: NextRequest) {
       sourceFile: prepared,
       supplierName: branding?.companyName ?? user.name,
       logoUrl: branding?.logoUrl ?? null,
+      model: resolved.model,
     });
   } catch (error) {
     const response = aiErrorResponse(error);

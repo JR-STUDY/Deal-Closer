@@ -259,7 +259,7 @@ export async function callMock(call: StructuredCall): Promise<StructuredResult> 
   // (가짜 견적서가 고객에게 발송되는 사고를 코드로 차단한다)
   if (process.env.NODE_ENV === "production") {
     throw new AiNotConfiguredError(
-      "목(mock) AI 프로바이더는 개발 환경에서만 사용할 수 있습니다. AI_PROVIDER 를 anthropic 또는 openai 로 설정해주세요.",
+      "목(mock) AI 프로바이더는 개발 환경에서만 사용할 수 있습니다. AI_PROVIDER 를 anthropic · openai · google 중 하나로 설정해주세요.",
     );
   }
 

@@ -52,6 +52,8 @@ import {
 } from "@/lib/constants";
 import { formatKRW } from "@/lib/format";
 import { DocumentPicker, type LibraryDoc } from "./document-picker";
+import { AiModelSelect } from "@/components/ai-model-select";
+import type { AiModelOption } from "@/lib/ai/models";
 
 /** 불러올 수 있는 표준 양식 (F-211) */
 export type TemplateChoice = {
@@ -101,12 +103,20 @@ export function GeneratorForm({
   templates,
   confirmedQuotes,
   initialTemplateId,
+  models,
+  defaultModel,
+  mockProvider,
 }: {
   libraryDocuments: LibraryDoc[];
   templates: TemplateChoice[];
   confirmedQuotes: ConfirmedQuote[];
   /** 표준 양식 화면에서 넘어온 경우 미리 선택할 양식 (?template=) */
   initialTemplateId?: string | null;
+  /** 선택 가능한 AI 모델 (키가 설정된 프로바이더만) */
+  models: AiModelOption[];
+  defaultModel: string;
+  /** 목 프로바이더로 동작 중 */
+  mockProvider: boolean;
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -115,6 +125,7 @@ export function GeneratorForm({
     initialTemplateId ?? NO_TEMPLATE,
   );
   const [documentType, setDocumentType] = useState<string>(AUTO_TYPE);
+  const [model, setModel] = useState<string>(defaultModel);
   const [sourceQuoteId, setSourceQuoteId] = useState<string>(NO_TEMPLATE);
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
@@ -299,6 +310,7 @@ export function GeneratorForm({
     if (showQuoteSource && sourceQuoteId !== NO_TEMPLATE) {
       formData.append("sourceDocumentId", sourceQuoteId);
     }
+    if (model) formData.append("model", model);
     if (clientName.trim()) formData.append("clientName", clientName.trim());
     if (clientContact.trim()) formData.append("clientContact", clientContact.trim());
     if (clientEmail.trim()) formData.append("clientEmail", clientEmail.trim());
@@ -356,8 +368,16 @@ export function GeneratorForm({
             className="min-h-40 resize-none text-base"
           />
 
-          {/* 문서 설정 — 표준 양식 불러오기(F-211) · 문서 종류 · 거래처 정보 */}
+          {/* 문서 설정 — AI 모델 · 표준 양식 불러오기(F-211) · 문서 종류 · 거래처 정보 */}
           <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+            <AiModelSelect
+              models={models}
+              value={model}
+              onChange={setModel}
+              disabled={isSubmitting}
+              mock={mockProvider}
+            />
+
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="template-select" className="text-xs">

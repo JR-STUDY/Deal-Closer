@@ -48,6 +48,7 @@ import { EditorPreview } from "./editor-preview";
 import { BlockInspector, ContentForm } from "./block-inspector";
 import { DocumentStatusControl } from "./document-status-control";
 import { DocumentVersionControl } from "./document-version-control";
+import type { AiModelOption } from "@/lib/ai/models";
 
 type Props = {
   documentId: string;
@@ -59,6 +60,10 @@ type Props = {
   version: number;
   /** 확정본 여부 (F-214) */
   isConfirmed: boolean;
+  /** 선택 가능한 AI 모델 (AI 부분 재작성용) */
+  models: AiModelOption[];
+  defaultModel: string;
+  mockProvider: boolean;
 };
 
 export function DocumentEditor({
@@ -69,6 +74,9 @@ export function DocumentEditor({
   catalog,
   version,
   isConfirmed,
+  models,
+  defaultModel,
+  mockProvider,
 }: Props) {
   const [doc, setDoc] = useState<EditorDoc>(initialDoc);
   const [docTitle, setDocTitle] = useState(initialTitle);
@@ -514,6 +522,9 @@ export function DocumentEditor({
             onPreview={() => setPreviewOpen(true)}
             getContentJson={getContentJson}
             onRevised={goToVersion}
+            models={models}
+            defaultModel={defaultModel}
+            mockProvider={mockProvider}
           />
         </div>
         <EditorCanvas

@@ -1,58 +1,46 @@
 /**
  * AI 연동 설정 (서버 전용).
  *
- * 프로바이더는 Claude(Anthropic)와 GPT(OpenAI) 둘을 지원한다.
- * 모델은 용도별로 분리한다 (환경변수로 오버라이드 가능):
+ * 프로바이더는 Claude(Anthropic) · GPT(OpenAI) · Gemini(Google) 셋을 지원한다.
+ * 선택 가능한 모델 목록은 `models.ts` 카탈로그가 단일 소스이고,
+ * 이 파일은 **환경변수에서 읽는 기본값**만 담당한다.
+ *
+ * 모델은 용도별로 분리한다:
  *  - AI_MODEL_GENERATE: 문서 초안 생성(F-212) · 양식 AI 세팅(F-203) · 부분 재작성(F-215)
- *    → 문서 구조·금액 추론 정확도가 중요한 경로. 각 프로바이더의 상위 모델.
- *  - AI_MODEL_BATCH: 변수 필드 추출(F-204) 등 반복·경량 경로. 중간 등급 모델.
+ *    → 사용자가 UI 에서 고르지 않았을 때의 기본값.
+ *  - AI_MODEL_BATCH: 변수 필드 추출(F-204) 등 반복·경량 경로 (선택기 없음).
  */
 
 import "server-only";
+import { DEFAULT_MODELS, providerOfModel, type AiProvider } from "./models";
 
-/** 실제 API 를 호출하는 프로바이더 (키가 필요하다) */
-export type AiLiveProvider = "anthropic" | "openai";
-
-/** mock = 로컬 검증용. 실제 호출 없이 스키마에 맞는 응답을 즉시 돌려준다 */
-export type AiProvider = AiLiveProvider | "mock";
-
-/** 프로바이더별 기본 모델 */
-const DEFAULT_MODELS: Record<AiProvider, { generate: string; batch: string }> = {
-  anthropic: { generate: "claude-opus-5", batch: "claude-sonnet-5" },
-  openai: { generate: "gpt-5.6-sol", batch: "gpt-5.6-terra" },
-  mock: { generate: "mock-local", batch: "mock-local" },
-};
-
-/** 모델 이름만 보고 프로바이더를 판별한다 (판별 불가면 null) */
-export function providerOfModel(model: string): AiProvider | null {
-  const name = model.trim().toLowerCase();
-  if (!name) return null;
-  if (name.startsWith("claude")) return "anthropic";
-  if (name.startsWith("mock")) return "mock";
-  if (
-    name.startsWith("gpt") ||
-    name.startsWith("chatgpt") ||
-    /^o\d/.test(name) // o1 · o3 · o4 계열 추론 모델
-  ) {
-    return "openai";
-  }
-  return null;
-}
+export type {
+  AiLiveProvider,
+  AiModelOption,
+  AiModelTier,
+  AiProvider,
+} from "./models";
+export { providerOfModel } from "./models";
 
 /**
- * 사용할 프로바이더를 결정한다.
+ * 사용할 기본 프로바이더를 결정한다.
  *
  * 우선순위:
  *  1. AI_PROVIDER 를 명시했으면 그대로 따른다. (mock 포함)
- *  2. AI_MODEL_GENERATE 모델명으로 판별한다. (예: gpt-5.6-sol → openai)
- *  3. 쓸 수 있는 키가 한쪽만 있으면 그쪽을 쓴다.
+ *  2. AI_MODEL_GENERATE 모델명으로 판별한다. (예: gemini-3.6-flash → google)
+ *  3. 쓸 수 있는 키가 하나뿐이면 그 프로바이더를 쓴다.
  *  4. 그래도 모르면 anthropic.
  *
  * mock 은 절대 자동 선택되지 않는다 — 명시해야만 켜진다.
  */
 function detectProvider(): AiProvider {
   const explicit = process.env.AI_PROVIDER?.trim().toLowerCase();
-  if (explicit === "openai" || explicit === "anthropic" || explicit === "mock") {
+  if (
+    explicit === "anthropic" ||
+    explicit === "openai" ||
+    explicit === "google" ||
+    explicit === "mock"
+  ) {
     return explicit;
   }
 
@@ -60,29 +48,35 @@ function detectProvider(): AiProvider {
   if (fromModel) return fromModel;
 
   // Messages API 로 쓸 수 있는 Anthropic 키인지까지 본다 (sk-ant-oat… 로그인 토큰은 제외)
-  const hasAnthropic = Boolean(
-    process.env.ANTHROPIC_API_KEY?.trim().startsWith("sk-ant-api"),
-  );
-  const hasOpenai = Boolean(process.env.OPENAI_API_KEY?.trim());
-  if (hasOpenai && !hasAnthropic) return "openai";
-  if (hasAnthropic && !hasOpenai) return "anthropic";
+  const configured: AiProvider[] = [];
+  if (process.env.ANTHROPIC_API_KEY?.trim().startsWith("sk-ant-api")) {
+    configured.push("anthropic");
+  }
+  if (process.env.OPENAI_API_KEY?.trim()) configured.push("openai");
+  if (process.env.GEMINI_API_KEY?.trim()) configured.push("google");
 
-  return "anthropic";
+  return configured.length === 1 ? configured[0] : "anthropic";
 }
 
 /** 기본 프로바이더 — 모델명으로 판별되지 않을 때의 폴백 */
 export const AI_PROVIDER: AiProvider = detectProvider();
 
-/** 문서 생성·재작성·양식 세팅에 사용하는 모델 */
+/** 사용자가 고르지 않았을 때 쓰는 생성 모델 */
 export const AI_MODEL_GENERATE =
   process.env.AI_MODEL_GENERATE?.trim() || DEFAULT_MODELS[AI_PROVIDER].generate;
 
-/** 변수 추출 등 경량·반복 작업에 사용하는 모델 */
+/** 변수 추출 등 경량·반복 작업에 사용하는 모델 (선택기 없음) */
 export const AI_MODEL_BATCH =
   process.env.AI_MODEL_BATCH?.trim() || DEFAULT_MODELS[AI_PROVIDER].batch;
 
-/** 이 모델을 어느 프로바이더로 보낼지 (판별 불가면 기본 프로바이더) */
+/**
+ * 이 모델을 어느 프로바이더로 보낼지.
+ *
+ * AI_PROVIDER=mock 이면 **모델과 무관하게 목으로 보낸다** — UI 에서 모델을 골라도
+ * 로컬 검증이 유지되도록 (그렇지 않으면 모델명 판별이 목 설정을 덮어써서 실제 호출이 나간다).
+ */
 export function providerOf(model: string): AiProvider {
+  if (AI_PROVIDER === "mock") return "mock";
   return providerOfModel(model) ?? AI_PROVIDER;
 }
 
@@ -92,7 +86,7 @@ export function providerOf(model: string): AiProvider {
  */
 export const AI_MAX_TOKENS = 16_000;
 
-/** 추론 강도 — 두 프로바이더가 공통으로 받는 값만 노출한다 */
+/** 추론 강도 — 세 프로바이더가 공통으로 받는 값만 노출한다 */
 export type AiEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
 /** API 키가 없거나 형식이 맞지 않을 때 (호출 자체가 불가) → HTTP 503 */

@@ -4,6 +4,7 @@ import { getCurrentOrg } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { TEMPLATE_SCOPE_LABELS, type TemplateScope } from "@/lib/constants";
 import { TemplateUploadDialog } from "./_components/template-upload-dialog";
+import { availableModels } from "@/lib/ai/model-access";
 import { TemplateCard, type TemplateCardData } from "./_components/template-card";
 
 /**
@@ -12,6 +13,10 @@ import { TemplateCard, type TemplateCardData } from "./_components/template-card
  */
 export default async function TemplatesPage() {
   const org = await getCurrentOrg();
+
+  // 양식 AI 세팅에 쓸 모델 선택 목록 (환경변수만 읽으므로 동기)
+  const { models, defaultModel, mock } = availableModels();
+  const modelProps = { models, defaultModel, mockProvider: mock };
 
   const templates = await prisma.template.findMany({
     where: { orgId: org.id },
@@ -65,7 +70,7 @@ export default async function TemplatesPage() {
           { label: "표준 양식" },
         ]}
         description="기존에 쓰던 양식을 올리면 AI 가 표준 양식으로 세팅하고 변수 항목을 정리합니다. 문서 생성 시 이 양식을 불러와 값만 채웁니다."
-        actions={<TemplateUploadDialog />}
+        actions={<TemplateUploadDialog {...modelProps} />}
       />
 
       <div className="flex-1 space-y-8 overflow-auto p-8">
@@ -76,7 +81,7 @@ export default async function TemplatesPage() {
               아직 표준 양식이 없습니다. 지금 쓰고 있는 견적서·계약서 파일(PDF·이미지·엑셀)을
               올리면 AI 가 재사용 가능한 양식으로 정리해 드립니다.
             </p>
-            <TemplateUploadDialog />
+            <TemplateUploadDialog {...modelProps} />
           </div>
         ) : (
           groups.map((group) =>

@@ -31,6 +31,8 @@ import { documentDate } from "./today";
 
 export type SetupTemplateInput = Omit<TemplateSetupContentInput, "today"> & {
   logoUrl?: string | null;
+  /** 사용자가 UI 에서 고른 모델. 없으면 기본값(AI_MODEL_GENERATE) */
+  model?: string | null;
 };
 
 export type SetupTemplateResult = {
@@ -49,7 +51,7 @@ export async function setupTemplate(
   input: SetupTemplateInput,
 ): Promise<SetupTemplateResult> {
   const result = await callStructured({
-    model: AI_MODEL_GENERATE,
+    model: input.model?.trim() || AI_MODEL_GENERATE,
     system: SYSTEM_TEMPLATE_SETUP,
     content: buildTemplateSetupContent({ ...input, today: documentDate() }),
     schema: TEMPLATE_SPEC_SCHEMA,

@@ -5,6 +5,7 @@ import { ok, fail } from "@/lib/api";
 import { toAttachmentRecord, validateUploadFiles } from "@/lib/attachments";
 import { generateDocument } from "@/lib/ai/generate-document";
 import { aiErrorResponse } from "@/lib/ai/http";
+import { resolveRequestedModel } from "@/lib/ai/model-access";
 import type { PreparedFile } from "@/lib/ai/content";
 import {
   CREDITS_PER_GENERATION,
@@ -25,6 +26,7 @@ import {
  *  - files: 첨부 파일 0개 이상 (PDF·이미지·엑셀·CSV)
  *  - referenceIds: 참고 보관함 문서 id 0개 이상
  *  - saveAsCommon: "true" 면 공용문서함에 저장
+ *  - model: 사용자가 고른 AI 모델 id (선택 — 카탈로그에 있는 값만 허용)
  *
  * Claude 호출이 실패하면 문서도 크레딧 거래도 만들지 않는다 (503/502 반환).
  */
@@ -42,6 +44,10 @@ export async function POST(req: NextRequest) {
   if (!prompt) return fail("생성할 문서 내용을 입력해주세요.");
 
   const saveAsCommon = String(form.get("saveAsCommon") ?? "") === "true";
+
+  // ── 모델 선택 검증 (임의 모델 호출 차단) ──
+  const resolved = resolveRequestedModel(form.get("model"));
+  if ("problem" in resolved) return fail(resolved.problem, resolved.status);
 
   const rawType = String(form.get("documentType") ?? "").trim();
   const documentType = (DOCUMENT_TYPES as readonly string[]).includes(rawType)
@@ -176,6 +182,7 @@ export async function POST(req: NextRequest) {
       },
       supplierName: branding?.companyName ?? user.name,
       logoUrl: branding?.logoUrl ?? null,
+      model: resolved.model,
     });
   } catch (error) {
     const response = aiErrorResponse(error);

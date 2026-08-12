@@ -33,6 +33,8 @@ import {
   TEMPLATE_SCOPE_LABELS,
   isAcceptedAttachment,
 } from "@/lib/constants";
+import { AiModelSelect } from "@/components/ai-model-select";
+import type { AiModelOption } from "@/lib/ai/models";
 
 const AUTO_TYPE = "AUTO";
 const MAX_PROMPT = 1000;
@@ -44,9 +46,19 @@ const DEFAULT_PROMPT =
  * 표준 양식 업로드 + AI 세팅 (PRD F-202 · F-203 · F-204).
  * 파일은 PDF·이미지·엑셀·CSV 만 받는다 (docx·hwp 는 서버가 안내 메시지로 거절).
  */
-export function TemplateUploadDialog() {
+export function TemplateUploadDialog({
+  models,
+  defaultModel,
+  mockProvider,
+}: {
+  /** 선택 가능한 AI 모델 (키가 설정된 프로바이더만) */
+  models: AiModelOption[];
+  defaultModel: string;
+  mockProvider: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [model, setModel] = useState<string>(defaultModel);
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [type, setType] = useState<string>(AUTO_TYPE);
@@ -80,6 +92,7 @@ export function TemplateUploadDialog() {
     if (name.trim()) formData.append("name", name.trim());
     if (type !== AUTO_TYPE) formData.append("type", type);
     formData.append("scope", scope);
+    if (model) formData.append("model", model);
     if (file) formData.append("file", file);
 
     try {
@@ -236,6 +249,16 @@ export function TemplateUploadDialog() {
           </div>
 
           <div className="space-y-1.5">
+            <AiModelSelect
+              id="template-model"
+              models={models}
+              value={model}
+              onChange={setModel}
+              disabled={submitting}
+              mock={mockProvider}
+              compact
+            />
+
             <Label htmlFor="template-prompt" className="text-xs">
               AI 에게 남길 지시
             </Label>
