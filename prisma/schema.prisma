@@ -141,6 +141,7 @@ model Contact {
 ///   문서 발송 시 자동 전이한다(F-113). 전이 규칙은 src/lib/opportunity-stage.ts 한 곳에 모은다.
 /// - lostReason: LOST 일 때만 채운다(F-117). 이탈률 통계(F-405)의 분류 축이 된다.
 /// - previousOpportunityId: 수주 후 자동 생성되는 "다음 기회"가 직전 기회를 가리킨다(F-115·F-306).
+/// - expectedAmount 는 **입력값이 아니라 확정 문서에서 파생된 값**이다 (기회-6).
 model Opportunity {
   id                  String    @id @default(cuid())
   orgId               String
@@ -151,7 +152,25 @@ model Opportunity {
   owner               User      @relation(fields: [ownerId], references: [id])
   name                String    // 기회명
   stage               String    @default("INITIAL")
-  expectedAmount      Int       @default(0) // 예상 금액 (KRW 정수)
+  /// 예상 금액 (KRW 정수) — **확정 문서(confirmedDocument)의 금액을 복제한 파생 값**이다.
+  /// 사용자가 직접 입력하지 않으며, 확정 문서가 없으면 0 이다 (기회-6 ④).
+  /// 집계(파이프라인·대시보드·캘린더)가 기회 행만 읽고도 합계를 낼 수 있도록 비정규화해 둔다 —
+  /// 매번 문서를 조인해 확정 문서를 다시 고르면 목록 한 화면의 조인이 기회 수만큼 늘어난다.
+  /// 쓰기는 `src/lib/opportunity-amount.ts` 한 곳뿐이다.
+  expectedAmount      Int       @default(0)
+  /// 예상 금액의 출처가 되는 **확정 문서 1건** (기회-6). null 이면 확정 문서 없음 → 금액 0.
+  /// `Document.isConfirmed` 플래그 대신 여기에 FK 를 두는 이유는, 기회당 확정 문서가
+  /// **구조적으로 1건**임이 보장되어 "여러 문서가 동시에 확정" 상태가 만들어질 수 없기 때문이다.
+  /// @unique 는 한 문서가 두 기회의 금액을 동시에 좌우하지 못하게 막는다
+  /// (previousOpportunityId 와 같은 선례의 named relation 이다).
+  /// 문서가 지워지면 SetNull 로 끊기고, 라우트가 곧바로 재판정해 금액을 다시 맞춘다.
+  confirmedDocumentId String?   @unique
+  confirmedDocument   Document? @relation("ConfirmedDocument", fields: [confirmedDocumentId], references: [id], onDelete: SetNull)
+  /// 확정 문서를 **사용자가 직접 골랐는지** (기회-6 ③). true 면 자동 판정에서 제외(잠금)된다.
+  /// 잠금 여부를 다른 상태에서 추론하지 않고 별도 컬럼으로 두는 이유: 자동 판정 결과와 사용자의
+  /// 선택이 우연히 같을 수 있어, 플래그가 없으면 "내가 고른 것"과 "마침 그렇게 뽑힌 것"을
+  /// 구분할 수 없다 — 그 상태에서 문서가 하나 추가되면 사용자의 선택이 조용히 뒤집힌다.
+  isConfirmedDocumentPinned Boolean @default(false)
   expectedCloseDate   DateTime? // 예상 마감일
   actualCloseDate     DateTime? // 실제 수주/실주 확정일
   lostReason          String?   // 실주 사유 (LOST 일 때만)
@@ -216,8 +235,11 @@ model Document {
   // 팀 공통(공유) 베이스 문서 여부. 폴더 배치와 무관한 교차 분류이며 "공통 문서" 탭에서 모아 본다.
   isCommon    Boolean  @default(false)
   // 연결된 영업 기회(선택). 기회 상세의 문서 목록·발송 시 단계 자동 전이(F-113)의 기준이 된다.
+  // 한 문서는 최대 한 기회에만 붙는다 — 그래야 문서 하나가 두 기회의 금액을 좌우하지 않는다 (기회-5).
   opportunityId String?
   opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  // 이 문서를 예상 금액의 근거(확정 문서)로 삼은 기회 (기회-6). 역방향이며 최대 1건이다.
+  confirmedFor  Opportunity? @relation("ConfirmedDocument")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

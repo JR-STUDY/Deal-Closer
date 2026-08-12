@@ -72,7 +72,6 @@ export type CreateOpportunityInput = {
   accountId: string;
   ownerId: string;
   name: string;
-  expectedAmount: number;
   expectedCloseDate: Date | null;
   memo: string | null;
 };
@@ -83,6 +82,9 @@ export type CreateOpportunityInput = {
  * 라우트가 `prisma.opportunity.create()` 를 직접 부르면 이력을 빠뜨릴 수 있으므로
  * 생성 경로도 이 모듈로 모은다. 초기 단계는 스키마 기본값(INITIAL)에 맡기고
  * `stage` 를 명시하지 않는다 — 단계 값을 정하는 곳은 이 파일 하나뿐이어야 한다.
+ *
+ * **예상 금액도 명시하지 않는다** (기회-6). 확정 문서가 정하는 값이라 새 기회는 0 으로
+ * 시작하고, 문서가 붙는 순간 `@/lib/opportunity-amount` 가 채운다.
  */
 export function createOpportunity(
   input: CreateOpportunityInput,
@@ -101,7 +103,7 @@ export function createOpportunity(
       opportunityId: created.id,
       actorId,
       eventType: "OPPORTUNITY_CREATED",
-      detail: { accountId, ownerId, expectedAmount: rest.expectedAmount },
+      detail: { accountId, ownerId },
     });
 
     return created;

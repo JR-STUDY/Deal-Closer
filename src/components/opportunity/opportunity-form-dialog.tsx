@@ -21,23 +21,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LinkableDocumentPicker } from "@/components/document/linkable-document-picker";
 import {
   OPPORTUNITY_MEMO_MAX,
   OPPORTUNITY_NAME_MAX,
-  formatAmountInput,
   type OpportunityAccountOption,
   type OpportunityDTO,
   type OpportunityFormValues,
   type OpportunityOwnerOption,
 } from "@/lib/opportunity";
+import { AccountCombobox } from "./account-combobox";
 
 type OpportunityFormDialogProps = {
   /** 값이 있으면 수정(PATCH), 없으면 생성(POST) */
   opportunityId?: string;
   initial: OpportunityFormValues;
-  /** 현재 조직의 거래처 후보 */
-  accounts: OpportunityAccountOption[];
-  /** 현재 조직의 담당자 후보 */
+  /** 미리 선택된 거래처의 회사명 (자동완성 입력에 그대로 채운다) */
+  initialAccountName?: string;
+  /** 현재 조직의 영업 담당자 후보 */
   owners: OpportunityOwnerOption[];
   title: string;
   description?: string;
@@ -48,11 +49,17 @@ type OpportunityFormDialogProps = {
 };
 
 /**
- * 영업 기회 생성·수정 다이얼로그 (F-111).
+ * 영업 기회 생성·수정 다이얼로그 (F-111 · 기회-16 · 기회-17).
  *
- * 거래처·기회명이 필수이고 금액·마감일·메모는 선택이다. 형식 검증은
- * 서버(`parseOpportunityInput`)가 단일 기준이며, 실패 메시지를 toast 로 보여준다.
- * 단계(stage)는 여기서 다루지 않는다 — 생성은 INITIAL 고정이고 변경은 Phase 3 범위다.
+ * 거래처·기회명이 필수이고 마감일·메모는 선택이다. 형식 검증은 서버
+ * (`parseOpportunityInput`)가 단일 기준이며, 실패 메시지를 toast 로 보여준다.
+ *
+ * **예상 금액 입력은 없다** (기회-6). 확정 문서에서 파생되는 값이라 폼에서 손대면 두 출처가
+ * 싸운다. 대신 등록할 때 **보관함 문서를 골라 바로 연결**할 수 있고(기회-17), 그 문서가
+ * 곧바로 확정 문서 판정 대상이 되어 금액이 정해진다.
+ *
+ * 거래처는 셀렉트가 아니라 **자동완성**이다 (기회-16) — 목록에서 찾고, 없으면 그 자리에서 만든다.
+ * 단계(stage)는 여기서 다루지 않는다 — 생성은 INITIAL 고정이고 전이는 스테퍼·칸반이 맡는다.
  *
  * 부모는 열고 싶을 때만 이 컴포넌트를 마운트한다. `key` 를 함께 주면 열 때마다
  * initial 로 새로 초기화된다 (파생 state 없이 리마운트로 해결).
@@ -60,28 +67,32 @@ type OpportunityFormDialogProps = {
 export function OpportunityFormDialog({
   opportunityId,
   initial,
-  accounts,
+  initialAccountName,
   owners,
   title,
   description,
   onSaved,
   onClose,
 }: OpportunityFormDialogProps) {
-  const [accountId, setAccountId] = useState(() => initial.accountId);
-  const [name, setName] = useState(() => initial.name);
-  const [expectedAmount, setExpectedAmount] = useState(() =>
-    formatAmountInput(initial.expectedAmount),
+  const isCreating = !opportunityId;
+  const [account, setAccount] = useState<OpportunityAccountOption | null>(() =>
+    initial.accountId
+      ? { id: initial.accountId, companyName: initialAccountName ?? "" }
+      : null,
   );
+  const [name, setName] = useState(() => initial.name);
   const [expectedCloseDate, setExpectedCloseDate] = useState(
     () => initial.expectedCloseDate,
   );
   const [ownerId, setOwnerId] = useState(() => initial.ownerId);
   const [memo, setMemo] = useState(() => initial.memo);
+  const [documentIds, setDocumentIds] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  const canSubmit = Boolean(accountId) && name.trim().length > 0 && !isSaving;
+  const canSubmit = Boolean(account) && name.trim().length > 0 && !isSaving;
 
   const handleSubmit = async () => {
+    if (!account) return;
     setIsSaving(true);
     try {
       const res = await fetch(
@@ -92,12 +103,13 @@ export function OpportunityFormDialog({
           method: opportunityId ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            accountId,
+            accountId: account.id,
             name,
-            expectedAmount,
             expectedCloseDate,
             ownerId,
             memo,
+            // 연결은 등록과 한 트랜잭션으로 처리된다 — 수정에서는 상세의 연관 문서에서 다룬다.
+            ...(isCreating ? { documentIds } : {}),
           }),
         },
       );
@@ -110,7 +122,9 @@ export function OpportunityFormDialog({
       toast.success(
         opportunityId
           ? "영업 기회를 수정했습니다."
-          : "영업 기회를 등록했습니다.",
+          : documentIds.length > 0
+            ? `영업 기회를 등록하고 문서 ${documentIds.length}건을 연결했습니다.`
+            : "영업 기회를 등록했습니다.",
       );
       onClose();
     } catch {
@@ -149,18 +163,20 @@ export function OpportunityFormDialog({
                 *
               </span>
             </Label>
-            <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger id="opportunity-account" className="w-full">
-                <SelectValue placeholder="거래처를 선택해주세요" />
-              </SelectTrigger>
-              <SelectContent>
-                {accounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.companyName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* 목록에서 찾고, 없으면 그 자리에서 만든다 (기회-16) */}
+            <AccountCombobox
+              id="opportunity-account"
+              value={account}
+              onChange={setAccount}
+              disabled={isSaving}
+              aria-describedby="opportunity-account-hint"
+            />
+            <p
+              id="opportunity-account-hint"
+              className="text-xs text-muted-foreground"
+            >
+              등록되지 않은 회사라면 입력하신 이름으로 바로 등록하실 수 있습니다.
+            </p>
           </div>
 
           <div className="space-y-1.5">
@@ -182,35 +198,6 @@ export function OpportunityFormDialog({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="opportunity-amount">예상 금액</Label>
-              <div className="relative">
-                <span
-                  className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground"
-                  aria-hidden="true"
-                >
-                  ₩
-                </span>
-                <Input
-                  id="opportunity-amount"
-                  className="pl-7"
-                  inputMode="numeric"
-                  value={expectedAmount}
-                  placeholder="0"
-                  aria-describedby="opportunity-amount-hint"
-                  onChange={(e) =>
-                    setExpectedAmount(formatAmountInput(e.target.value))
-                  }
-                />
-              </div>
-              <p
-                id="opportunity-amount-hint"
-                className="text-xs text-muted-foreground"
-              >
-                원(KRW) 단위로 입력해주세요.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
               <Label htmlFor="opportunity-close-date">예상 마감일</Label>
               <Input
                 id="opportunity-close-date"
@@ -226,24 +213,44 @@ export function OpportunityFormDialog({
                 아직 정해지지 않았다면 비워두셔도 됩니다.
               </p>
             </div>
+
+            <div className="space-y-1.5">
+              {/* 거래처 담당자 입력란과 헷갈리지 않게 "영업 담당자" 로 못박는다 (기회-14) */}
+              <Label htmlFor="opportunity-owner">영업 담당자</Label>
+              <Select value={ownerId} onValueChange={setOwnerId}>
+                <SelectTrigger id="opportunity-owner" className="w-full">
+                  <SelectValue placeholder="영업 담당자를 선택해주세요" />
+                </SelectTrigger>
+                <SelectContent>
+                  {owners.map((owner) => (
+                    <SelectItem key={owner.id} value={owner.id}>
+                      {owner.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            {/* 거래처 담당자 입력란과 헷갈리지 않게 "영업 담당자" 로 못박는다 (기회-14) */}
-            <Label htmlFor="opportunity-owner">영업 담당자</Label>
-            <Select value={ownerId} onValueChange={setOwnerId}>
-              <SelectTrigger id="opportunity-owner" className="w-full">
-                <SelectValue placeholder="영업 담당자를 선택해주세요" />
-              </SelectTrigger>
-              <SelectContent>
-                {owners.map((owner) => (
-                  <SelectItem key={owner.id} value={owner.id}>
-                    {owner.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/*
+            등록 시점에 보관함 문서를 골라 바로 연결한다 (기회-17).
+            수정에서는 감춘다 — 이미 만들어진 기회의 문서는 상세의 "연관 문서" 에서 다뤄야
+            연결·해제·확정 지정이 한자리에 모인다.
+          */}
+          {isCreating ? (
+            <div className="space-y-1.5">
+              <Label>연결할 문서</Label>
+              <LinkableDocumentPicker
+                selectedIds={documentIds}
+                onChange={setDocumentIds}
+                disabled={isSaving}
+              />
+              <p className="text-xs text-muted-foreground">
+                예상 금액은 연결하신 문서에서 자동으로 정해집니다. 지금 고르지
+                않으셔도 나중에 기회 상세에서 연결하실 수 있습니다.
+              </p>
+            </div>
+          ) : null}
 
           <div className="space-y-1.5">
             <Label htmlFor="opportunity-memo">메모</Label>

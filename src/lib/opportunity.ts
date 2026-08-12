@@ -14,31 +14,13 @@ import { isOpportunityStage, type OpportunityStage } from "./constants";
 // ── 저장 제약 (정책 VAL_*) ──
 export const OPPORTUNITY_NAME_MAX = 100;
 export const OPPORTUNITY_MEMO_MAX = 2000;
-/** 예상 금액 상한 — Prisma `Int` 는 32비트 부호 있는 정수라 이 값을 넘기면 DB 가 거부한다 */
-export const OPPORTUNITY_AMOUNT_MAX = 2_147_483_647;
 
-// ────────────────────── 금액 입력 (정책 FORM_CURRENCY_KRW) ──────────────────────
-
-/**
- * 입력값에서 숫자만 남겨 천단위 구분 기호를 붙인다 ("1234567" → "1,234,567").
- * 저장은 정수로 하고 표시만 구분 기호를 쓰므로, 폼에서 매 입력마다 이 함수를 통과시킨다.
+/*
+ * 예상 금액은 **이 모듈이 다루지 않는다** (기회-6).
+ * 사용자가 입력하는 값이 아니라 확정 문서에서 파생되는 값이라, 판정은
+ * `@/lib/confirmed-document`(규칙) · 저장은 `@/lib/opportunity-amount`(쓰기) 가 맡는다.
+ * 금액 입력 헬퍼(천단위 구분·정수 변환)를 여기 남겨두면 폼이 다시 손으로 고칠 길을 열게 된다.
  */
-export function formatAmountInput(raw: string): string {
-  const digits = raw.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
-  if (!digits) return "";
-  // 자릿수가 지나치게 길면 Number 변환이 정밀도를 잃는다 → 상한 검증에서 걸리도록 원본을 남긴다.
-  const value = Number(digits);
-  return Number.isSafeInteger(value) ? value.toLocaleString("ko-KR") : digits;
-}
-
-/** 구분 기호가 섞인 입력을 원(KRW) 정수로. 숫자가 없으면 0. */
-export function parseAmountInput(raw: string): number {
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return 0;
-  const value = Number(digits);
-  // 안전 정수를 벗어나면 상한 초과로 다뤄 검증에서 거부한다.
-  return Number.isSafeInteger(value) ? value : OPPORTUNITY_AMOUNT_MAX + 1;
-}
 
 // ─────────────────── 날짜 입력 (`<input type="date">` 형식) ───────────────────
 
@@ -80,8 +62,15 @@ export type OpportunityDTO = {
   ownerName: string;
   name: string;
   stage: OpportunityStage;
-  /** 예상 금액 (KRW 정수) */
+  /**
+   * 예상 금액 (KRW 정수) — **확정 문서에서 파생된 읽기 전용 값**이다 (기회-6).
+   * 확정 문서가 없으면 0 이며, 폼으로 고칠 수 없다.
+   */
   expectedAmount: number;
+  /** 금액의 근거가 된 확정 문서 id. 없으면 null → 화면은 `₩0 · 확정 문서 없음`. */
+  confirmedDocumentId: string | null;
+  /** 사용자가 확정 문서를 직접 고정했는지 (자동 판정에서 제외된 상태) */
+  isConfirmedDocumentPinned: boolean;
   /** `YYYY-MM-DD`. 미정이면 null. */
   expectedCloseDate: string | null;
   memo: string | null;
@@ -93,18 +82,20 @@ export type OpportunityDTO = {
 export type OpportunityAccountOption = { id: string; companyName: string };
 export type OpportunityOwnerOption = { id: string; name: string };
 
-/** 생성·수정 폼의 편집 값 (금액은 구분 기호가 들어간 표시 문자열) */
+/**
+ * 생성·수정 폼의 편집 값.
+ * **예상 금액은 없다** — 확정 문서에서 파생되므로 폼이 다룰 값이 아니다 (기회-6 ④).
+ */
 export type OpportunityFormValues = {
   accountId: string;
   name: string;
-  expectedAmount: string;
   /** `YYYY-MM-DD`. 빈 문자열이면 미정. */
   expectedCloseDate: string;
   ownerId: string;
   memo: string;
 };
 
-/** 새 기회 폼의 초기값. 거래처 상세에서 열면 그 거래처가 미리 선택된다 (F-111). */
+/** 새 기회 폼의 초기값. 거래처 상세·거래처 목록 `⋯` 에서 열면 그 거래처가 미리 선택된다 (F-111 · 거래처-2). */
 export function emptyOpportunityForm(defaults: {
   accountId?: string;
   ownerId: string;
@@ -112,7 +103,6 @@ export function emptyOpportunityForm(defaults: {
   return {
     accountId: defaults.accountId ?? "",
     name: "",
-    expectedAmount: "",
     expectedCloseDate: "",
     ownerId: defaults.ownerId,
     memo: "",
@@ -126,7 +116,6 @@ export function toOpportunityFormValues(
   return {
     accountId: opportunity.accountId,
     name: opportunity.name,
-    expectedAmount: formatAmountInput(String(opportunity.expectedAmount)),
     expectedCloseDate: opportunity.expectedCloseDate ?? "",
     ownerId: opportunity.ownerId,
     memo: opportunity.memo ?? "",
@@ -143,6 +132,8 @@ export function toOpportunityDTO(record: {
   name: string;
   stage: string;
   expectedAmount: number;
+  confirmedDocumentId: string | null;
+  isConfirmedDocumentPinned: boolean;
   expectedCloseDate: Date | null;
   memo: string | null;
   createdAt: Date;
@@ -158,6 +149,8 @@ export function toOpportunityDTO(record: {
     // stage 는 DB 가 String 컬럼이라 정의 밖 값이 들어올 수 있다. 초기 단계로 보수 해석한다.
     stage: isOpportunityStage(record.stage) ? record.stage : "INITIAL",
     expectedAmount: record.expectedAmount,
+    confirmedDocumentId: record.confirmedDocumentId,
+    isConfirmedDocumentPinned: record.isConfirmedDocumentPinned,
     expectedCloseDate: toDateInputValue(record.expectedCloseDate) || null,
     memo: record.memo,
     createdAt: record.createdAt.toISOString(),
@@ -167,12 +160,14 @@ export function toOpportunityDTO(record: {
 
 // ────────────────────────────── 입력 검증 ──────────────────────────────
 
-/** 검증을 통과한 기회 입력값 */
+/**
+ * 검증을 통과한 기회 입력값.
+ * `expectedAmount` 는 없다 — 확정 문서가 정하는 값이라 요청 본문에 담겨도 무시한다 (기회-6).
+ */
 export type OpportunityInput = {
   accountId: string;
   ownerId: string;
   name: string;
-  expectedAmount: number;
   expectedCloseDate: Date | null;
   memo: string | null;
 };
@@ -182,7 +177,6 @@ export type OpportunityCurrentValues = {
   accountId: string;
   ownerId: string;
   name: string;
-  expectedAmount: number;
   expectedCloseDate: Date | null;
   memo: string | null;
 };
@@ -208,7 +202,6 @@ export function withOpportunityDefaults(
     accountId: pick("accountId", current.accountId),
     ownerId: pick("ownerId", current.ownerId),
     name: pick("name", current.name),
-    expectedAmount: pick("expectedAmount", current.expectedAmount),
     expectedCloseDate: pick(
       "expectedCloseDate",
       toDateInputValue(current.expectedCloseDate),
@@ -219,9 +212,12 @@ export function withOpportunityDefaults(
 
 /**
  * API 요청 본문을 검증·정규화한다 (POST · PATCH 공용).
- * 거래처·담당자·기회명이 필수이고 금액·마감일·메모는 선택이다.
+ * 거래처·담당자·기회명이 필수이고 마감일·메모는 선택이다.
  * 거래처·담당자가 **현재 조직 소속인지**는 여기서 알 수 없으므로 라우트가 별도로 확인한다.
  * 실패 시 사용자용 한국어 메시지를 담은 `{ error }` 를 반환한다.
+ *
+ * 본문에 `expectedAmount` 가 섞여 와도 **조용히 버린다** (기회-6 ④) — 예상 금액은 확정
+ * 문서에서만 정해지므로, 여기서 받아 넘기면 손으로 고칠 뒷문이 생긴다.
  */
 export function parseOpportunityInput(
   body: Record<string, unknown>,
@@ -245,21 +241,6 @@ export function parseOpportunityInput(
     return { error: `메모는 ${OPPORTUNITY_MEMO_MAX}자 이내여야 합니다.` };
   }
 
-  // 금액은 문자열("1,234,567")·숫자 모두 받아 원 단위 정수로 좁힌다.
-  const rawAmount = body.expectedAmount;
-  const expectedAmount =
-    typeof rawAmount === "number"
-      ? Math.trunc(rawAmount)
-      : parseAmountInput(typeof rawAmount === "string" ? rawAmount : "");
-  if (!Number.isFinite(expectedAmount) || expectedAmount < 0) {
-    return { error: "예상 금액은 0원 이상으로 입력해주세요." };
-  }
-  if (expectedAmount > OPPORTUNITY_AMOUNT_MAX) {
-    return {
-      error: `예상 금액은 ${OPPORTUNITY_AMOUNT_MAX.toLocaleString("ko-KR")}원 이하로 입력해주세요.`,
-    };
-  }
-
   // 마감일은 비워둘 수 있고, 값이 있을 때만 형식을 본다 (정책 VAL_*).
   const expectedCloseDate = closeDateRaw ? parseDateInput(closeDateRaw) : null;
   if (closeDateRaw && !expectedCloseDate) {
@@ -270,7 +251,6 @@ export function parseOpportunityInput(
     accountId,
     ownerId,
     name,
-    expectedAmount,
     expectedCloseDate,
     memo: memo || null,
   };
@@ -351,6 +331,8 @@ export const OPPORTUNITY_DTO_SELECT = {
   name: true,
   stage: true,
   expectedAmount: true,
+  confirmedDocumentId: true,
+  isConfirmedDocumentPinned: true,
   expectedCloseDate: true,
   memo: true,
   createdAt: true,

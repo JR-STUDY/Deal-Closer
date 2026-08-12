@@ -10,14 +10,13 @@ import { formatDate, formatKRW } from "@/lib/format";
 import {
   OPPORTUNITY_MEMO_MAX,
   OPPORTUNITY_NAME_MAX,
-  formatAmountInput,
-  parseAmountInput,
   toOpportunityFormValues,
   type OpportunityAccountOption,
   type OpportunityDTO,
   type OpportunityFormValues,
   type OpportunityOwnerOption,
 } from "@/lib/opportunity";
+import { useConfirmedDocument } from "@/components/opportunity/confirmed-document-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,6 +42,10 @@ import {
  *
  * **단계(stage)는 여기서 다루지 않는다** — 전이는 활동 이력과 한 트랜잭션이어야 하므로
  * 스테퍼가 `POST /api/opportunities/:id/stage` 로만 처리한다 (AGENTS.md 규칙).
+ *
+ * **예상 금액도 고칠 수 없다** (기회-6). 확정 문서에서 파생되는 값이라 여기서 손대면
+ * 문서와 기회가 서로 다른 금액을 주장하게 된다. 대신 근거 문서를 밝히고, 수동으로 고정한
+ * 경우 자동 판정으로 되돌리는 길만 둔다.
  */
 
 /** 인라인으로 고칠 수 있는 필드 */
@@ -52,9 +55,8 @@ type FieldKey = keyof OpportunityFormValues;
 const FIELD_LABELS: Record<FieldKey, string> = {
   accountId: "거래처",
   name: "기회명",
-  expectedAmount: "예상 금액",
   expectedCloseDate: "예상 마감일",
-  // 거래처 담당자(Account.contactName)와 헷갈리지 않도록 못박는다 (기회-14)
+  // 거래처 담당자와 헷갈리지 않도록 못박는다 (기회-14)
   ownerId: "영업 담당자",
   memo: "메모",
 };
@@ -286,16 +288,88 @@ function InlineSelectEditor({
   );
 }
 
+/**
+ * 예상 금액 한 칸 — 값 + 근거 문서 + 자동/수동 전환 (기회-6 ②·③·④).
+ *
+ * 금액만 덩그러니 두면 "왜 이 숫자인지" 를 알 수 없다. 근거가 된 문서를 함께 보여주고,
+ * 수동으로 고정한 상태라면 **자동 판정으로 되돌리는 길**을 같은 자리에 둔다 —
+ * 잠금 상태 자체가 자동/수동 스위치이므로 별도 설정 화면을 만들지 않는다.
+ */
+function ExpectedAmountValue({
+  amount,
+  confirmedDocument,
+  isPinned,
+  isSaving,
+  onReleasePin,
+}: {
+  amount: number;
+  confirmedDocument: { id: string; title: string } | null;
+  isPinned: boolean;
+  isSaving: boolean;
+  onReleasePin: () => void;
+}) {
+  return (
+    <div className="space-y-0.5 py-1">
+      <p className="flex flex-wrap items-baseline gap-x-2">
+        <span className="font-medium tabular-nums">{formatKRW(amount)}</span>
+        {confirmedDocument ? (
+          <Link
+            href={`/editor/${confirmedDocument.id}`}
+            className="rounded text-xs text-muted-foreground transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            {confirmedDocument.title} 기준
+          </Link>
+        ) : (
+          <span className="text-xs text-muted-foreground">확정 문서 없음</span>
+        )}
+      </p>
+      {confirmedDocument ? (
+        isPinned ? (
+          <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+            <span>직접 지정하신 문서입니다.</span>
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={onReleasePin}
+              className="rounded text-primary transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60"
+            >
+              {isSaving ? "되돌리는 중…" : "자동 판정으로 되돌리기"}
+            </button>
+          </p>
+        ) : null
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          오른쪽 &ldquo;연관 문서&rdquo; 에서 문서를 연결하시면 그 금액이 예상
+          금액이 됩니다.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function OpportunityInlineFields({
   opportunity,
   accounts,
   owners,
+  confirmedDocument,
 }: {
   opportunity: OpportunityDTO;
   accounts: OpportunityAccountOption[];
   owners: OpportunityOwnerOption[];
+  /** 예상 금액의 근거가 된 문서 (없으면 null) */
+  confirmedDocument: { id: string; title: string } | null;
 }) {
   const router = useRouter();
+  const confirmed = useConfirmedDocument(opportunity.id);
+
+  /** 잠금을 풀고 자동 판정으로 되돌린다 — 금액이 달라지면 그대로 알린다 (기회-6 ②) */
+  const releasePin = async () => {
+    const sync = await confirmed.unpin();
+    if (!sync) return;
+    // 사용자가 직접 누른 결과라 되돌리기는 붙이지 않는다 (방금 한 일을 물리라는 말이 된다).
+    confirmed.notify(sync);
+    router.refresh();
+  };
   const [values, setValues] = useState<OpportunityFormValues>(() =>
     toOpportunityFormValues(opportunity),
   );
@@ -403,22 +477,19 @@ export function OpportunityInlineFields({
             </InfoRow>
 
             {/* 단계는 위 스테퍼가 더 정확히(지나온·현재·남은·마감) 보여주므로 여기서 뺀다 */}
-            <InfoRow label={FIELD_LABELS.expectedAmount}>
-              {editingKey === "expectedAmount" ? (
-                <InlineTextEditor
-                  label={FIELD_LABELS.expectedAmount}
-                  initial={values.expectedAmount}
-                  inputMode="numeric"
-                  transform={formatAmountInput}
-                  onCommit={(next) => save("expectedAmount", next)}
-                  onCancel={() => setEditingKey(null)}
-                />
-              ) : (
-                display(
-                  "expectedAmount",
-                  formatKRW(parseAmountInput(values.expectedAmount)),
-                )
-              )}
+            {/*
+              예상 금액은 **고칠 수 없다** (기회-6 ④). 확정 문서에서 오는 값이라
+              손으로도 고쳐지면 두 출처가 싸운다. 대신 어느 문서에서 왔는지 밝히고,
+              근거가 없으면 문서를 연결하도록 안내한다.
+            */}
+            <InfoRow label="예상 금액">
+              <ExpectedAmountValue
+                amount={opportunity.expectedAmount}
+                confirmedDocument={confirmedDocument}
+                isPinned={opportunity.isConfirmedDocumentPinned}
+                isSaving={confirmed.isSaving}
+                onReleasePin={releasePin}
+              />
             </InfoRow>
 
             <InfoRow label={FIELD_LABELS.expectedCloseDate}>

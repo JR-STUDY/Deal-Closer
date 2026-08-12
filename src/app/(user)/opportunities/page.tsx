@@ -85,8 +85,9 @@ export default async function OpportunitiesPage({
   const where = opportunitiesWhere(user.orgId, filters);
   const { skip, take } = pageQueryRange(requestedPage);
 
-  // 표·합계·셀렉트 후보는 서로 독립 조회다 → 전부 병렬로 돌린다
-  const [opportunities, summaryRows, accounts, owners] = await Promise.all([
+  // 표·합계·담당자 후보는 서로 독립 조회다 → 전부 병렬로 돌린다.
+  // 거래처 후보는 읽지 않는다 — 등록·수정 다이얼로그가 자동완성으로 직접 검색한다 (기회-16).
+  const [opportunities, summaryRows, owners] = await Promise.all([
     prisma.opportunity.findMany({
       where,
       orderBy: OPPORTUNITY_LIST_ORDER_BY,
@@ -100,11 +101,6 @@ export default async function OpportunitiesPage({
     isBoard
       ? null
       : prisma.opportunity.findMany({ where, select: SUMMARY_SELECT }),
-    prisma.account.findMany({
-      where: { orgId: user.orgId },
-      orderBy: { companyName: "asc" },
-      select: { id: true, companyName: true },
-    }),
     prisma.user.findMany({
       where: { orgId: user.orgId },
       orderBy: { name: "asc" },
@@ -139,11 +135,7 @@ export default async function OpportunitiesPage({
         title="영업 기회"
         description="거래처별 영업 건을 등록해 두면 단계·예상 매출이 파이프라인으로 모입니다."
         actions={
-          <NewOpportunityButton
-            accounts={accounts}
-            owners={owners}
-            defaultOwnerId={user.id}
-          />
+          <NewOpportunityButton owners={owners} defaultOwnerId={user.id} />
         }
       />
 
@@ -194,7 +186,6 @@ export default async function OpportunitiesPage({
                   모입니다.
                 </p>
                 <NewOpportunityButton
-                  accounts={accounts}
                   owners={owners}
                   defaultOwnerId={user.id}
                   label="첫 기회 등록"
@@ -277,8 +268,23 @@ export default async function OpportunitiesPage({
                       <TableCell>
                         <StageBadge stage={opportunity.stage} />
                       </TableCell>
-                      {/* 자릿수마다 글자폭이 같아야 칸을 고정한 보람이 있다 (tabular-nums) */}
-                      <TableCell className="text-right tabular-nums">
+                      {/*
+                        자릿수마다 글자폭이 같아야 칸을 고정한 보람이 있다 (tabular-nums).
+                        확정 문서가 없으면 0 원이다 (기회-6 ④) — 칸이 좁아 사유를 적을 자리가
+                        없으므로 흐린 글자 + title 로만 알리고, 자세한 안내는 상세에서 한다.
+                      */}
+                      <TableCell
+                        className={`text-right tabular-nums ${
+                          opportunity.confirmedDocumentId
+                            ? ""
+                            : "text-muted-foreground"
+                        }`}
+                        title={
+                          opportunity.confirmedDocumentId
+                            ? undefined
+                            : "확정 문서가 없어 0원입니다. 기회 상세에서 문서를 연결해주세요."
+                        }
+                      >
                         {formatKRW(opportunity.expectedAmount)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">
@@ -297,8 +303,7 @@ export default async function OpportunitiesPage({
                       <TableCell className={`text-right ${ROW_LINK_ABOVE}`}>
                         <OpportunityRowActions
                           opportunity={toOpportunityDTO(opportunity)}
-                          // 수정 다이얼로그 후보는 위에서 이미 조회한 값을 재사용한다
-                          accounts={accounts}
+                          // 담당자 후보는 위에서 이미 조회한 값을 재사용한다
                           owners={owners}
                         />
                       </TableCell>

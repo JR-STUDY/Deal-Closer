@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 import { isDocumentType } from "@/lib/constants";
 import { applyDocumentLinked } from "@/lib/opportunity-stage";
+import { syncOpportunityAmounts } from "@/lib/opportunity-amount";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -49,7 +50,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return ok({ id: document.id, opportunityId: nextOpportunityId });
   }
 
-  await prisma.$transaction(async (tx) => {
+  const amountSync = await prisma.$transaction(async (tx) => {
     await tx.document.update({
       where: { id: document.id },
       data: { opportunityId: nextOpportunityId },
@@ -70,7 +71,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         tx,
       );
     }
+
+    /*
+     * 연결이 바뀌면 양쪽 기회의 확정 문서를 다시 판정한다 (기회-6 ①).
+     * **놓아주는 쪽(이전 기회)을 먼저** 넘긴다 — 그 기회가 이 문서를 확정으로 붙들고 있으면
+     * `confirmedDocumentId` 의 UNIQUE 제약 때문에 새 기회가 먼저 집어갈 수 없다.
+     */
+    const synced = await syncOpportunityAmounts(
+      [document.opportunityId, nextOpportunityId],
+      user.orgId,
+      tx,
+    );
+    // 화면이 알려야 하는 건 "이 문서가 붙은 기회"의 금액이다 (해제면 알릴 금액이 없다).
+    return nextOpportunityId ? (synced.at(-1) ?? null) : null;
   });
 
-  return ok({ id: document.id, opportunityId: nextOpportunityId });
+  return ok({ id: document.id, opportunityId: nextOpportunityId, amountSync });
 }

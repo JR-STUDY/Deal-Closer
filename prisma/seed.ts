@@ -6,6 +6,9 @@ import {
   calcItemTableTotal,
   type BlockPropsMap,
 } from "../src/lib/editor-schema";
+// 확정 문서 판정은 런타임과 **같은 순수 함수**를 쓴다 (기회-6) — 시드가 화면과 다른 숫자를
+// 만들어 내면 "왜 이 금액인지" 를 설명할 수 없다.
+import { resolveConfirmedDocument } from "../src/lib/confirmed-document";
 
 const adapter = new PrismaBetterSqlite3({
   url: process.env.DATABASE_URL ?? "file:./dev.db",
@@ -1245,12 +1248,28 @@ async function main() {
     new Date(base.getTime() + days * DAY_MS);
 
   type SeedStage = "INITIAL" | "PROPOSAL" | "NEGOTIATION" | "WON" | "LOST";
+
+  /**
+   * 기회에 붙일 문서 (기회-5 · 기회-6).
+   * **예상 금액은 여기서 온다** — 기회에 금액을 직접 적지 않고 확정 문서가 정한다.
+   */
+  type OpportunityDocumentSeed = {
+    title: string;
+    type: "QUOTE" | "CONTRACT" | "NDA" | "PROPOSAL";
+    status: "DRAFT" | "SENT" | "COMPLETED" | "VOID";
+    /** 총액 (KRW 정수) */
+    amount: number;
+    createdAt: string;
+    /** 동순위 판정의 기준 — 비우면 createdAt 과 같다 */
+    updatedAt?: string;
+    /** 발송 이력을 함께 남길 때만 */
+    sent?: { at: string; recipients: string };
+  };
+
   type OpportunitySeed = {
     company: string;
     name: string;
     stage: SeedStage;
-    /** 예상 금액 (KRW 정수) */
-    expectedAmount: number;
     /** 예상 마감일 — null 이면 미정 (목록에서 뒤로 정렬된다) */
     expectedCloseDate: string | null;
     ownerId: string;
@@ -1259,128 +1278,269 @@ async function main() {
     actualCloseDate?: string;
     lostReason?: string;
     memo?: string;
+    /** 이 기회에 붙는 문서. 비우면 확정 문서가 없어 예상 금액이 ₩0 이 된다 (기회-6 ④). */
+    documents?: OpportunityDocumentSeed[];
+    /** 자동 판정 대신 이 제목의 문서를 **수동 고정**한다 (기회-6 ③) */
+    pinnedDocumentTitle?: string;
   };
 
+  /*
+   * 문서 배분 원칙 (기회-6) — 예상 금액이 확정 문서에서 오므로 문서 구성이 곧 파이프라인이다.
+   *  - 12건 중 10건에 문서를 붙인다. 대부분의 기회에 근거 문서가 있어야 대시보드가 성립한다.
+   *  - **2건은 일부러 비워 둔다** (2027 연간 유지보수 갱신 · 네트워크 이중화 검토) →
+   *    `₩0 · 확정 문서 없음` 표시를 화면에서 바로 확인할 수 있다.
+   *  - **1건은 수동 고정한다** (인프라 증설 1차) → 자동 판정이라면 최근 수정된 2차 견적서가
+   *    뽑히지만 1차를 고정해 두어 "자동 판정으로 되돌리기" 를 눌러볼 수 있다.
+   *  - 폐기(VOID) 문서를 낀 기회도 하나 둔다 (엔드포인트 보안 파일럿) → 폐기가 후보에서
+   *    빠지는지 눈으로 확인된다.
+   */
   const OPPORTUNITY_SEEDS: OpportunitySeed[] = [
     {
       company: "(주)에이비씨 테크놀로지",
       name: "2026 그룹웨어 도입",
       stage: "PROPOSAL",
-      expectedAmount: 48_000_000,
       expectedCloseDate: "2026-09-30",
       ownerId: rep.id,
       createdAt: "2026-07-06T10:00:00+09:00",
       memo: "견적 재발송 이력 있음. 결재 라인은 팀장 → 본부장 2단계.",
+      // 1차(초안)와 2차(발송완료)가 함께 있다 → 발송완료가 앞서 2차가 확정된다
+      documents: [
+        {
+          title: "(주)에이비씨 테크놀로지 그룹웨어 견적서(2차)",
+          type: "QUOTE",
+          status: "SENT",
+          amount: 48_000_000,
+          createdAt: "2026-07-20T10:00:00+09:00",
+          sent: {
+            at: "2026-07-20T10:30:00+09:00",
+            recipients: "seojun.lee@abctech.example.com",
+          },
+        },
+      ],
     },
     {
       company: "(주)에이비씨 테크놀로지",
       name: "보안 솔루션 추가 도입",
       stage: "INITIAL",
-      expectedAmount: 12_000_000,
       expectedCloseDate: "2026-11-20",
       ownerId: rep.id,
       createdAt: "2026-08-03T14:10:00+09:00",
+      // 문서는 아래 DOCUMENT_EVENT_SEEDS 에서 붙는 초안 견적서 한 건뿐이다 (발송 전 흐름 데모)
     },
     {
       company: "글로벌커머스(주)",
       name: "커머스 플랫폼 고도화",
       stage: "WON",
-      expectedAmount: 180_000_000,
       expectedCloseDate: "2026-06-30",
       ownerId: rep.id,
       createdAt: "2026-05-11T09:30:00+09:00",
       actualCloseDate: "2026-06-25T16:00:00+09:00",
       memo: "통합 계약 체결 완료. 연간 유지보수 갱신 시점은 매년 4월.",
+      // 계약완료 체결본이 발송완료 계약서(아래에서 연결)를 제치고 확정된다
+      documents: [
+        {
+          title: "커머스 플랫폼 고도화 계약서(체결본)",
+          type: "CONTRACT",
+          status: "COMPLETED",
+          amount: 180_000_000,
+          createdAt: "2026-06-24T14:00:00+09:00",
+        },
+      ],
     },
     {
       company: "글로벌커머스(주)",
       name: "2027 연간 유지보수 갱신",
       stage: "INITIAL",
-      expectedAmount: 36_000_000,
       expectedCloseDate: "2027-03-31",
       ownerId: leader.id,
       createdAt: "2026-07-29T11:00:00+09:00",
+      memo: "갱신 시점만 잡아 둔 단계. 견적은 4분기에 낸다.",
+      // 문서 없음 → ₩0 · 확정 문서 없음
     },
     {
       company: "세종테크",
       name: "엔드포인트 보안 파일럿",
       stage: "NEGOTIATION",
-      expectedAmount: 24_000_000,
       expectedCloseDate: "2026-08-28",
       ownerId: rep.id,
       createdAt: "2026-06-18T13:20:00+09:00",
       memo: "파일럿 10대 규모로 시작해 전사 확대를 검토 중.",
+      documents: [
+        // 폐기 견적서가 가장 최근·가장 큰 금액이지만 후보에서 빠진다
+        {
+          title: "세종테크 엔드포인트 보안 견적서(구버전 폐기)",
+          type: "QUOTE",
+          status: "VOID",
+          amount: 31_000_000,
+          createdAt: "2026-06-19T09:00:00+09:00",
+          updatedAt: "2026-07-30T09:00:00+09:00",
+        },
+        {
+          title: "세종테크 엔드포인트 보안 견적서",
+          type: "QUOTE",
+          status: "SENT",
+          amount: 24_000_000,
+          createdAt: "2026-06-25T11:00:00+09:00",
+          sent: {
+            at: "2026-06-25T11:20:00+09:00",
+            recipients: "it@sejongtech.example.com",
+          },
+        },
+      ],
     },
     {
       company: "세종테크",
       name: "통합 로그 관제 구축",
       stage: "PROPOSAL",
-      expectedAmount: 65_000_000,
       expectedCloseDate: "2026-10-15",
       ownerId: leader.id,
       createdAt: "2026-07-14T15:45:00+09:00",
+      documents: [
+        {
+          title: "세종테크 통합 로그 관제 견적서",
+          type: "QUOTE",
+          status: "SENT",
+          amount: 65_000_000,
+          createdAt: "2026-07-18T10:00:00+09:00",
+          sent: {
+            at: "2026-07-18T10:40:00+09:00",
+            recipients: "infra@sejongtech.example.com",
+          },
+        },
+      ],
     },
     {
       company: "세종테크",
       name: "임직원 보안 교육 프로그램",
       stage: "LOST",
-      expectedAmount: 8_000_000,
       expectedCloseDate: "2026-06-15",
       ownerId: leader.id,
       createdAt: "2026-04-27T10:15:00+09:00",
       actualCloseDate: "2026-06-12T17:30:00+09:00",
       lostReason: "일정",
+      documents: [
+        {
+          title: "세종테크 임직원 보안 교육 제안서",
+          type: "PROPOSAL",
+          status: "SENT",
+          amount: 8_000_000,
+          createdAt: "2026-05-08T13:00:00+09:00",
+          sent: {
+            at: "2026-05-08T13:30:00+09:00",
+            recipients: "hr@sejongtech.example.com",
+          },
+        },
+      ],
     },
     {
       company: "다올테크",
       name: "인프라 증설 1차",
       stage: "NEGOTIATION",
-      expectedAmount: 92_000_000,
       expectedCloseDate: "2026-09-12",
       ownerId: rep.id,
       createdAt: "2026-06-02T09:00:00+09:00",
-      memo: "메일보다 전화 연락을 선호. 담당 차장이 최종 검토 중.",
+      memo: "메일보다 전화 연락을 선호. 담당 차장이 최종 검토 중. 2차 견적은 참고용이라 1차를 예상 금액 기준으로 고정해 두었다.",
+      // 자동 판정이라면 최근 수정된 2차가 뽑히지만, 1차를 수동 고정해 둔다 (기회-6 ③)
+      documents: [
+        {
+          title: "다올테크 인프라 증설 견적서(1차)",
+          type: "QUOTE",
+          status: "SENT",
+          amount: 92_000_000,
+          createdAt: "2026-06-10T10:00:00+09:00",
+          updatedAt: "2026-06-10T10:00:00+09:00",
+          sent: {
+            at: "2026-06-10T10:30:00+09:00",
+            recipients: "purchase@daoltech.example.com",
+          },
+        },
+        {
+          title: "다올테크 인프라 증설 견적서(2차 축소안)",
+          type: "QUOTE",
+          status: "SENT",
+          amount: 88_000_000,
+          createdAt: "2026-07-28T09:00:00+09:00",
+          updatedAt: "2026-07-28T09:00:00+09:00",
+          sent: {
+            at: "2026-07-28T09:30:00+09:00",
+            recipients: "purchase@daoltech.example.com",
+          },
+        },
+      ],
+      pinnedDocumentTitle: "다올테크 인프라 증설 견적서(1차)",
     },
     {
       company: "다올테크",
       name: "백업 스토리지 교체",
       stage: "LOST",
-      expectedAmount: 30_000_000,
       expectedCloseDate: "2026-07-10",
       ownerId: rep.id,
       createdAt: "2026-05-19T16:40:00+09:00",
       actualCloseDate: "2026-07-08T11:20:00+09:00",
       lostReason: "가격",
+      documents: [
+        {
+          title: "다올테크 백업 스토리지 견적서",
+          type: "QUOTE",
+          status: "SENT",
+          amount: 30_000_000,
+          createdAt: "2026-06-05T14:00:00+09:00",
+          sent: {
+            at: "2026-06-05T14:20:00+09:00",
+            recipients: "purchase@daoltech.example.com",
+          },
+        },
+      ],
     },
     {
       company: "다올테크",
       name: "네트워크 이중화 검토",
       stage: "INITIAL",
-      expectedAmount: 0,
       expectedCloseDate: null,
       ownerId: rep.id,
       createdAt: "2026-08-07T09:50:00+09:00",
       memo: "예산·시점 모두 미정. 담당자 요청으로 사전 검토만 진행.",
+      // 문서 없음 → ₩0 · 확정 문서 없음
     },
     {
       company: "Bluewave Systems Korea",
       name: "APAC 라이선스 확대",
       stage: "PROPOSAL",
-      expectedAmount: 140_000_000,
       expectedCloseDate: "2026-12-18",
       ownerId: leader.id,
       createdAt: "2026-07-21T14:00:00+09:00",
       memo: "본사 승인 절차가 있어 계약까지 6주 이상 소요된다.",
+      documents: [
+        {
+          title: "Bluewave APAC 라이선스 확대 견적서",
+          type: "QUOTE",
+          status: "SENT",
+          amount: 140_000_000,
+          createdAt: "2026-07-25T16:00:00+09:00",
+          sent: {
+            at: "2026-07-25T16:30:00+09:00",
+            recipients: "apac.procurement@bluewave.example.com",
+          },
+        },
+      ],
     },
     {
       company: "Bluewave Systems Korea",
       name: "국내 지사 PoC",
       stage: "WON",
-      expectedAmount: 22_000_000,
       expectedCloseDate: "2026-05-29",
       ownerId: rep.id,
       createdAt: "2026-04-15T10:30:00+09:00",
       actualCloseDate: "2026-05-27T15:10:00+09:00",
+      documents: [
+        {
+          title: "Bluewave 국내 지사 PoC 계약서",
+          type: "CONTRACT",
+          status: "COMPLETED",
+          amount: 22_000_000,
+          createdAt: "2026-05-26T11:00:00+09:00",
+        },
+      ],
     },
   ];
 
@@ -1398,7 +1558,7 @@ async function main() {
         ownerId: seed.ownerId,
         name: seed.name,
         stage: seed.stage,
-        expectedAmount: seed.expectedAmount,
+        // 예상 금액은 아래 확정 문서 재판정 패스가 채운다 (기회-6) — 여기서 적지 않는다
         expectedCloseDate: seed.expectedCloseDate
           ? new Date(seed.expectedCloseDate)
           : null,
@@ -1421,11 +1581,7 @@ async function main() {
     }[] = [
       {
         eventType: "OPPORTUNITY_CREATED",
-        detail: {
-          accountId,
-          ownerId: seed.ownerId,
-          expectedAmount: seed.expectedAmount,
-        },
+        detail: { accountId, ownerId: seed.ownerId },
         occurredAt: createdAt,
       },
     ];
@@ -1467,6 +1623,72 @@ async function main() {
         occurredAt: event.occurredAt,
       })),
     });
+
+    // 이 기회의 문서 — 연결(DOCUMENT_CREATED)·발송(DOCUMENT_SENT) 이력을 함께 남긴다.
+    // 확정 문서·예상 금액은 아래 재판정 패스가 한 번에 정한다.
+    for (const documentSeed of seed.documents ?? []) {
+      const documentCreatedAt = new Date(documentSeed.createdAt);
+      const created = await prisma.document.create({
+        data: {
+          orgId: org.id,
+          authorId: seed.ownerId,
+          opportunityId: opportunity.id,
+          title: documentSeed.title,
+          type: documentSeed.type,
+          status: documentSeed.status,
+          clientName: seed.company,
+          amount: documentSeed.amount,
+          createdAt: documentCreatedAt,
+          // 동순위(같은 상태)일 때 최근 수정이 앞서므로 판정이 눈에 보이도록 명시한다
+          updatedAt: documentSeed.updatedAt
+            ? new Date(documentSeed.updatedAt)
+            : documentCreatedAt,
+        },
+      });
+
+      const base = {
+        documentId: created.id,
+        documentType: documentSeed.type,
+        documentTitle: documentSeed.title,
+      };
+      await prisma.activityLog.create({
+        data: {
+          orgId: org.id,
+          opportunityId: opportunity.id,
+          actorId: seed.ownerId,
+          eventType: "DOCUMENT_CREATED",
+          detail: JSON.stringify(base),
+          occurredAt: documentCreatedAt,
+        },
+      });
+
+      if (documentSeed.sent) {
+        await prisma.emailLog.create({
+          data: {
+            documentId: created.id,
+            senderId: seed.ownerId,
+            recipients: documentSeed.sent.recipients,
+            subject: documentSeed.title,
+            attachmentName: `${documentSeed.title}.pdf`,
+            status: "SENT",
+            sentAt: new Date(documentSeed.sent.at),
+          },
+        });
+        await prisma.activityLog.create({
+          data: {
+            orgId: org.id,
+            opportunityId: opportunity.id,
+            actorId: seed.ownerId,
+            eventType: "DOCUMENT_SENT",
+            detail: JSON.stringify({
+              ...base,
+              recipients: documentSeed.sent.recipients,
+            }),
+            occurredAt: new Date(documentSeed.sent.at),
+          },
+        });
+      }
+    }
   }
 
   // 10-3) 대표 문서를 대응 기회에 연결 + 문서·발송 이력 (F-113 · F-114)
@@ -1571,6 +1793,49 @@ async function main() {
     }
   }
 
+  // 10-4) 확정 문서 재판정 — 예상 금액을 문서에서 도출한다 (기회-6)
+  //   런타임(`src/lib/opportunity-amount.ts`)이 하는 일을 시드에서도 **같은 순수 함수**로
+  //   재현한다. 여기서 숫자를 손으로 적으면 화면이 계산한 값과 어긋난 시드가 만들어진다.
+  //   수동 고정(pinnedDocumentTitle)이 있으면 자동 판정보다 우선한다.
+  const pinnedTitleByOpportunity = new Map(
+    OPPORTUNITY_SEEDS.flatMap((seed) =>
+      seed.pinnedDocumentTitle ? [[seed.name, seed.pinnedDocumentTitle]] : [],
+    ),
+  );
+
+  const seededOpportunities = await prisma.opportunity.findMany({
+    where: { orgId: org.id },
+    select: {
+      id: true,
+      name: true,
+      stage: true,
+      documents: {
+        select: { id: true, title: true, status: true, amount: true, updatedAt: true },
+      },
+    },
+  });
+
+  for (const opportunity of seededOpportunities) {
+    const pinnedTitle = pinnedTitleByOpportunity.get(opportunity.name);
+    const pinnedDocument = pinnedTitle
+      ? opportunity.documents.find((document) => document.title === pinnedTitle)
+      : undefined;
+
+    const resolution = resolveConfirmedDocument(opportunity.documents, {
+      confirmedDocumentId: pinnedDocument?.id ?? null,
+      isPinned: Boolean(pinnedDocument),
+    });
+
+    await prisma.opportunity.update({
+      where: { id: opportunity.id },
+      data: {
+        confirmedDocumentId: resolution.confirmedDocumentId,
+        isConfirmedDocumentPinned: resolution.isPinned,
+        expectedAmount: resolution.amount,
+      },
+    });
+  }
+
   // 11) 팀원 초대 (대기 중)
   await prisma.invite.createMany({
     data: [
@@ -1598,7 +1863,19 @@ async function main() {
     })),
   });
 
-  // 요약 출력
+  // 요약 출력 — 파이프라인 합계는 확정 문서 기준이라 시드 구성이 바뀌면 함께 움직인다
+  const pipelineTotals = await prisma.opportunity.aggregate({
+    where: { orgId: org.id },
+    _sum: { expectedAmount: true },
+  });
+  const openTotals = await prisma.opportunity.aggregate({
+    where: { orgId: org.id, stage: { in: ["INITIAL", "PROPOSAL", "NEGOTIATION"] } },
+    _sum: { expectedAmount: true },
+  });
+  const withoutConfirmed = await prisma.opportunity.count({
+    where: { orgId: org.id, confirmedDocumentId: null },
+  });
+
   const counts = {
     조직: await prisma.organization.count(),
     사용자: await prisma.user.count(),
@@ -1619,6 +1896,11 @@ async function main() {
     정책: await prisma.policy.count(),
   };
   console.log("✅ seeding 완료:", counts);
+  console.log("📊 파이프라인(확정 문서 기준):", {
+    전체합계: (pipelineTotals._sum.expectedAmount ?? 0).toLocaleString("ko-KR"),
+    진행중합계: (openTotals._sum.expectedAmount ?? 0).toLocaleString("ko-KR"),
+    확정문서없음: `${withoutConfirmed}건`,
+  });
 }
 
 main()

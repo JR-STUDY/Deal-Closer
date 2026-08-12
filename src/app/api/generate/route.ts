@@ -6,6 +6,7 @@ import { ok, fail } from "@/lib/api";
 import { toAttachmentRecord } from "@/lib/attachments";
 import { seedTemplate } from "@/lib/editor-schema";
 import { applyDocumentLinked } from "@/lib/opportunity-stage";
+import { syncOpportunityAmount } from "@/lib/opportunity-amount";
 import {
   CREDITS_PER_GENERATION,
   MAX_ATTACHMENTS,
@@ -362,6 +363,8 @@ export async function POST(req: NextRequest) {
           },
           tx,
         );
+        // 문서 연결은 확정 문서 재판정 시점이다 (기회-6 ①) — 새 문서가 곧바로 후보가 된다
+        await syncOpportunityAmount({ opportunityId, orgId: user.orgId }, tx);
       }
       return created;
     });
@@ -448,6 +451,8 @@ export async function POST(req: NextRequest) {
         },
         tx,
       );
+      // 문서 연결은 확정 문서 재판정 시점이다 (기회-6 ①) — 새 문서가 곧바로 후보가 된다
+      await syncOpportunityAmount({ opportunityId, orgId: user.orgId }, tx);
     }
 
     return created;

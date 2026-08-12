@@ -8,6 +8,9 @@
  *  ② **빈 문자열은 "비움"이라는 뜻**이라 현재 값으로 덮이지 않는가 (키 존재 여부로만 판단)
  * 병합 결과가 `parseOpportunityInput()` 을 그대로 통과하는지도 함께 확인해, 다이얼로그 저장과
  * 인라인 저장의 제약이 갈라지지 않게 한다.
+ *
+ * **예상 금액은 여기서 다루지 않는다** (기회-6). 확정 문서에서 파생되는 값이라 인라인 수정
+ * 대상에서 빠졌고, 본문에 섞여 와도 병합 결과에 남지 않아야 한다 — 그 사실도 아래에서 확인한다.
  */
 
 import assert from "node:assert/strict";
@@ -28,7 +31,6 @@ const CURRENT: OpportunityCurrentValues = {
   accountId: "acc_1",
   ownerId: "user_1",
   name: "2026 그룹웨어 도입",
-  expectedAmount: 12_000_000,
   expectedCloseDate: new Date(2026, 8, 30), // 2026-09-30 (로컬 자정)
   memo: "1차 미팅 완료",
 };
@@ -47,7 +49,6 @@ check(
     accountId: "acc_1",
     ownerId: "user_1",
     name: "2026 그룹웨어 도입",
-    expectedAmount: 12_000_000,
     expectedCloseDate: "2026-09-30",
     memo: "1차 미팅 완료",
   },
@@ -60,7 +61,6 @@ check(
     accountId: "acc_1",
     ownerId: "user_1",
     name: "2026 그룹웨어 도입",
-    expectedAmount: 12_000_000,
     expectedCloseDate: "",
     memo: "",
   },
@@ -74,7 +74,6 @@ for (const [key, value, label] of [
   ["name", "2026 그룹웨어 도입(수정)", "기회명"],
   ["accountId", "acc_2", "거래처"],
   ["ownerId", "user_2", "영업 담당자"],
-  ["expectedAmount", "9,900,000", "예상 금액"],
   ["expectedCloseDate", "2026-12-31", "예상 마감일"],
   ["memo", "결재 라인 확인 필요", "메모"],
 ] as const) {
@@ -98,29 +97,18 @@ check(
   "",
   "메모를 비우면 현재 값으로 되돌아가지 않는다",
 );
-check(
-  withOpportunityDefaults({ expectedAmount: "" }, CURRENT).expectedAmount,
-  "",
-  "금액을 비우면 현재 값으로 되돌아가지 않는다 (0원으로 저장된다)",
-);
-
 // ─────────── 정의 밖 키는 무시한다 (본문에 무엇이 오든 모양은 고정) ───────────
 check(
   Object.keys(
     withOpportunityDefaults(
-      { stage: "WON", id: "opp_x", orgId: "org_x" },
+      // expectedAmount 도 여기 섞어 둔다 — 확정 문서가 정하는 값이라(기회-6) 본문으로
+      // 들어와도 병합 결과에 남아서는 안 된다. 남으면 손으로 금액을 고칠 뒷문이 생긴다.
+      { stage: "WON", id: "opp_x", orgId: "org_x", expectedAmount: "9,900,000" },
       CURRENT,
     ),
   ).sort(),
-  [
-    "accountId",
-    "expectedAmount",
-    "expectedCloseDate",
-    "memo",
-    "name",
-    "ownerId",
-  ],
-  "stage·id·orgId 같은 키는 병합 결과에 섞이지 않는다",
+  ["accountId", "expectedCloseDate", "memo", "name", "ownerId"],
+  "stage·id·orgId·expectedAmount 같은 키는 병합 결과에 섞이지 않는다",
 );
 
 // ─────────── 병합 결과는 기존 검증 함수를 그대로 통과한다 ───────────
@@ -135,20 +123,10 @@ check(
   2026,
   "마감일은 로컬 기준 Date 로 되살아난다",
 );
-check(parsedFull.expectedAmount, 12_000_000, "금액은 현재 값이 유지된다");
-
-const parsedAmount = parseOpportunityInput(
-  withOpportunityDefaults({ expectedAmount: "9,900,000" }, CURRENT),
-);
-assert.ok(
-  !("error" in parsedAmount),
-  "금액만 고친 병합 결과도 검증을 통과한다",
-);
-checks += 1;
 check(
-  parsedAmount.expectedAmount,
-  9_900_000,
-  "구분 기호가 섞여도 정수로 좁힌다",
+  Object.keys(parsedFull).sort(),
+  ["accountId", "expectedCloseDate", "memo", "name", "ownerId"],
+  "검증 결과에도 예상 금액은 없다 (확정 문서가 정한다 — 기회-6)",
 );
 
 // 필수 값을 지우려는 요청은 (다이얼로그 저장과 똑같이) 거부돼야 한다

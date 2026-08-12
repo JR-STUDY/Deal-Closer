@@ -19,7 +19,10 @@ export type RelatedOpportunity = {
   id: string;
   name: string;
   stage: string;
+  /** 확정 문서에서 파생된 예상 금액 (기회-6). 근거 문서가 없으면 0 이다. */
   expectedAmount: number;
+  /** 금액의 근거가 된 문서. null 이면 확정 문서 없음 → 금액이 0 인 이유다. */
+  confirmedDocumentId: string | null;
   expectedCloseDate: Date | null;
   owner: { name: string };
 };
@@ -110,7 +113,19 @@ export function AccountRelatedTabs({
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
-                  <span className="text-sm font-medium">
+                  {/* 근거 문서가 없으면 0 원이다 (기회-6 ④) — 이유를 흐린 글자와 title 로 알린다 */}
+                  <span
+                    className={
+                      opportunity.confirmedDocumentId
+                        ? "text-sm font-medium"
+                        : "text-sm text-muted-foreground"
+                    }
+                    title={
+                      opportunity.confirmedDocumentId
+                        ? undefined
+                        : "확정 문서가 없어 0원입니다. 기회 상세에서 문서를 연결해주세요."
+                    }
+                  >
                     {formatKRW(opportunity.expectedAmount)}
                   </span>
                   <StageBadge stage={opportunity.stage} />

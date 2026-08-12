@@ -11,11 +11,14 @@ import {
   XCircle,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { StatusBadge, DocTypeBadge } from "@/components/status-badge";
+import { DocTypeBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
 import type { ActivityEventType } from "@/lib/constants";
-import { formatDate, formatDateTime, formatKRW } from "@/lib/format";
+import { formatDateTime, formatKRW } from "@/lib/format";
+import {
+  OpportunityDocuments,
+  type OpportunityDocument,
+} from "./opportunity-documents";
 
 /**
  * 기회 상세의 이력·연관 문서 (F-111 · F-114).
@@ -95,34 +98,11 @@ function eventStyle(eventType: string) {
   return EVENT_STYLES[eventType as ActivityEventType] ?? FALLBACK_EVENT_STYLE;
 }
 
-export type LinkedDocument = {
-  id: string;
-  title: string;
-  type: string;
-  status: string;
-  amount: number;
-  createdAt: Date;
-};
-
-/** 탭 안의 빈 상태 안내 — 다음에 할 일이 있으면 버튼으로 함께 안내한다 (기회-3) */
-function EmptyPanel({
-  message,
-  action,
-}: {
-  message: string;
-  action?: { href: string; label: string };
-}) {
+/** 탭 안의 빈 상태 안내 */
+function EmptyPanel({ message }: { message: string }) {
   return (
     <div className="rounded-md border border-dashed p-8 text-center">
       <p className="text-sm text-muted-foreground">{message}</p>
-      {action ? (
-        <Button asChild className="mt-4">
-          <Link href={action.href}>
-            <FilePlus2 className="size-4" aria-hidden="true" />
-            {action.label}
-          </Link>
-        </Button>
-      ) : null}
     </div>
   );
 }
@@ -179,14 +159,15 @@ export function OpportunityDetailTabs({
   timeline,
   documents,
   opportunityId,
+  confirmedDocumentId,
 }: {
   timeline: TimelineEntry[];
-  documents: LinkedDocument[];
-  /** 빈 상태에서 이 기회에 연결된 문서를 만들러 갈 때 쓴다 (기회-2 · 기회-3) */
+  documents: OpportunityDocument[];
+  /** 문서 연결·확정 지정에 쓴다 (기회-5 · 기회-6) */
   opportunityId: string;
+  /** 예상 금액의 근거가 된 문서 (없으면 null) */
+  confirmedDocumentId: string | null;
 }) {
-  const newDocumentHref = `/generator?opportunityId=${encodeURIComponent(opportunityId)}`;
-
   return (
     <Tabs defaultValue="timeline" className="gap-4">
       <TabsList>
@@ -257,40 +238,15 @@ export function OpportunityDetailTabs({
       </TabsContent>
 
       <TabsContent value="documents">
-        {documents.length === 0 ? (
-          <EmptyPanel
-            message="이 기회에 연결된 문서가 아직 없습니다. 견적서·계약서를 만드시면 여기에 모이고, 발송하시면 단계도 함께 옮겨집니다."
-            action={{ href: newDocumentHref, label: "문서 생성으로 이동" }}
-          />
-        ) : (
-          <ul className="divide-y rounded-md border">
-            {documents.map((document) => (
-              <li
-                key={document.id}
-                className="flex items-center justify-between gap-4 p-4"
-              >
-                <div className="min-w-0">
-                  <Link
-                    href={`/editor/${document.id}`}
-                    className="truncate font-medium transition-colors hover:text-primary hover:underline"
-                  >
-                    {document.title}
-                  </Link>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {formatDate(document.createdAt)} 생성
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="text-sm font-medium">
-                    {formatKRW(document.amount)}
-                  </span>
-                  <DocTypeBadge type={document.type} />
-                  <StatusBadge status={document.status} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        {/*
+          연결·확정 지정·미리보기가 모두 여기 모인다 (기회-5 · 기회-6 ③ · 기회-19).
+          문서를 다루는 일이 상호작용이라 이 탭 본문만 클라이언트 컴포넌트다.
+        */}
+        <OpportunityDocuments
+          opportunityId={opportunityId}
+          documents={documents}
+          confirmedDocumentId={confirmedDocumentId}
+        />
       </TabsContent>
     </Tabs>
   );

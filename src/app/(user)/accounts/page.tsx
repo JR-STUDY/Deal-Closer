@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { Building2, SearchX } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { getCurrentOrg } from "@/lib/session";
+import { getCurrentUser } from "@/lib/session";
 import { accountsWhere, toAccountDTO } from "@/lib/account";
 import { primaryContact } from "@/lib/contact";
 import {
@@ -44,16 +44,18 @@ export default async function AccountsPage({
 }: {
   searchParams: Promise<{ q?: string; page?: string }>;
 }) {
-  // searchParams 와 조직 조회는 서로 독립 → 병렬 처리
-  const [params, org] = await Promise.all([searchParams, getCurrentOrg()]);
+  // searchParams 와 세션 조회는 서로 독립 → 병렬 처리
+  const [params, user] = await Promise.all([searchParams, getCurrentUser()]);
   const query = params.q?.trim() ?? "";
   const requestedPage = parsePageParam(params.page);
   // orgId 스코프는 목록·건수 양쪽에 같은 조건으로 걸린다
-  const where = accountsWhere(org.id, query);
+  const where = accountsWhere(user.orgId, query);
   const { skip, take } = pageQueryRange(requestedPage);
 
-  // 건수는 페이지네이션과 "총 N곳" 표시가 함께 쓴다 → 목록 조회와 병렬로 돌린다
-  const [totalCount, accounts] = await Promise.all([
+  // 건수는 페이지네이션과 "총 N곳" 표시가 함께 쓴다 → 목록 조회와 병렬로 돌린다.
+  // 담당자 후보는 행의 `⋯ › 기회 연결` 다이얼로그가 쓴다 (거래처-2) — 행마다 조회하지 않도록
+  // 여기서 한 번만 읽어 내려보낸다.
+  const [totalCount, accounts, owners] = await Promise.all([
     prisma.account.count({ where }),
     prisma.account.findMany({
       where,
@@ -66,6 +68,11 @@ export default async function AccountsPage({
         // 전원을 실어 오면 행마다 조회량이 담당자 수만큼 늘고, 보여줄 곳도 없다.
         contacts: { where: { isPrimary: true } },
       },
+    }),
+    prisma.user.findMany({
+      where: { orgId: user.orgId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
     }),
   ]);
 
@@ -253,6 +260,9 @@ export default async function AccountsPage({
                           account={toAccountDTO(account)}
                           // 목록이 이미 읽은 건수를 재사용한다 (삭제 차단 안내용)
                           opportunityCount={account._count.opportunities}
+                          // `⋯ › 기회 연결` 이 쓸 담당자 후보 (거래처-2)
+                          owners={owners}
+                          defaultOwnerId={user.id}
                         />
                       </TableCell>
                     </TableRow>
