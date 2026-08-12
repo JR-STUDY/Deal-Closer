@@ -112,7 +112,8 @@ export const AI_MODEL_CATALOG: readonly AiModelOption[] = [
     label: "Gemini 3.1 Pro",
     provider: "google",
     tier: "premium",
-    description: "정확도 최우선. 프리뷰 모델이라 응답이 바뀔 수 있습니다.",
+    description:
+      "정확도 최우선. 프리뷰 모델이라 무료 한도에서는 요청이 막힐 수 있습니다.",
   },
   {
     id: "gemini-3.6-flash",
@@ -120,6 +121,13 @@ export const AI_MODEL_CATALOG: readonly AiModelOption[] = [
     provider: "google",
     tier: "standard",
     description: "품질과 속도의 균형. 첨부 파일이 많은 문서에 강합니다.",
+  },
+  {
+    id: "gemini-3.5-flash",
+    label: "Gemini 3.5 Flash",
+    provider: "google",
+    tier: "standard",
+    description: "3.6 Flash 보다 가볍고 응답이 빠릅니다. 무료 한도에서 안정적입니다.",
   },
   {
     id: "gemini-3.5-flash-lite",

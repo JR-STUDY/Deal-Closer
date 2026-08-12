@@ -48,14 +48,14 @@ export function AiModelSelect({
   id = "ai-model",
 }: Props) {
   // 프로바이더별로 묶는다 (카탈로그 순서 = 고급→저가 유지)
-  const grouped = useMemo(
-    () =>
-      AI_LIVE_PROVIDERS.map((provider) => ({
-        provider,
-        options: models.filter((m) => m.provider === provider),
-      })).filter((group) => group.options.length > 0),
-    [models],
-  );
+  const grouped = useMemo(() => {
+    const groups: { provider: AiLiveProvider; options: AiModelOption[] }[] = [];
+    for (const provider of AI_LIVE_PROVIDERS) {
+      const options = models.filter((model) => model.provider === provider);
+      if (options.length > 0) groups.push({ provider, options });
+    }
+    return groups;
+  }, [models]);
 
   const selected = models.find((m) => m.id === value);
 
@@ -88,7 +88,7 @@ export function AiModelSelect({
         <SelectContent>
           {grouped.map(({ provider, options }) => (
             <SelectGroup key={provider}>
-              <SelectLabel>{PROVIDER_LABELS[provider as AiLiveProvider]}</SelectLabel>
+              <SelectLabel>{PROVIDER_LABELS[provider]}</SelectLabel>
               {options.map((option) => (
                 <SelectItem key={option.id} value={option.id}>
                   <span className="flex items-center gap-2">

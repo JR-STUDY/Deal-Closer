@@ -47,9 +47,15 @@ function detectProvider(): AiProvider {
   const fromModel = providerOfModel(process.env.AI_MODEL_GENERATE ?? "");
   if (fromModel) return fromModel;
 
-  // Messages API 로 쓸 수 있는 Anthropic 키인지까지 본다 (sk-ant-oat… 로그인 토큰은 제외)
+  // Messages API 로 쓸 수 없는 Anthropic 자격증명은 "설정됨"으로 세지 않는다.
+  // (형식을 화이트리스트로 검사하지 않는다 — 신형 키를 막지 않기 위해. client.ts 와 동일 방침)
   const configured: AiProvider[] = [];
-  if (process.env.ANTHROPIC_API_KEY?.trim().startsWith("sk-ant-api")) {
+  const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim() ?? "";
+  if (
+    anthropicKey &&
+    !anthropicKey.startsWith("sk-ant-oat") &&
+    !anthropicKey.startsWith("sk-ant-admin")
+  ) {
     configured.push("anthropic");
   }
   if (process.env.OPENAI_API_KEY?.trim()) configured.push("openai");

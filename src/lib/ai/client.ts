@@ -31,47 +31,53 @@ const globalForAi = globalThis as unknown as {
 // ===================== 키 형식 검사 =====================
 
 /**
- * Messages API 용 Anthropic 키인지 확인한다.
- * `sk-ant-oat…`(Claude Code 로그인 OAuth 토큰)·`sk-ant-admin…`(Admin API 키)는 쓸 수 없다.
+ * 키 접두사로 "어느 프로바이더 키인지" 추정한다 (모르면 null).
+ *
+ * 형식을 화이트리스트로 검사하지 않는 이유: 각 사가 키 형식을 늘리기 때문이다
+ * (예: Google AI Studio 는 `AIza…` 외에 `AQ.…` 형식도 발급한다).
+ * 접두사를 맞히려 들면 정상 키를 막게 되므로, **다른 프로바이더 키를 잘못 넣은 경우만**
+ * 잡아내고 나머지는 서버 응답(401)에 맡긴다.
  */
-function anthropicKeyProblem(apiKey: string): string | null {
-  if (apiKey.startsWith("sk-ant-api")) return null;
-  if (apiKey.startsWith("sk-ant-oat")) {
-    return "ANTHROPIC_API_KEY 에 Claude Code 로그인 토큰(sk-ant-oat…)이 들어가 있습니다. Anthropic 콘솔에서 발급한 API 키(sk-ant-api…)로 교체해주세요.";
-  }
-  if (apiKey.startsWith("sk-ant-admin")) {
-    return "ANTHROPIC_API_KEY 에 Admin API 키(sk-ant-admin…)가 들어가 있습니다. 문서 생성에는 일반 API 키(sk-ant-api…)가 필요합니다.";
-  }
-  return "ANTHROPIC_API_KEY 형식이 올바르지 않습니다. Anthropic 콘솔에서 발급한 API 키(sk-ant-api…)인지 확인해주세요.";
-}
+type KeyKind = AiLiveProvider | "anthropic-oauth" | "anthropic-admin";
 
-/** OpenAI 키인지 확인한다 (일반 sk-… · 프로젝트 sk-proj-… · 서비스계정 sk-svcacct-…) */
-function openaiKeyProblem(apiKey: string): string | null {
-  if (apiKey.startsWith("sk-ant-")) {
-    return "OPENAI_API_KEY 에 Anthropic 키(sk-ant-…)가 들어가 있습니다. OpenAI 플랫폼에서 발급한 키(sk-…)로 교체해주세요.";
-  }
-  if (!apiKey.startsWith("sk-")) {
-    return "OPENAI_API_KEY 형식이 올바르지 않습니다. OpenAI 플랫폼에서 발급한 키(sk-…)인지 확인해주세요.";
-  }
+function guessKeyKind(apiKey: string): KeyKind | null {
+  if (apiKey.startsWith("sk-ant-oat")) return "anthropic-oauth";
+  if (apiKey.startsWith("sk-ant-admin")) return "anthropic-admin";
+  if (apiKey.startsWith("sk-ant-")) return "anthropic";
+  if (apiKey.startsWith("sk-")) return "openai";
+  if (apiKey.startsWith("AIza") || apiKey.startsWith("AQ.")) return "google";
   return null;
 }
 
-/** Google AI Studio 키인지 확인한다 (AIza… 로 시작한다) */
-function googleKeyProblem(apiKey: string): string | null {
-  if (apiKey.startsWith("sk-")) {
-    return "GEMINI_API_KEY 에 OpenAI/Anthropic 키(sk-…)가 들어가 있습니다. Google AI Studio 에서 발급한 키(AIza…)로 교체해주세요.";
-  }
-  if (!apiKey.startsWith("AIza")) {
-    return "GEMINI_API_KEY 형식이 올바르지 않습니다. Google AI Studio 에서 발급한 키(AIza…)인지 확인해주세요.";
-  }
-  return null;
-}
-
-const KEY_PROBLEM: Record<AiLiveProvider, (apiKey: string) => string | null> = {
-  anthropic: anthropicKeyProblem,
-  openai: openaiKeyProblem,
-  google: googleKeyProblem,
+/** 사람이 읽는 프로바이더 이름 (오배치 안내 문구용) */
+const KIND_LABELS: Record<KeyKind, string> = {
+  anthropic: "Anthropic",
+  "anthropic-oauth": "Claude Code 로그인 토큰",
+  "anthropic-admin": "Anthropic Admin",
+  openai: "OpenAI",
+  google: "Google",
 };
+
+/** 이 프로바이더 자리에 이 키를 써도 되는지. 문제가 있으면 안내 문구 */
+function keyProblem(provider: AiLiveProvider, apiKey: string): string | null {
+  const envName = PROVIDER_KEY_ENV[provider];
+  const kind = guessKeyKind(apiKey);
+
+  // 형식을 못 알아보면 통과시킨다 (신형 키일 수 있다 — 틀리면 서버가 401 을 준다)
+  if (kind === null || kind === provider) return null;
+
+  // Messages API 에 쓸 수 없는 Anthropic 자격증명 — 원인을 콕 집어 알려준다
+  if (provider === "anthropic") {
+    if (kind === "anthropic-oauth") {
+      return `${envName} 에 Claude Code 로그인 토큰(sk-ant-oat…)이 들어가 있습니다. Anthropic 콘솔에서 발급한 API 키(sk-ant-api…)로 교체해주세요.`;
+    }
+    if (kind === "anthropic-admin") {
+      return `${envName} 에 Admin API 키(sk-ant-admin…)가 들어가 있습니다. 문서 생성에는 일반 API 키(sk-ant-api…)가 필요합니다.`;
+    }
+  }
+
+  return `${envName} 에 ${KIND_LABELS[kind]} 키가 들어가 있습니다. ${KIND_LABELS[provider]} 키로 교체해주세요.`;
+}
 
 function readKey(provider: AiLiveProvider): { key: string } | { problem: string } {
   const envName = PROVIDER_KEY_ENV[provider];
@@ -81,7 +87,7 @@ function readKey(provider: AiLiveProvider): { key: string } | { problem: string 
       problem: `AI 연동이 설정되지 않았습니다. 관리자에게 ${envName} 설정을 요청해주세요.`,
     };
   }
-  const problem = KEY_PROBLEM[provider](apiKey);
+  const problem = keyProblem(provider, apiKey);
   return problem ? { problem } : { key: apiKey };
 }
 
@@ -144,7 +150,18 @@ export function getGoogle(): GoogleGenAI {
   if (!globalForAi.google || globalForAi.googleKey !== result.key) {
     globalForAi.google = new GoogleGenAI({
       apiKey: result.key,
-      httpOptions: { timeout: REQUEST_TIMEOUT_MS },
+      httpOptions: {
+        timeout: REQUEST_TIMEOUT_MS,
+        // Gemini 는 인기 모델에서 일시적 503(high demand)을 자주 돌려준다.
+        // 기본 재시도가 보장되지 않아 명시한다 — 다른 두 SDK 의 maxRetries 와 같은 횟수.
+        // 사용자 요청을 오래 붙잡지 않도록 백오프 상한은 짧게 둔다.
+        retryOptions: {
+          attempts: 1 + MAX_RETRIES,
+          initialDelay: 1,
+          maxDelay: 8,
+          httpStatusCodes: [408, 429, 500, 502, 503, 504],
+        },
+      },
     });
     globalForAi.googleKey = result.key;
   }
