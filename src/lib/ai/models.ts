@@ -130,14 +130,20 @@ export const AI_MODEL_CATALOG: readonly AiModelOption[] = [
   },
 ] as const;
 
-/** 프로바이더별 기본 모델 (환경변수를 지정하지 않았을 때) */
+/**
+ * 프로바이더별 기본 모델 (환경변수를 지정하지 않았을 때 = 선택기 초기값).
+ *
+ * Gemini 만 최상위(Pro)가 아니라 Flash 가 기본이다 — 현재 Pro 는 프리뷰 모델이고
+ * Google 문서가 "프리뷰·실험 모델은 rate limit 이 더 제한적"이라고 명시하므로
+ * 기본값으로 두면 첫 호출부터 429 를 만날 수 있다. Pro 는 선택기에서 고를 수 있다.
+ */
 export const DEFAULT_MODELS: Record<
   AiProvider,
   { generate: string; batch: string }
 > = {
   anthropic: { generate: "claude-opus-5", batch: "claude-sonnet-5" },
   openai: { generate: "gpt-5.6-sol", batch: "gpt-5.6-terra" },
-  google: { generate: "gemini-3.1-pro-preview", batch: "gemini-3.6-flash" },
+  google: { generate: "gemini-3.6-flash", batch: "gemini-3.5-flash-lite" },
   mock: { generate: "mock-local", batch: "mock-local" },
 };
 

@@ -91,7 +91,8 @@ export async function extractTemplateVariables(input: {
     schema: VARIABLES_SCHEMA,
     schemaName: "template_variables",
     effort: "medium",
-    maxTokens: 4_000,
+    // 추론 토큰도 이 상한에 포함되므로 변수 목록(수백 토큰)보다 넉넉히 잡는다
+    maxTokens: 12_000,
   });
 
   const value = (

@@ -82,9 +82,15 @@ export function providerOf(model: string): AiProvider {
 
 /**
  * 응답 최대 토큰.
- * 비스트리밍 요청이므로 SDK HTTP 타임아웃에 걸리지 않는 범위로 잡는다.
+ *
+ * 주의: 세 프로바이더 모두 **추론(thinking/reasoning) 토큰이 이 상한에 포함**된다
+ * (Claude max_tokens · GPT max_output_tokens · Gemini maxOutputTokens).
+ * 상한을 빡빡하게 잡으면 모델이 생각하는 데 예산을 다 쓰고 본문이 잘려
+ * "결과가 너무 길어 완성되지 못했습니다" 로 실패한다.
+ * → 눈에 보이는 출력(DocSpec 기준 2~4K)보다 넉넉히 잡는다.
+ * 비스트리밍 요청이지만 SDK 타임아웃이 5분이라 이 정도는 안전하다.
  */
-export const AI_MAX_TOKENS = 16_000;
+export const AI_MAX_TOKENS = 32_000;
 
 /** 추론 강도 — 세 프로바이더가 공통으로 받는 값만 노출한다 */
 export type AiEffort = "low" | "medium" | "high" | "xhigh" | "max";
