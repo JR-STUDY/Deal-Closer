@@ -20,6 +20,7 @@ import type {
   DocSpec,
   SpecItem,
   SpecNote,
+  SpecTable,
   SpecVariable,
   TemplateSpec,
 } from "../doc-spec";
@@ -103,6 +104,18 @@ const VAT_SUMMARY_ROWS = [
   { label: "합계 (VAT 포함)", formula: "subtotal * 1.1" },
 ];
 
+/** 품목표로 표현할 수 없는 격자 표 (실제 견적서의 등급 매트릭스를 흉내낸 픽스처) */
+const MOCK_TABLE: SpecTable = {
+  title: "유지보수 등급별 지원 범위",
+  headerRow: ["지원 항목", "라이트(10%)", "실버(15%)", "골드(18%)"],
+  rows: [
+    ["패치", "O", "O", "O"],
+    ["장애처리", "O", "O", "O"],
+    ["정기점검", "X", "반기1회", "분기1회"],
+    ["부품 교체", "미포함", "미포함", "미포함"],
+  ],
+};
+
 function mockNotes(request: string): SpecNote[] {
   return [
     {
@@ -162,6 +175,8 @@ function mockDocSpec(text: string): DocSpec {
     supplierFields: [],
     items: isQuote ? MOCK_ITEMS : [],
     summaryRows: isQuote ? VAT_SUMMARY_ROWS : [],
+    // 격자 표 경로도 검증되도록 등급 매트릭스를 흉내낸 표 1개를 넣는다
+    tables: isQuote ? [MOCK_TABLE] : [],
     notes: mockNotes(request),
   };
 }

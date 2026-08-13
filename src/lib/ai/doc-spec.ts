@@ -37,6 +37,13 @@ export type SpecItem = {
 };
 export type SpecSummaryRow = { label: string; formula: string };
 export type SpecNote = { heading: string; lines: string[] };
+/**
+ * 품목표로 표현할 수 없는 **격자 표**.
+ *
+ * 실제 견적서에는 "지원항목 × 유지보수 등급" 처럼 O/X 매트릭스나 조건표가 들어간다.
+ * 이걸 스펙에 담을 수 없으면 원본 양식을 옮길 때 그 표가 통째로 사라진다.
+ */
+export type SpecTable = { title: string; headerRow: string[]; rows: string[][] };
 export type SpecVariable = {
   key: string;
   label: string;
@@ -59,6 +66,8 @@ export type DocSpec = {
   supplierFields: SpecField[];
   items: SpecItem[];
   summaryRows: SpecSummaryRow[];
+  /** 품목표로 표현할 수 없는 격자 표 (등급 매트릭스·조건표 등) */
+  tables: SpecTable[];
   notes: SpecNote[];
 };
 
@@ -122,6 +131,29 @@ const NOTE_SCHEMA = {
   },
 } as const;
 
+const TABLE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "headerRow", "rows"],
+  properties: {
+    title: {
+      type: "string",
+      description: '표 위에 붙일 제목. 없으면 빈 문자열. 예: "유지보수 등급별 지원 범위"',
+    },
+    headerRow: {
+      type: "array",
+      description: "머리글 행의 칸 목록. 머리글이 없으면 빈 배열",
+      items: { type: "string" },
+    },
+    rows: {
+      type: "array",
+      description:
+        "본문 행 목록. 각 행은 칸 문자열 배열이며, 머리글과 칸 수를 맞춘다. 빈 칸은 빈 문자열",
+      items: { type: "array", items: { type: "string" } },
+    },
+  },
+} as const;
+
 const DOC_SPEC_PROPERTIES = {
   title: {
     type: "string",
@@ -167,6 +199,13 @@ const DOC_SPEC_PROPERTIES = {
     description:
       "품목표 하단 금액 요약행. 부가세를 별도 표기해야 하면 공급가액/부가세/합계 3행. 필요 없으면 빈 배열",
     items: SUMMARY_ROW_SCHEMA,
+  },
+  tables: {
+    type: "array",
+    description:
+      "품목표로 표현할 수 없는 격자 표 (예: 지원항목 × 등급 O/X 매트릭스, 조건표, 요율표). " +
+      "원본 문서에 이런 표가 있으면 칸 값을 그대로 옮긴다. 없으면 빈 배열",
+    items: TABLE_SCHEMA,
   },
   notes: {
     type: "array",
@@ -238,6 +277,9 @@ const MAX_ITEMS = 200;
 const MAX_FIELDS = 30;
 const MAX_NOTES = 12;
 const MAX_NOTE_LINES = 40;
+const MAX_TABLES = 6;
+const MAX_TABLE_ROWS = 40;
+const MAX_TABLE_COLS = 12;
 const MAX_VARIABLES = 40;
 
 function str(value: unknown, max = MAX_TEXT): string {
@@ -287,6 +329,37 @@ function parseSummaryRows(value: unknown): SpecSummaryRow[] {
       return { label: str(r?.label, 40), formula: str(r?.formula, 200) };
     })
     .filter((r) => r.label.length > 0 && r.formula.length > 0);
+}
+
+/**
+ * 격자 표를 파싱한다.
+ * 머리글과 본문 행의 칸 수가 어긋나면 가장 넓은 행에 맞춰 빈 칸으로 채운다
+ * (모델이 칸을 빠뜨려도 표가 깨지지 않게).
+ */
+function parseTables(value: unknown): SpecTable[] {
+  return arr(value)
+    .slice(0, MAX_TABLES)
+    .map((raw) => {
+      const t = raw as Record<string, unknown>;
+      const headerRow = arr(t?.headerRow)
+        .slice(0, MAX_TABLE_COLS)
+        .map((cell) => str(cell, 200));
+      const rows = arr(t?.rows)
+        .slice(0, MAX_TABLE_ROWS)
+        .map((row) => arr(row).slice(0, MAX_TABLE_COLS).map((cell) => str(cell, 300)))
+        .filter((row) => row.some((cell) => cell.length > 0));
+
+      const cols = Math.max(headerRow.length, ...rows.map((r) => r.length), 0);
+      const pad = (row: string[]) =>
+        Array.from({ length: cols }, (_, i) => row[i] ?? "");
+
+      return {
+        title: str(t?.title, 120),
+        headerRow: headerRow.length > 0 ? pad(headerRow) : [],
+        rows: rows.map(pad),
+      };
+    })
+    .filter((t) => t.rows.length > 0);
 }
 
 function parseNotes(value: unknown): SpecNote[] {
@@ -347,6 +420,7 @@ export function parseDocSpec(raw: unknown, fallbackType: DocumentType = "QUOTE")
     supplierFields: parseFields(o.supplierFields),
     items: parseItems(o.items),
     summaryRows: parseSummaryRows(o.summaryRows),
+    tables: parseTables(o.tables),
     notes: parseNotes(o.notes),
   };
 }
@@ -456,6 +530,52 @@ function noteBlock(note: SpecNote, y: number): Block {
   return block;
 }
 
+/** 표 한 줄 높이 (머리글 포함) */
+const TABLE_ROW_HEIGHT = 26;
+
+/**
+ * 격자 표 블록을 만든다.
+ * 제목이 있으면 표 위에 텍스트 블록을 따로 두므로, 여기서는 표만 만든다.
+ */
+function tableBlock(table: SpecTable, y: number): Block {
+  const block = createBlock("table", { x: 40, y });
+  block.w = 714;
+  const props = block.props as BlockPropsMap["table"];
+  const cells = table.headerRow.length > 0
+    ? [table.headerRow, ...table.rows]
+    : table.rows;
+  props.cells = cells;
+  props.hasHeader = table.headerRow.length > 0;
+  // 첫 칸은 항목명이라 왼쪽, 나머지는 값·기호라 가운데 정렬이 읽기 좋다
+  props.colAligns = Array.from({ length: cells[0]?.length ?? 1 }, (_, i) =>
+    i === 0 ? "left" : "center",
+  );
+  block.h = Math.max(TABLE_ROW_HEIGHT * 2, cells.length * TABLE_ROW_HEIGHT);
+  return block;
+}
+
+/** 표 제목 텍스트 블록 */
+function tableTitleBlock(title: string, y: number): Block {
+  const block = createBlock("text", { x: 40, y });
+  block.w = 714;
+  block.h = 24;
+  const props = block.props as BlockPropsMap["text"];
+  props.text = `▶ ${title}`;
+  props.fontSize = 12;
+  return block;
+}
+
+/** 이 표 제목이 이미 양식에 있는지 (양식 기반 생성에서 중복 추가를 막는다) */
+function hasTableTitle(doc: EditorDoc, title: string): boolean {
+  if (!title) return false;
+  const needle = normalizeLabel(title);
+  return doc.blocks.some((b) => {
+    if (b.type !== "text" && b.type !== "title") return false;
+    const text = (b.props as BlockPropsMap["text"]).text ?? "";
+    return normalizeLabel(text).includes(needle);
+  });
+}
+
 /** 이 안내문과 같은 제목의 텍스트 블록이 이미 양식에 있는지 */
 function hasNoteHeading(doc: EditorDoc, heading: string): boolean {
   if (!heading) return true; // 제목 없는 섹션은 중복 판단이 불가 → 추가하지 않는다
@@ -485,9 +605,26 @@ export function fillTemplateDoc(base: EditorDoc, spec: DocSpec): EditorDoc {
     }
   }
 
+  // 양식에 없는 격자 표·안내문은 문서 맨 아래에 덧붙인다.
+  // 그러지 않으면 원본에 있던 등급 매트릭스나 사용자가 요청한 조건이 조용히 사라진다.
+  const hasGrid = doc.blocks.some((b) => b.type === "table");
+  const newTables = spec.tables.filter(
+    (table) => !(hasGrid && hasTableTitle(doc, table.title)),
+  );
   const newNotes = spec.notes.filter((note) => !hasNoteHeading(doc, note.heading));
-  if (newNotes.length > 0) {
+
+  if (newTables.length > 0 || newNotes.length > 0) {
     let y = doc.blocks.reduce((max, b) => Math.max(max, b.y + b.h), 0) + 24;
+    for (const table of newTables) {
+      if (table.title) {
+        const titleBlock = tableTitleBlock(table.title, y);
+        doc.blocks.push(titleBlock);
+        y += titleBlock.h + 4;
+      }
+      const grid = tableBlock(table, y);
+      doc.blocks.push(grid);
+      y += grid.h + 24;
+    }
     for (const note of newNotes) {
       const block = noteBlock(note, y);
       doc.blocks.push(block);
@@ -587,6 +724,18 @@ export function buildDocFromSpec(
     itemTable.h = itemTableHeight(props.rows.length, props.summaryRows.length);
     blocks.push(itemTable);
     y += itemTable.h + 24;
+  }
+
+  // 격자 표 (등급 매트릭스·조건표 등) — 품목표 아래, 안내문 위
+  for (const table of spec.tables) {
+    if (table.title) {
+      const titleBlock = tableTitleBlock(table.title, y);
+      blocks.push(titleBlock);
+      y += titleBlock.h + 4;
+    }
+    const grid = tableBlock(table, y);
+    blocks.push(grid);
+    y += grid.h + 24;
   }
 
   // 하단 안내·약관 섹션

@@ -18,33 +18,105 @@ import { unsupportedSourceMessage } from "@/lib/ai/content";
  * 함께 넣을 수 있도록 준비). PDF/이미지는 원본 바이트만 저장한다.
  */
 
-/** 추출 텍스트 최대 길이 (SQLite TEXT 비대 방지) */
-const MAX_EXTRACTED_LENGTH = 50_000;
+/**
+ * 추출 텍스트 최대 길이 (SQLite TEXT 비대 방지).
+ *
+ * 전역으로 자르면 **뒤쪽 시트가 통째로 사라진다** — 실제로 18시트 견적서에서
+ * 목표 시트가 잘려 나가 모델이 엉뚱한 시트로 문서를 만든 사고가 있었다.
+ * 그래서 상한을 넉넉히 두고, 자르기는 시트 단위로 한다(아래 MAX_SHEET_LENGTH).
+ */
+const MAX_EXTRACTED_LENGTH = 400_000;
+/** 시트 하나가 가져갈 수 있는 최대 길이 — 한 시트가 예산을 독식하지 못하게 한다 */
+const MAX_SHEET_LENGTH = 12_000;
 
-function clampText(text: string): string {
-  const trimmed = text.trim();
-  return trimmed.length > MAX_EXTRACTED_LENGTH
-    ? `${trimmed.slice(0, MAX_EXTRACTED_LENGTH)}\n…(생략됨)`
-    : trimmed;
-}
-
-/** 셀 값을 사람이 읽을 수 있는 문자열로 변환 */
-function cellToText(value: ExcelJS.CellValue): string {
-  if (value === null || value === undefined) return "";
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === "object") {
-    // 하이퍼링크/리치텍스트/수식 등
-    if ("text" in value && typeof value.text === "string") return value.text;
-    if ("result" in value) return String(value.result ?? "");
-    if ("richText" in value && Array.isArray(value.richText)) {
-      return value.richText.map((r) => r.text).join("");
-    }
-    return "";
+/** Date 를 사람이 읽는 형태로. 엑셀 시간 직렬값(1900년 이전)은 시각만 남긴다 */
+function formatCellDate(value: Date): string {
+  if (Number.isNaN(value.getTime())) return "";
+  if (value.getFullYear() < 1901) {
+    return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
   }
-  return String(value);
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
-/** XLSX 바이트를 시트별 TSV 텍스트로 추출 */
+/**
+ * 셀 값을 사람이 읽을 수 있는 문자열로 변환한다.
+ *
+ * 수식 셀의 캐시된 결과(result)가 Date·리치텍스트·하이퍼링크 객체일 수 있어
+ * **재귀로** 풀어야 한다. 예전 구현은 String(result) 를 써서 담당자 이메일·전화번호가
+ * "[object Object]" 로, 날짜가 로케일 의존 문자열로 들어갔다.
+ */
+function cellToText(value: ExcelJS.CellValue, depth = 0): string {
+  if (value === null || value === undefined) return "";
+  if (depth > 4) return "";
+  if (value instanceof Date) return formatCellDate(value);
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "string") return value;
+
+  if (typeof value === "object") {
+    const obj = value as unknown as Record<string, unknown>;
+    if (Array.isArray(obj.richText)) {
+      return obj.richText
+        .map((run) => cellToText(run as ExcelJS.CellValue, depth + 1))
+        .join("");
+    }
+    // 수식 셀 — 캐시된 결과를 다시 풀어준다
+    if ("result" in obj) return cellToText(obj.result as ExcelJS.CellValue, depth + 1);
+    // 하이퍼링크 셀 — 보이는 텍스트를 쓴다
+    if ("text" in obj) return cellToText(obj.text as ExcelJS.CellValue, depth + 1);
+    // 오류 셀(#REF! 등)은 옮길 값이 없다
+    if ("error" in obj) return "";
+  }
+  return "";
+}
+
+/** 시트 하나의 추출 결과 */
+type SheetExtract = { name: string; rowCount: number; text: string };
+
+/**
+ * 시트를 TSV 로 옮긴다.
+ *
+ * 병합셀은 **대표 셀에서 한 번만** 값을 쓴다. exceljs 는 병합 범위의 모든 셀에
+ * 같은 값을 채워주기 때문에, 그대로 옮기면 "견 적 서" 가 한 줄에 12번 반복되는 식으로
+ * 텍스트가 몇 배로 불어나 프롬프트 예산을 잡아먹는다.
+ */
+function extractSheet(sheet: ExcelJS.Worksheet): SheetExtract {
+  const lines: string[] = [];
+  let rowCount = 0;
+
+  sheet.eachRow({ includeEmpty: false }, (row) => {
+    const cells: string[] = [];
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      // 병합 영역의 종속 셀은 비워 둔다 (대표 셀만 값을 남긴다)
+      const isFollower = cell.isMerged && cell.master?.address !== cell.address;
+      const text = isFollower ? "" : cellToText(cell.value).trim();
+      // 셀 안 줄바꿈은 TSV 구조를 깨므로 공백으로 바꾼다
+      cells[colNumber - 1] = text.replace(/\s*\n\s*/g, " ");
+    });
+
+    // 뒤쪽 빈 칸은 버린다
+    let last = cells.length - 1;
+    while (last >= 0 && !cells[last]) last--;
+    if (last < 0) return; // 완전히 빈 행
+
+    rowCount++;
+    lines.push(
+      Array.from({ length: last + 1 }, (_, i) => cells[i] ?? "").join("\t"),
+    );
+  });
+
+  let text = lines.join("\n");
+  if (text.length > MAX_SHEET_LENGTH) {
+    text = `${text.slice(0, MAX_SHEET_LENGTH)}\n…(이 시트의 이하 내용 생략)`;
+  }
+  return { name: sheet.name, rowCount, text };
+}
+
+/**
+ * XLSX 바이트를 텍스트로 추출한다.
+ *
+ * 맨 앞에 **시트 목록(manifest)** 을 넣는다 — 시트가 많은 견적서 워크북에서
+ * 모델이 "어떤 시트가 있는지" 알고 요청에 맞는 시트를 고를 수 있어야 한다.
+ */
 async function extractXlsx(bytes: Uint8Array): Promise<string> {
   const workbook = new ExcelJS.Workbook();
   // exceljs 는 Buffer/ArrayBuffer 를 받는다
@@ -55,18 +127,27 @@ async function extractXlsx(bytes: Uint8Array): Promise<string> {
     ) as ArrayBuffer,
   );
 
-  const parts: string[] = [];
+  const sheets: SheetExtract[] = [];
   workbook.eachSheet((sheet) => {
-    const lines: string[] = [];
-    sheet.eachRow({ includeEmpty: false }, (row) => {
-      const values = Array.isArray(row.values) ? row.values.slice(1) : [];
-      lines.push(values.map((v) => cellToText(v as ExcelJS.CellValue)).join("\t"));
-    });
-    if (lines.length > 0) {
-      parts.push(`# 시트: ${sheet.name}\n${lines.join("\n")}`);
-    }
+    const extracted = extractSheet(sheet);
+    if (extracted.text) sheets.push(extracted);
   });
-  return parts.join("\n\n");
+  if (sheets.length === 0) return "";
+
+  const manifest = [
+    `# 워크북 시트 목록 (${sheets.length}개)`,
+    ...sheets.map((s, i) => `${i + 1}. ${s.name} (${s.rowCount}행)`),
+  ].join("\n");
+
+  const body = sheets.map((s) => `# 시트: ${s.name}\n${s.text}`).join("\n\n");
+  return `${manifest}\n\n${body}`;
+}
+
+function clampText(text: string): string {
+  const trimmed = text.trim();
+  return trimmed.length > MAX_EXTRACTED_LENGTH
+    ? `${trimmed.slice(0, MAX_EXTRACTED_LENGTH)}\n…(생략됨)`
+    : trimmed;
 }
 
 /** CSV 바이트를 UTF-8 텍스트로 디코드 */

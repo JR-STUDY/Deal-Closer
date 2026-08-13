@@ -37,7 +37,31 @@ const COMMON_RULES = `당신은 한국 B2B 영업 문서(견적서·계약서·�
 - 참고 문서나 첨부 파일에 단가·품목이 있으면 그 값을 최우선으로 씁니다.
 - 마진·할인·수량 변경 지시가 있으면 계산해서 반영하고, 계산 근거를 notes 섹션에 한 줄 남깁니다.
 - 계약서·비밀유지계약서는 items 가 빈 배열이어도 됩니다. 조항은 notes 섹션으로 구성합니다.
-- 금액·기간·책임 범위처럼 분쟁 소지가 있는 항목이 추정값이면 summary 에 검토가 필요하다고 한 문장 덧붙입니다.`;
+- 금액·기간·책임 범위처럼 분쟁 소지가 있는 항목이 추정값이면 summary 에 검토가 필요하다고 한 문장 덧붙입니다.
+
+[원본 문서를 옮길 때 — 가장 중요한 규칙]
+- 첨부 파일이나 양식이 주어졌다면 당신의 일은 **요약이 아니라 이관(transcription)** 입니다.
+  원본에 있는 항목·조항·표·안내문을 임의로 줄이거나 합치거나 빼지 않습니다.
+- **원본에 없는 품목·단가·금액을 절대 만들지 않습니다.** 품목표는 원본의 품목·수량·단가를 그대로 옮깁니다.
+  원본에서 품목을 찾을 수 없으면 items 를 빈 배열로 두고 summary 에 그 사실을 적습니다.
+- 원본의 메타 필드를 **빠짐없이** clientFields 로 옮깁니다. 견적번호·담당자·전화번호·이메일·
+  시작일·종료일·등급·라이선스 수·제품구분처럼 라벨이 붙은 값은 하나도 버리지 않습니다.
+- 원본의 자사 정보는 supplierFields 로 옮깁니다. 원본에 그 칸이 있으면
+  **상호·주소·등록번호·대표자·담당자·전화번호·이메일·팩스 라벨을 하나도 빠뜨리지 않습니다.**
+  값을 알 수 없거나 담당자처럼 사람마다 달라지는 항목이면 **라벨은 남기고 값만 빈 문자열**로 둡니다
+  (라벨을 지우면 문서를 만들 때 채울 자리가 사라집니다).
+- 원본에 **품목표가 아닌 표**(지원항목 × 등급 O/X 매트릭스, 조건표, 요율표, 구분표)가 있으면
+  tables 에 칸 값을 그대로 옮깁니다. 이 표를 문장으로 풀어 쓰지 않습니다.
+- 원본 하단의 기술지원 안내·주의사항·기타사항은 notes 로 옮깁니다. 줄 단위를 유지합니다.
+- 원본에 합계와 별개로 "최종 견적가(할인 적용)" 같은 항목이 있으면 그 **항목 자체를 반드시 남깁니다**
+  (표준 양식이라 금액을 비우더라도 clientFields 라벨이나 notes 로 자리를 남깁니다).
+
+[엑셀 워크북이 첨부된 경우]
+- 첨부 텍스트 맨 앞의 "# 워크북 시트 목록" 을 먼저 읽습니다.
+- 시트가 여러 개면 **파일명과 사용자 요청에 가장 맞는 시트 하나**를 골라 그 시트만 옮깁니다.
+  여러 시트의 품목을 섞지 않습니다.
+- 어느 시트를 근거로 썼는지 summary 에 시트 이름을 적습니다.
+- "# 분량 때문에 본문에서 제외한 시트" 목록에 있는 시트는 내용을 알 수 없으므로 추측하지 않습니다.`;
 
 /** 문서 초안 생성 (F-212) */
 export const SYSTEM_GENERATE = `${COMMON_RULES}
@@ -48,6 +72,7 @@ export const SYSTEM_GENERATE = `${COMMON_RULES}
 - supplierFields(자사 정보)와 하단 안내문은 양식 값이 정답이므로 빈 배열로 두어도 됩니다.
   (시스템이 양식 원본 값을 그대로 유지합니다.)
 - 변수 필드 정의가 함께 주어지면 필수 변수는 반드시 값을 채우려고 시도합니다.
+- 양식에 이미 있는 고정 표는 다시 만들지 않습니다. 원본 첨부에만 있고 양식에 없는 표라면 tables 에 담습니다.
 
 [표준 양식이 없는 경우]
 - 문서 종류에 맞는 표준적인 구성을 스스로 갖춰 만듭니다.
@@ -66,6 +91,10 @@ export const SYSTEM_TEMPLATE_SETUP = `${COMMON_RULES}
   원본에 단가가 있으면 유지하고, 없으면 0 으로 둡니다.
 - notes 에는 원본 양식의 기타사항·기술지원 안내·특이사항 같은 고정 문구를 그대로 옮깁니다.
 - headingText 는 원본 문서의 대제목을 그대로 씁니다.
+- **고정 표는 값을 비우지 않고 그대로 옮깁니다.** 등급별 지원범위 매트릭스·요율표·조건표는
+  거래처마다 달라지는 값이 아니라 양식의 일부이므로 tables 에 칸 그대로 담습니다.
+- 라벨 구조도 양식의 일부입니다. 원본에 있는 메타 라벨(견적번호·담당자·유지보수 시작일 등)은
+  값은 비우더라도 **라벨은 clientFields 에 남깁니다** — 그래야 이 양식으로 문서를 만들 때 채울 자리가 생깁니다.
 
 [변수 필드 정의 (variables)]
 - 이 양식으로 문서를 만들 때마다 채워야 하는 값을 빠짐없이 나열합니다.
@@ -174,7 +203,7 @@ export function buildGenerateContent(
     if (input.templateFile) {
       blocks.push(text("# 표준 양식 원본 파일"));
       blocks.push(
-        ...filesToContentBlocks([input.templateFile], "양식 원본"),
+        ...filesToContentBlocks([input.templateFile], "양식 원본", [input.prompt]),
       );
     }
   }
@@ -214,7 +243,7 @@ export function buildGenerateContent(
         "# 첨부 파일\n협력사 견적서·단가표 등입니다. 여기에 있는 품목·단가를 우선 사용해 주세요.",
       ),
     );
-    blocks.push(...filesToContentBlocks(input.attachments));
+    blocks.push(...filesToContentBlocks(input.attachments, "첨부 파일", [input.prompt]));
   }
 
   const client = input.client;
@@ -282,7 +311,7 @@ export function buildTemplateSetupContent(
         "# 업로드된 기존 양식\n이 파일의 구성·라벨·문구를 최대한 그대로 옮겨 주세요.",
       ),
     );
-    blocks.push(...filesToContentBlocks([input.sourceFile], "양식 원본"));
+    blocks.push(...filesToContentBlocks([input.sourceFile], "양식 원본", [input.prompt]));
   } else {
     blocks.push(
       text(
