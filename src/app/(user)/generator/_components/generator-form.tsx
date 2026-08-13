@@ -66,6 +66,15 @@ export type TemplateChoice = {
   variables: { key: string; label: string; sample: string | null; required: boolean }[];
 };
 
+/** 문서를 붙일 수 있는 영업 기회 (F-212) */
+export type OpportunityChoice = {
+  id: string;
+  name: string;
+  stage: string;
+  expectedAmount: number;
+  accountName: string;
+};
+
 /** 계약서의 소스로 고를 수 있는 확정 견적서 (F-213) */
 export type ConfirmedQuote = {
   id: string;
@@ -99,13 +108,6 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
 
-/** 만든 문서를 붙일 영업 기회 (기회 상세에서 "문서 작성"으로 들어온 경우, 기회-2) */
-export type GeneratorOpportunity = {
-  id: string;
-  name: string;
-  accountName: string;
-};
-
 /** AI 대화형 문서 생성기 입력 폼 (클라이언트 전용 상태) */
 export function GeneratorForm({
   libraryDocuments,
@@ -115,7 +117,8 @@ export function GeneratorForm({
   models,
   defaultModel,
   mockProvider,
-  opportunity,
+  opportunities,
+  initialOpportunityId,
 }: {
   libraryDocuments: LibraryDoc[];
   templates: TemplateChoice[];
@@ -127,8 +130,13 @@ export function GeneratorForm({
   defaultModel: string;
   /** 목 프로바이더로 동작 중 */
   mockProvider: boolean;
-  /** 있으면 생성한 문서를 이 기회에 연결한다. 없으면 평소처럼 보관함에만 담긴다. */
-  opportunity: GeneratorOpportunity | null;
+  /** 문서를 붙일 수 있는 진행 중 기회 (F-212). 고르면 CRM 거래처 정보가 AI 에 그대로 간다 */
+  opportunities: OpportunityChoice[];
+  /**
+   * 기회 상세에서 "문서 작성"으로 들어온 경우 미리 선택할 기회 (`?opportunityId=`, 기회-2).
+   * 서버가 후보 목록 안에 있는지 확인한 값만 내려온다.
+   */
+  initialOpportunityId?: string | null;
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -138,6 +146,14 @@ export function GeneratorForm({
   );
   const [documentType, setDocumentType] = useState<string>(AUTO_TYPE);
   const [model, setModel] = useState<string>(defaultModel);
+  // 기회 연결은 선택 — 고르지 않으면 "기회 미연결" 빠른 초안이 된다
+  const [opportunityId, setOpportunityId] = useState<string>(
+    initialOpportunityId ?? NO_TEMPLATE,
+  );
+  const selectedOpportunity =
+    opportunityId === NO_TEMPLATE
+      ? null
+      : (opportunities.find((o) => o.id === opportunityId) ?? null);
   const [sourceQuoteId, setSourceQuoteId] = useState<string>(NO_TEMPLATE);
   const [clientName, setClientName] = useState("");
   const [clientContact, setClientContact] = useState("");
@@ -323,14 +339,14 @@ export function GeneratorForm({
       formData.append("sourceDocumentId", sourceQuoteId);
     }
     if (model) formData.append("model", model);
+    // 고른 기회에 문서를 연결한다 (기회-2 · F-212).
+    // 연결 여부·권한은 서버가 orgId 로 다시 확인한다 — 여기 값은 그대로 믿지 않는다.
+    if (opportunityId !== NO_TEMPLATE) {
+      formData.append("opportunityId", opportunityId);
+    }
     if (clientName.trim()) formData.append("clientName", clientName.trim());
     if (clientContact.trim()) formData.append("clientContact", clientContact.trim());
     if (clientEmail.trim()) formData.append("clientEmail", clientEmail.trim());
-    // 기회 상세에서 들어왔다면 만든 문서를 그 기회에 연결한다 (기회-2).
-    // 연결 여부·권한은 서버가 orgId 로 다시 확인한다 — 여기 값은 그대로 믿지 않는다.
-    if (opportunity) {
-      formData.append("opportunityId", opportunity.id);
-    }
 
     try {
       const res = await fetch("/api/generate", {
@@ -359,8 +375,8 @@ export function GeneratorForm({
         json?.data?.opportunityId ?? null;
       const summary: string = json?.data?.summary ?? "AI 초안을 생성했습니다.";
       toast.success(
-        linkedOpportunityId && opportunity
-          ? `${summary} ‘${opportunity.name}’ 기회에 연결했습니다.`
+        linkedOpportunityId && selectedOpportunity
+          ? `${summary} ‘${selectedOpportunity.name}’ 기회에 연결했습니다.`
           : summary,
       );
       router.push(`/editor/${documentId}`);
@@ -374,21 +390,21 @@ export function GeneratorForm({
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       {/* 어느 기회에 붙을 문서인지 먼저 알린다 (기회-2) — 만들고 나서야 알게 되면 늦다 */}
-      {opportunity ? (
+      {selectedOpportunity ? (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border bg-muted/30 px-4 py-3 text-sm">
           <Target className="size-4 shrink-0 text-primary" aria-hidden="true" />
           <span>
-            <span className="font-medium">{opportunity.name}</span>
+            <span className="font-medium">{selectedOpportunity.name}</span>
             <span className="text-muted-foreground">
               {" "}
-              · {opportunity.accountName}
+              · {selectedOpportunity.accountName}
             </span>
           </span>
           <span className="text-muted-foreground">
             기회에 연결할 문서를 만듭니다.
           </span>
           <Link
-            href={`/opportunities/${opportunity.id}`}
+            href={`/opportunities/${selectedOpportunity.id}`}
             className="ml-auto shrink-0 rounded text-xs text-muted-foreground transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
             기회로 돌아가기
@@ -426,6 +442,37 @@ export function GeneratorForm({
               disabled={isSubmitting}
               mock={mockProvider}
             />
+
+            <div className="space-y-1.5">
+              <Label htmlFor="opportunity-select" className="text-xs">
+                영업 기회 연결
+              </Label>
+              <Select
+                value={opportunityId}
+                onValueChange={setOpportunityId}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger id="opportunity-select" className="w-full">
+                  <SelectValue placeholder="기회 없이 생성" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_TEMPLATE}>기회 없이 생성</SelectItem>
+                  {opportunities.map((opportunity) => (
+                    <SelectItem key={opportunity.id} value={opportunity.id}>
+                      {opportunity.accountName} · {opportunity.name}
+                      {opportunity.expectedAmount > 0
+                        ? ` · ${formatKRW(opportunity.expectedAmount)}`
+                        : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {selectedOpportunity
+                  ? `${selectedOpportunity.accountName} 의 거래처 정보를 AI 에 그대로 전달하고, 생성된 문서를 이 기회에 연결합니다.`
+                  : "기회를 고르면 거래처 정보를 CRM 에서 가져와 채웁니다. 고르지 않으면 기회 미연결 문서가 됩니다."}
+              </p>
+            </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -509,6 +556,12 @@ export function GeneratorForm({
               </div>
             )}
 
+            {selectedOpportunity ? (
+              <p className="rounded-md border border-dashed bg-background px-3 py-2 text-xs text-muted-foreground">
+                거래처 정보는 <strong className="font-medium">{selectedOpportunity.accountName}</strong>{" "}
+                의 CRM 등록값을 사용합니다. 직접 입력할 필요가 없습니다.
+              </p>
+            ) : (
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label htmlFor="client-name" className="text-xs">
@@ -548,6 +601,7 @@ export function GeneratorForm({
                 />
               </div>
             </div>
+            )}
 
             {/* 선택한 양식의 필수 변수 안내 (F-204) */}
             {requiredVariables.length > 0 && (

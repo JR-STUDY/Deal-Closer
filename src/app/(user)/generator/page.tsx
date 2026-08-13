@@ -4,16 +4,24 @@ import { getCurrentOrg } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { latestVersionsOnly } from "@/lib/document-version";
+import { OPEN_OPPORTUNITY_STAGES } from "@/lib/constants";
 import { availableModels } from "@/lib/ai/model-access";
 import { GeneratorForm } from "./_components/generator-form";
 
 /**
- * AI 문서 생성 (F-201).
+ * AI 문서 생성 (F-201 · F-211 · F-212).
  *
  * 기회 상세에서 "문서 작성"으로 들어오면 `?opportunityId=` 가 함께 온다 (기회-2). 그때는
  * 만든 문서를 그 기회에 바로 연결하므로, 어느 기회에 붙을지 화면에서 먼저 알려준다.
- * 기회 id 는 주소창에서 바꿀 수 있으므로 **반드시 orgId 로 좁혀 확인**한다 — 찾지 못하면
- * 연결 없이 평소의 문서 생성 화면으로 둔다.
+ *
+ * 기회 없이 이 화면으로 바로 들어올 수도 있으므로 **후보 목록도 함께 내린다** (F-212) —
+ * 진입 경로에 따라 기회를 고를 수 있고 없고가 갈리면, 보관함에서 시작한 담당자는 문서를
+ * 만든 뒤 다시 기회에 붙이러 가야 한다. 기회 연결은 끝까지 **선택**이다(빠른 초안 허용).
+ *
+ * 후보는 **진행 중 기회만**이다 — 수주·실주로 마감한 기회에 새 문서를 만들 이유가 없다.
+ * 그래서 `?opportunityId=` 로 마감 기회가 들어오면 미리 선택되지 않는다. 기회 상세도
+ * 마감이면 진입점을 감추므로 정상 경로에서는 생기지 않는 상황이다.
+ * 기회 id 는 주소창에서 바꿀 수 있으므로 **반드시 후보 목록 안에서만** 초기값으로 인정한다.
  */
 export default async function GeneratorPage({
   searchParams,
@@ -21,7 +29,7 @@ export default async function GeneratorPage({
   // Next.js 16: searchParams 는 Promise 이므로 await 한다
   searchParams: Promise<{ template?: string; opportunityId?: string }>;
 }) {
-  const [{ template: templateParam, opportunityId }, org] = await Promise.all([
+  const [{ template: templateParam, opportunityId: opportunityParam }, org] = await Promise.all([
     searchParams,
     getCurrentOrg(),
   ]);
@@ -31,7 +39,7 @@ export default async function GeneratorPage({
 
   // 독립 조회는 병렬화 (REACT_BEST_PRACTICES ①)
   // prettier-ignore
-  const [wallet, allDocuments, templates, confirmedQuotes, opportunity] = await Promise.all([
+  const [wallet, allDocuments, templates, confirmedQuotes, opportunities] = await Promise.all([
     prisma.creditWallet.findUnique({ where: { orgId: org.id } }),
     prisma.document.findMany({
       where: { orgId: org.id, status: { not: "VOID" } },
@@ -82,16 +90,19 @@ export default async function GeneratorPage({
       },
       take: 50,
     }),
-    opportunityId
-      ? prisma.opportunity.findFirst({
-          where: { id: opportunityId, orgId: org.id },
-          select: {
-            id: true,
-            name: true,
-            account: { select: { companyName: true } },
-          },
-        })
-      : null,
+    // 문서를 붙일 수 있는 영업 기회 (F-212) — 마감된 기회는 대상이 아니므로 제외한다
+    prisma.opportunity.findMany({
+      where: { orgId: org.id, stage: { in: [...OPEN_OPPORTUNITY_STAGES] } },
+      orderBy: [{ expectedCloseDate: "asc" }, { updatedAt: "desc" }],
+      select: {
+        id: true,
+        name: true,
+        stage: true,
+        expectedAmount: true,
+        account: { select: { companyName: true } },
+      },
+      take: 100,
+    }),
   ]);
 
   // 참고 문서 선택기에는 버전 묶음별 최신 버전만 노출한다 (F-214)
@@ -124,13 +135,18 @@ export default async function GeneratorPage({
           defaultModel={defaultModel}
           mockProvider={mock}
           // 클라이언트로는 직렬화 가능한 값만 넘긴다 (REACT_BEST_PRACTICES ③)
-          opportunity={
-            opportunity
-              ? {
-                  id: opportunity.id,
-                  name: opportunity.name,
-                  accountName: opportunity.account.companyName,
-                }
+          opportunities={opportunities.map((opportunity) => ({
+            id: opportunity.id,
+            name: opportunity.name,
+            stage: opportunity.stage,
+            expectedAmount: opportunity.expectedAmount,
+            accountName: opportunity.account.companyName,
+          }))}
+          // 주소로 들어온 기회는 **후보 안에 있을 때만** 초기 선택한다 (마감·타 조직 제외)
+          initialOpportunityId={
+            opportunityParam &&
+            opportunities.some((o) => o.id === opportunityParam)
+              ? opportunityParam
               : null
           }
         />

@@ -9,7 +9,13 @@
 import "server-only";
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants";
 import { text, type AiContentBlock } from "./blocks";
-import { describeDocument, describeTemplate, type DocumentMeta } from "./describe";
+import {
+  describeDocument,
+  describeOpportunity,
+  describeTemplate,
+  type DocumentMeta,
+  type OpportunityContext,
+} from "./describe";
 import { filesToContentBlocks, type PreparedFile } from "./content";
 
 // ===================== 시스템 프롬프트 =====================
@@ -72,6 +78,13 @@ export const SYSTEM_GENERATE = `${COMMON_RULES}
 - supplierFields(자사 정보)와 하단 안내문은 양식 값이 정답이므로 빈 배열로 두어도 됩니다.
   (시스템이 양식 원본 값을 그대로 유지합니다.)
 - 변수 필드 정의가 함께 주어지면 필수 변수는 반드시 값을 채우려고 시도합니다.
+
+[영업 기회·거래처 정보가 주어진 경우]
+- 고객사명·담당자·직책·연락처·이메일·사업자등록번호는 **CRM 값을 그대로** 씁니다. 변형·보완하지 않습니다.
+- 예상 금액은 참고치입니다. 품목 근거(양식·첨부·확정 견적서)가 있으면 그쪽이 우선이고,
+  예상 금액과 크게 다르면 summary 에 한 문장으로 알립니다.
+- "직전 기회"가 표시된 갱신 거래라면 이전 조건을 이어받는 것이 자연스럽습니다.
+  다만 이전 문서가 함께 주어지지 않았다면 조건을 상상해서 만들지 않습니다.
 - 양식에 이미 있는 고정 표는 다시 만들지 않습니다. 원본 첨부에만 있고 양식에 없는 표라면 tables 에 담습니다.
 
 [표준 양식이 없는 경우]
@@ -163,8 +176,10 @@ export type GenerateContentInput = {
   references: DocumentMeta[];
   /** 업로드한 첨부 파일 */
   attachments: PreparedFile[];
-  /** 거래처 정보 */
+  /** 거래처 정보 (기회를 고르지 않은 빠른 초안에서 직접 입력받은 값) */
   client?: ClientInput | null;
+  /** 연결된 영업 기회 + 거래처 (F-212). 있으면 client 보다 우선한다 */
+  opportunity?: OpportunityContext | null;
   /** 자사(공급자) 이름 — 양식이 없을 때 기본값으로 쓰인다 */
   supplierName: string;
   /** 오늘 날짜 문자열 ("2026. 08. 07") — 서버에서 주입한다 */
@@ -246,6 +261,21 @@ export function buildGenerateContent(
     blocks.push(...filesToContentBlocks(input.attachments, "첨부 파일", [input.prompt]));
   }
 
+  // 기회·거래처 (F-212) — CRM 등록값이므로 가장 신뢰도가 높다
+  if (input.opportunity) {
+    blocks.push(
+      text(
+        [
+          "# 이 문서를 만드는 영업 기회·거래처",
+          "아래 값은 CRM 에 등록된 정보입니다. **추측하지 말고 그대로 사용**하세요.",
+          "고객사명·담당자·연락처·사업자등록번호는 이 값이 유일한 정답입니다.",
+          "",
+          describeOpportunity(input.opportunity),
+        ].join("\n"),
+      ),
+    );
+  }
+
   const client = input.client;
   if (client && (client.name || client.contactName || client.email || client.memo)) {
     blocks.push(
@@ -257,7 +287,9 @@ export function buildGenerateContent(
           client.email ? `- 담당자 이메일: ${client.email}` : null,
           client.memo ? `- 메모: ${client.memo}` : null,
           "",
-          "이 값들은 사용자가 직접 입력한 것이므로 다른 자료보다 우선합니다.",
+          input.opportunity
+            ? "이 값들은 사용자가 이번 요청에서 덧붙인 것이므로, CRM 거래처 정보와 충돌하면 이쪽을 따릅니다."
+            : "이 값들은 사용자가 직접 입력한 것이므로 다른 자료보다 우선합니다.",
         ]
           .filter((line) => line !== null)
           .join("\n"),
