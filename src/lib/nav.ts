@@ -1,6 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
+  Building2,
+  Target,
   Sparkles,
   FolderClosed,
   Mail,
@@ -30,6 +32,8 @@ export type NavItem = {
 /** 영업 담당자 포털 (user-web) 네비게이션 */
 export const userNav: NavItem[] = [
   { href: "/dashboard", label: "대시보드", icon: LayoutDashboard },
+  { href: "/accounts", label: "거래처", icon: Building2 },
+  { href: "/opportunities", label: "영업 기회", icon: Target },
   { href: "/generator", label: "새 문서 생성", icon: Sparkles },
   {
     href: "/library",

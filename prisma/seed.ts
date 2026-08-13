@@ -395,6 +395,9 @@ async function main() {
   await prisma.generationRequest.deleteMany();
   await prisma.documentItem.deleteMany();
   await prisma.document.deleteMany();
+  await prisma.activityLog.deleteMany();
+  await prisma.opportunity.deleteMany();
+  await prisma.account.deleteMany();
   // TemplateVariable 은 Template 삭제 시 Cascade 로 함께 지워진다
   await prisma.template.deleteMany();
   await prisma.emailTemplate.deleteMany();
@@ -1111,6 +1114,323 @@ async function main() {
     },
   });
 
+  // 10-1) 거래처(Account) — CRM 데모 데이터 (F-101 · 102 · 103)
+  //   회사명을 기존 문서의 clientName 과 맞춰 두어, Phase 2 에서 기회·문서를 이 거래처에
+  //   연결할 때 이름을 새로 만들지 않아도 되게 한다.
+  //   사업자등록번호는 실재하지 않는 합성값이다.
+  await prisma.account.createMany({
+    data: [
+      {
+        orgId: org.id,
+        companyName: "(주)에이비씨 테크놀로지",
+        contactName: "이서준",
+        position: "구매팀 과장",
+        phone: "010-2345-6789",
+        email: "seojun.lee@abctech.example.com",
+        bizRegNo: "123-45-67890",
+        memo: "그룹웨어 도입 검토 중. 견적 재발송 이력 있음(2026-07). 결재 라인은 팀장 → 본부장 2단계.",
+      },
+      {
+        orgId: org.id,
+        companyName: "글로벌커머스(주)",
+        contactName: "박지훈",
+        position: "IT기획팀 팀장",
+        phone: "010-3456-7890",
+        email: "jihoon.park@globalcommerce.example.com",
+        bizRegNo: "211-86-01234",
+        memo: "통합 계약 체결 완료. 연간 유지보수 갱신 시점은 매년 4월.",
+      },
+      {
+        orgId: org.id,
+        companyName: "세종테크",
+        contactName: "최유진",
+        position: "정보보안팀 대리",
+        phone: "010-4567-8901",
+        email: "yujin.choi@sejongtech.example.com",
+        bizRegNo: "305-81-45678",
+        memo: null,
+      },
+      {
+        orgId: org.id,
+        companyName: "다올테크",
+        contactName: "정민석",
+        position: "인프라팀 차장",
+        phone: "010-5678-9012",
+        email: null,
+        bizRegNo: null,
+        memo: "인프라 증설 견적 검토 중. 메일보다 전화 연락을 선호.",
+      },
+      {
+        orgId: org.id,
+        companyName: "Bluewave Systems Korea",
+        contactName: "한그레이스",
+        position: "Sales Director",
+        phone: null,
+        email: "grace.han@bluewave.example.com",
+        bizRegNo: "412-88-90123",
+        memo: "본사 승인 절차가 있어 계약까지 6주 이상 소요된다.",
+      },
+    ],
+  });
+
+  // 10-2) 영업 기회(Opportunity) + 활동 이력(ActivityLog) — 파이프라인 데모 (F-111 · F-114)
+  //   단계가 INITIAL·PROPOSAL·NEGOTIATION·WON·LOST 로 고루 분포하도록 12건을 거래처 5곳에
+  //   나눠 붙인다. 대시보드(F-401~406)·캘린더(F-301~306)가 의미 있는 그림을 그릴 수 있어야 한다.
+  const accountIdByName = new Map(
+    (
+      await prisma.account.findMany({
+        where: { orgId: org.id },
+        select: { id: true, companyName: true },
+      })
+    ).map((account) => [account.companyName, account.id] as const),
+  );
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const shiftDays = (base: Date, days: number) =>
+    new Date(base.getTime() + days * DAY_MS);
+
+  type SeedStage = "INITIAL" | "PROPOSAL" | "NEGOTIATION" | "WON" | "LOST";
+  type OpportunitySeed = {
+    company: string;
+    name: string;
+    stage: SeedStage;
+    /** 예상 금액 (KRW 정수) */
+    expectedAmount: number;
+    /** 예상 마감일 — null 이면 미정 (목록에서 뒤로 정렬된다) */
+    expectedCloseDate: string | null;
+    ownerId: string;
+    createdAt: string;
+    /** WON·LOST 확정일 */
+    actualCloseDate?: string;
+    lostReason?: string;
+    memo?: string;
+  };
+
+  const OPPORTUNITY_SEEDS: OpportunitySeed[] = [
+    {
+      company: "(주)에이비씨 테크놀로지",
+      name: "2026 그룹웨어 도입",
+      stage: "PROPOSAL",
+      expectedAmount: 48_000_000,
+      expectedCloseDate: "2026-09-30",
+      ownerId: rep.id,
+      createdAt: "2026-07-06T10:00:00+09:00",
+      memo: "견적 재발송 이력 있음. 결재 라인은 팀장 → 본부장 2단계.",
+    },
+    {
+      company: "(주)에이비씨 테크놀로지",
+      name: "보안 솔루션 추가 도입",
+      stage: "INITIAL",
+      expectedAmount: 12_000_000,
+      expectedCloseDate: "2026-11-20",
+      ownerId: rep.id,
+      createdAt: "2026-08-03T14:10:00+09:00",
+    },
+    {
+      company: "글로벌커머스(주)",
+      name: "커머스 플랫폼 고도화",
+      stage: "WON",
+      expectedAmount: 180_000_000,
+      expectedCloseDate: "2026-06-30",
+      ownerId: rep.id,
+      createdAt: "2026-05-11T09:30:00+09:00",
+      actualCloseDate: "2026-06-25T16:00:00+09:00",
+      memo: "통합 계약 체결 완료. 연간 유지보수 갱신 시점은 매년 4월.",
+    },
+    {
+      company: "글로벌커머스(주)",
+      name: "2027 연간 유지보수 갱신",
+      stage: "INITIAL",
+      expectedAmount: 36_000_000,
+      expectedCloseDate: "2027-03-31",
+      ownerId: leader.id,
+      createdAt: "2026-07-29T11:00:00+09:00",
+    },
+    {
+      company: "세종테크",
+      name: "엔드포인트 보안 파일럿",
+      stage: "NEGOTIATION",
+      expectedAmount: 24_000_000,
+      expectedCloseDate: "2026-08-28",
+      ownerId: rep.id,
+      createdAt: "2026-06-18T13:20:00+09:00",
+      memo: "파일럿 10대 규모로 시작해 전사 확대를 검토 중.",
+    },
+    {
+      company: "세종테크",
+      name: "통합 로그 관제 구축",
+      stage: "PROPOSAL",
+      expectedAmount: 65_000_000,
+      expectedCloseDate: "2026-10-15",
+      ownerId: leader.id,
+      createdAt: "2026-07-14T15:45:00+09:00",
+    },
+    {
+      company: "세종테크",
+      name: "임직원 보안 교육 프로그램",
+      stage: "LOST",
+      expectedAmount: 8_000_000,
+      expectedCloseDate: "2026-06-15",
+      ownerId: leader.id,
+      createdAt: "2026-04-27T10:15:00+09:00",
+      actualCloseDate: "2026-06-12T17:30:00+09:00",
+      lostReason: "일정",
+    },
+    {
+      company: "다올테크",
+      name: "인프라 증설 1차",
+      stage: "NEGOTIATION",
+      expectedAmount: 92_000_000,
+      expectedCloseDate: "2026-09-12",
+      ownerId: rep.id,
+      createdAt: "2026-06-02T09:00:00+09:00",
+      memo: "메일보다 전화 연락을 선호. 담당 차장이 최종 검토 중.",
+    },
+    {
+      company: "다올테크",
+      name: "백업 스토리지 교체",
+      stage: "LOST",
+      expectedAmount: 30_000_000,
+      expectedCloseDate: "2026-07-10",
+      ownerId: rep.id,
+      createdAt: "2026-05-19T16:40:00+09:00",
+      actualCloseDate: "2026-07-08T11:20:00+09:00",
+      lostReason: "가격",
+    },
+    {
+      company: "다올테크",
+      name: "네트워크 이중화 검토",
+      stage: "INITIAL",
+      expectedAmount: 0,
+      expectedCloseDate: null,
+      ownerId: rep.id,
+      createdAt: "2026-08-07T09:50:00+09:00",
+      memo: "예산·시점 모두 미정. 담당자 요청으로 사전 검토만 진행.",
+    },
+    {
+      company: "Bluewave Systems Korea",
+      name: "APAC 라이선스 확대",
+      stage: "PROPOSAL",
+      expectedAmount: 140_000_000,
+      expectedCloseDate: "2026-12-18",
+      ownerId: leader.id,
+      createdAt: "2026-07-21T14:00:00+09:00",
+      memo: "본사 승인 절차가 있어 계약까지 6주 이상 소요된다.",
+    },
+    {
+      company: "Bluewave Systems Korea",
+      name: "국내 지사 PoC",
+      stage: "WON",
+      expectedAmount: 22_000_000,
+      expectedCloseDate: "2026-05-29",
+      ownerId: rep.id,
+      createdAt: "2026-04-15T10:30:00+09:00",
+      actualCloseDate: "2026-05-27T15:10:00+09:00",
+    },
+  ];
+
+  const opportunityIdByName = new Map<string, string>();
+
+  for (const seed of OPPORTUNITY_SEEDS) {
+    const accountId = accountIdByName.get(seed.company);
+    if (!accountId) continue;
+
+    const createdAt = new Date(seed.createdAt);
+    const opportunity = await prisma.opportunity.create({
+      data: {
+        orgId: org.id,
+        accountId,
+        ownerId: seed.ownerId,
+        name: seed.name,
+        stage: seed.stage,
+        expectedAmount: seed.expectedAmount,
+        expectedCloseDate: seed.expectedCloseDate
+          ? new Date(seed.expectedCloseDate)
+          : null,
+        actualCloseDate: seed.actualCloseDate
+          ? new Date(seed.actualCloseDate)
+          : null,
+        lostReason: seed.lostReason ?? null,
+        memo: seed.memo ?? null,
+        createdAt,
+      },
+    });
+    opportunityIdByName.set(seed.name, opportunity.id);
+
+    // 타임라인: 생성 → (진행 단계면) 단계 변경 → (마감이면) 수주·실주.
+    // detail 은 SQLite 가 Json scalar 를 지원하지 않아 JSON 문자열로 직렬화한다.
+    const events: {
+      eventType: string;
+      detail: Record<string, unknown>;
+      occurredAt: Date;
+    }[] = [
+      {
+        eventType: "OPPORTUNITY_CREATED",
+        detail: {
+          accountId,
+          ownerId: seed.ownerId,
+          expectedAmount: seed.expectedAmount,
+        },
+        occurredAt: createdAt,
+      },
+    ];
+    if (seed.stage !== "INITIAL") {
+      events.push({
+        eventType: "STAGE_CHANGED",
+        detail: { from: "INITIAL", to: "PROPOSAL" },
+        occurredAt: shiftDays(createdAt, 7),
+      });
+    }
+    if (seed.stage === "NEGOTIATION" || seed.stage === "WON") {
+      events.push({
+        eventType: "STAGE_CHANGED",
+        detail: { from: "PROPOSAL", to: "NEGOTIATION" },
+        occurredAt: shiftDays(createdAt, 14),
+      });
+    }
+    if (seed.stage === "WON" || seed.stage === "LOST") {
+      events.push({
+        eventType: seed.stage,
+        detail: {
+          from: seed.stage === "WON" ? "NEGOTIATION" : "PROPOSAL",
+          to: seed.stage,
+          ...(seed.lostReason ? { lostReason: seed.lostReason } : {}),
+        },
+        occurredAt: seed.actualCloseDate
+          ? new Date(seed.actualCloseDate)
+          : shiftDays(createdAt, 21),
+      });
+    }
+
+    await prisma.activityLog.createMany({
+      data: events.map((event) => ({
+        orgId: org.id,
+        opportunityId: opportunity.id,
+        actorId: seed.ownerId,
+        eventType: event.eventType,
+        detail: JSON.stringify(event.detail),
+        occurredAt: event.occurredAt,
+      })),
+    });
+  }
+
+  // 10-3) 대표 문서를 대응 기회에 연결 — 기회 상세의 "연관 문서" 탭과
+  //       거래처 상세의 문서·이메일 탭(기회를 경유해 조회)이 실제 데이터로 채워진다.
+  const abcOpportunityId = opportunityIdByName.get("2026 그룹웨어 도입");
+  if (abcOpportunityId) {
+    await prisma.document.update({
+      where: { id: abcQuote.id },
+      data: { opportunityId: abcOpportunityId },
+    });
+  }
+  const globalOpportunityId = opportunityIdByName.get("커머스 플랫폼 고도화");
+  if (globalOpportunityId) {
+    await prisma.document.update({
+      where: { id: globalContract.id },
+      data: { opportunityId: globalOpportunityId },
+    });
+  }
+
   // 11) 팀원 초대 (대기 중)
   await prisma.invite.createMany({
     data: [
@@ -1142,6 +1462,9 @@ async function main() {
   const counts = {
     조직: await prisma.organization.count(),
     사용자: await prisma.user.count(),
+    거래처: await prisma.account.count(),
+    기회: await prisma.opportunity.count(),
+    활동이력: await prisma.activityLog.count(),
     문서: await prisma.document.count(),
     문서항목: await prisma.documentItem.count(),
     폴더: await prisma.folder.count(),

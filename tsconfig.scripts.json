@@ -1,0 +1,10 @@
+{
+  "//": "scripts/mailer.test.mts 실행 전용. tsx 가 server-only 를 스텁으로 해석하도록 별칭만 덧댄다.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "server-only": ["./scripts/server-only.stub.ts"]
+    }
+  }
+}

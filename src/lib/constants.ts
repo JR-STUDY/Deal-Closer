@@ -57,6 +57,78 @@ export const TEMPLATE_SCOPE_LABELS: Record<TemplateScope, string> = {
   PERSONAL: "내 문서함",
 };
 
+// ── 영업 기회 단계 (PRD F-112) ──
+// INITIAL → PROPOSAL → NEGOTIATION 이 정상 흐름이며, 어느 단계에서든 WON(수주)·LOST(실주)로 마감한다.
+// 견적서 발송 시 PROPOSAL, 계약서 발송 시 NEGOTIATION 으로 자동 전이한다 (F-113).
+export const OPPORTUNITY_STAGES = [
+  "INITIAL",
+  "PROPOSAL",
+  "NEGOTIATION",
+  "WON",
+  "LOST",
+] as const;
+export type OpportunityStage = (typeof OPPORTUNITY_STAGES)[number];
+
+export const OPPORTUNITY_STAGE_LABELS: Record<OpportunityStage, string> = {
+  INITIAL: "초기",
+  PROPOSAL: "제안",
+  NEGOTIATION: "검토/협상",
+  WON: "수주",
+  LOST: "실주",
+};
+
+/** 마감되지 않은 진행 중 단계. 파이프라인 집계(F-402·F-404)의 대상이다. */
+export const OPEN_OPPORTUNITY_STAGES = [
+  "INITIAL",
+  "PROPOSAL",
+  "NEGOTIATION",
+] as const satisfies readonly OpportunityStage[];
+
+/** 마감 단계(수주·실주). 문서 발송에 따른 자동 전이 대상에서 제외한다. */
+export const CLOSED_OPPORTUNITY_STAGES = [
+  "WON",
+  "LOST",
+] as const satisfies readonly OpportunityStage[];
+
+/**
+ * DB 의 `stage` 컬럼은 String 이므로, 읽어온 값을 좁힐 때 사용한다.
+ * 집계(pipeline.ts)와 전이(opportunity-stage.ts)가 공유한다.
+ */
+export function isOpportunityStage(value: string): value is OpportunityStage {
+  return (OPPORTUNITY_STAGES as readonly string[]).includes(value);
+}
+
+/**
+ * 마감 단계(수주·실주)인지. 목록 정의 바로 옆이라 판별도 여기 둔다.
+ * 전이(opportunity-stage.ts — server-only)와 표시(opportunity-progress.ts — 클라이언트 공용)가
+ * 같은 기준을 쓰려면 공용 모듈인 constants 에 있어야 한다.
+ */
+export function isClosedOpportunityStage(stage: OpportunityStage): boolean {
+  return (CLOSED_OPPORTUNITY_STAGES as readonly OpportunityStage[]).includes(
+    stage,
+  );
+}
+
+// ── 활동 이력 이벤트 유형 (PRD F-114) ──
+export const ACTIVITY_EVENT_TYPES = [
+  "OPPORTUNITY_CREATED",
+  "STAGE_CHANGED",
+  "DOCUMENT_CREATED",
+  "DOCUMENT_SENT",
+  "WON",
+  "LOST",
+] as const;
+export type ActivityEventType = (typeof ACTIVITY_EVENT_TYPES)[number];
+
+export const ACTIVITY_EVENT_LABELS: Record<ActivityEventType, string> = {
+  OPPORTUNITY_CREATED: "기회 생성",
+  STAGE_CHANGED: "단계 변경",
+  DOCUMENT_CREATED: "문서 생성",
+  DOCUMENT_SENT: "문서 발송",
+  WON: "수주",
+  LOST: "실주",
+};
+
 // ── 초대 상태 ──
 export const INVITE_STATUSES = ["PENDING", "ACCEPTED", "EXPIRED"] as const;
 export type InviteStatus = (typeof INVITE_STATUSES)[number];
