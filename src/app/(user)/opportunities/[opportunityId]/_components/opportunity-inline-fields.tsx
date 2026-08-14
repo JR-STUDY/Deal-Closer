@@ -17,6 +17,7 @@ import {
   type OpportunityOwnerOption,
 } from "@/lib/opportunity";
 import { useConfirmedDocument } from "@/components/opportunity/confirmed-document-actions";
+import { DocumentPreviewDialog } from "@/components/document/document-preview-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -294,6 +295,11 @@ function InlineSelectEditor({
  * 금액만 덩그러니 두면 "왜 이 숫자인지" 를 알 수 없다. 근거가 된 문서를 함께 보여주고,
  * 수동으로 고정한 상태라면 **자동 판정으로 되돌리는 길**을 같은 자리에 둔다 —
  * 잠금 상태 자체가 자동/수동 스위치이므로 별도 설정 화면을 만들지 않는다.
+ *
+ * 근거 문서를 누르면 **미리보기 팝업**이 뜬다 (기회-5 재수정). 여기서 알고 싶은 것은
+ * "그래서 그 문서가 무엇이냐" 이지 "고치겠다" 가 아니다. 편집 화면으로 바로 넘기면 상세에서
+ * 하던 일이 끊기고 되돌아와야 한다 — 편집으로 가는 길은 미리보기 안에 그대로 있다.
+ * 연관 문서 탭의 미리보기와 **같은 컴포넌트**를 써서 두 경로가 다르게 보이지 않게 한다.
  */
 function ExpectedAmountValue({
   amount,
@@ -308,21 +314,34 @@ function ExpectedAmountValue({
   isSaving: boolean;
   onReleasePin: () => void;
 }) {
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
   return (
     <div className="space-y-0.5 py-1">
       <p className="flex flex-wrap items-baseline gap-x-2">
         <span className="font-medium tabular-nums">{formatKRW(amount)}</span>
         {confirmedDocument ? (
-          <Link
-            href={`/editor/${confirmedDocument.id}`}
+          <button
+            type="button"
+            onClick={() => setIsPreviewOpen(true)}
             className="rounded text-xs text-muted-foreground transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
             {confirmedDocument.title} 기준
-          </Link>
+            <span className="sr-only"> — 미리보기 열기</span>
+          </button>
         ) : (
           <span className="text-xs text-muted-foreground">확정 문서 없음</span>
         )}
       </p>
+
+      {confirmedDocument ? (
+        <DocumentPreviewDialog
+          documentId={confirmedDocument.id}
+          title={confirmedDocument.title}
+          open={isPreviewOpen}
+          onOpenChange={setIsPreviewOpen}
+        />
+      ) : null}
       {confirmedDocument ? (
         isPinned ? (
           <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">

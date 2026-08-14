@@ -82,8 +82,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       user.orgId,
       tx,
     );
-    // 화면이 알려야 하는 건 "이 문서가 붙은 기회"의 금액이다 (해제면 알릴 금액이 없다).
-    return nextOpportunityId ? (synced.at(-1) ?? null) : null;
+    /*
+     * 화면이 알려야 하는 건 **금액이 바뀐 쪽**이다.
+     * 연결이면 집어간 기회(마지막), 해제면 놓아준 기회(유일)라 어느 쪽이든 마지막 결과다.
+     * 해제도 알려야 한다 — 확정 문서를 떼면 예상 금액이 남은 문서 기준으로 다시 잡히거나
+     * ₩0 이 되는데, 말해 주지 않으면 금액이 소리 없이 달라진다 (기회-6 ②).
+     */
+    return synced.at(-1) ?? null;
   });
 
   return ok({ id: document.id, opportunityId: nextOpportunityId, amountSync });

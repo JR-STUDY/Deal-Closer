@@ -144,6 +144,9 @@ export default async function OpportunityDetailPage({
           status: true,
           amount: true,
           createdAt: true,
+          // 연결 해제 시 "다음 확정 문서가 무엇인지"를 화면에서 미리 판정하는 데 쓴다
+          // (동순위는 최근 수정이 앞선다 — `@/lib/confirmed-document`)
+          updatedAt: true,
         },
       }),
       prisma.account.findMany({
@@ -233,6 +236,7 @@ export default async function OpportunityDetailPage({
   const linkedDocuments = documents.map((document) => ({
     ...document,
     createdAt: document.createdAt.toISOString(),
+    updatedAt: document.updatedAt.toISOString(),
   }));
 
   /**
@@ -252,10 +256,18 @@ export default async function OpportunityDetailPage({
         title={dto.name}
         // 브레드크럼이 거래처를 상위로 두므로 되돌아갈 기본 위치도 그 거래처로 맞춘다
         backHref={`/accounts/${dto.accountId}`}
+        /*
+         * 라벨 위 · 값 아래의 2줄 구조다 (기회-7). `거래처 > 다올테크 > 인프라 증설 1차` 처럼
+         * 세 칸을 나열하면 분류(거래처)와 값(회사명·기회명)이 같은 줄에 섞여 읽힌다.
+         * 위 줄이 그 칸의 뜻, 아래 줄이 값이고 `>` 는 값끼리만 잇는다.
+         */
         breadcrumb={[
-          { label: "거래처", href: "/accounts" },
-          { label: dto.accountName, href: `/accounts/${dto.accountId}` },
-          { label: dto.name },
+          {
+            caption: "거래처",
+            label: dto.accountName,
+            href: `/accounts/${dto.accountId}`,
+          },
+          { caption: "기회", label: dto.name },
         ]}
         description={`${formatDate(opportunity.createdAt)} 등록 · ${formatDateTime(opportunity.updatedAt)} 최근 수정`}
         actions={
