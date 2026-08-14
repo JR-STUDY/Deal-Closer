@@ -21,6 +21,7 @@
     "test:pagination": "tsx --tsconfig tsconfig.scripts.json scripts/pagination.test.ts",
     "test:contact": "tsx --tsconfig tsconfig.scripts.json scripts/contact.test.ts",
     "test:confirmed-document": "tsx --tsconfig tsconfig.scripts.json scripts/confirmed-document.test.ts",
+    "test:amount-breakdown": "tsx --tsconfig tsconfig.scripts.json scripts/amount-breakdown.test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",

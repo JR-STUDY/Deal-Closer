@@ -16,8 +16,10 @@ import {
   type OpportunityFormValues,
   type OpportunityOwnerOption,
 } from "@/lib/opportunity";
+import type { AmountBreakdown } from "@/lib/amount-breakdown";
 import { useConfirmedDocument } from "@/components/opportunity/confirmed-document-actions";
 import { DocumentPreviewDialog } from "@/components/document/document-preview-dialog";
+import { HintTooltip } from "@/components/hint-tooltip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -300,26 +302,63 @@ function InlineSelectEditor({
  * "그래서 그 문서가 무엇이냐" 이지 "고치겠다" 가 아니다. 편집 화면으로 바로 넘기면 상세에서
  * 하던 일이 끊기고 되돌아와야 한다 — 편집으로 가는 길은 미리보기 안에 그대로 있다.
  * 연관 문서 탭의 미리보기와 **같은 컴포넌트**를 써서 두 경로가 다르게 보이지 않게 한다.
+ *
+ * ## 부가세 표기 (4차 피드백 W-C 1)
+ *
+ * 금액만 있으면 그 숫자가 **부가세를 포함한 값인지 알 수 없다.** 그런데 우리가 10% 를 붙여
+ * 계산할 수는 없다 — `Document.amount` 는 본문 요약 행의 마지막 값이라 이미 부가세가 든
+ * 문서도 있고(그러면 121% 가 된다) 사용자가 임의 수식을 쓴 문서도 있다. 그래서 **확정 문서
+ * 본문의 요약 행을 그대로 비춘다**(`@/lib/amount-breakdown` 이 유일한 판정처).
+ *
+ *   예상 금액  ₩101,200,000  합계 (VAT 포함)
+ *              공급가액 ₩92,000,000 · 부가세 (10%) ₩9,200,000
+ *              다올테크 인프라 증설 견적서(1차) 기준
+ *
+ * 마지막 요약 행은 위의 큰 숫자와 같은 값이라 **값을 뺀 라벨만** 금액 옆에 붙인다 — 같은
+ * 숫자를 두 번 적으면 읽는 사람이 다른 금액인지 멈춰서 확인한다. 라벨은 문서가 쓴 낱말
+ * 그대로다(우리가 `부가세 포함` 으로 고쳐 쓰지 않는다).
  */
 function ExpectedAmountValue({
   amount,
   confirmedDocument,
+  breakdown,
   isPinned,
   isSaving,
   onReleasePin,
 }: {
   amount: number;
   confirmedDocument: { id: string; title: string } | null;
+  /** 확정 문서 본문에서 뽑은 금액 내역 (문서가 없거나 설명할 수 없으면 표기를 생략한다) */
+  breakdown: AmountBreakdown | null;
   isPinned: boolean;
   isSaving: boolean;
   onReleasePin: () => void;
 }) {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
+  /*
+   * 금액 옆에 붙일 한 마디 — 문서가 마지막 요약 행에 적은 라벨(`합계 (VAT 포함)`)이거나,
+   * 요약 행이 아예 없을 때의 `부가세 별도` 다. 후자는 우리 낱말이지만 주장이 아니라 사실이다 —
+   * 요약 행이 없으면 금액이 품목 소계(수량×단가 합)라 부가세가 들어갈 자리 자체가 없고,
+   * 기본 양식의 각주도 "※ 상기 견적은 부가세 별도입니다." 로 같은 말을 한다.
+   * `unknown`(본문을 읽지 못함)일 때는 **아무 말도 하지 않는다.**
+   */
+  const totalNote =
+    breakdown?.kind === "rows"
+      ? breakdown.totalLabel
+      : breakdown?.kind === "subtotal"
+        ? "부가세 별도"
+        : "";
+  const lines = breakdown?.kind === "rows" ? breakdown.lines : [];
+  const hidden = breakdown?.kind === "rows" ? breakdown.hidden : [];
+
   return (
     <div className="space-y-0.5 py-1">
       <p className="flex flex-wrap items-baseline gap-x-2">
         <span className="font-medium tabular-nums">{formatKRW(amount)}</span>
+        {totalNote ? (
+          <span className="text-xs text-muted-foreground">{totalNote}</span>
+        ) : null}
         {confirmedDocument ? (
           <button
             type="button"
@@ -333,6 +372,42 @@ function ExpectedAmountValue({
           <span className="text-xs text-muted-foreground">확정 문서 없음</span>
         )}
       </p>
+
+      {/*
+        문서가 적은 내역을 한 줄에 나열한다. 구분자 `·` 는 시각 장식이라 읽히지 않게 감춘다.
+        줄이 많은 문서는 앞에서부터 상한(4줄)까지만 펼치고 나머지는 `외 N건` 툴팁으로 접는다 —
+        여기서 알고 싶은 것은 "부가세가 들어 있나" 이지 문서 전체의 계산서가 아니고, 전부 보려면
+        위의 문서 이름을 눌러 미리보기를 열면 된다. 툴팁은 목록과 같은 `HintTooltip` 이라
+        Tab 초점으로도 열린다 (ACC_*).
+      */}
+      {lines.length > 0 ? (
+        <p className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
+          {lines.map((line, index) => (
+            // key 는 본문 요약 행의 id 다 — 라벨은 같은 값이 여럿일 수 있어 안전하지 않다
+            <span key={line.id}>
+              {index > 0 ? <span aria-hidden="true">· </span> : null}
+              {line.label ? `${line.label} ` : ""}
+              <span className="tabular-nums">{formatKRW(line.value)}</span>
+            </span>
+          ))}
+          {hidden.length > 0 ? (
+            <HintTooltip
+              content={
+                <span className="block">
+                  {hidden.map((line) => (
+                    <span key={line.id} className="block">
+                      {line.label ? `${line.label} ` : ""}
+                      {formatKRW(line.value)}
+                    </span>
+                  ))}
+                </span>
+              }
+            >
+              외 {hidden.length}건
+            </HintTooltip>
+          ) : null}
+        </p>
+      ) : null}
 
       {confirmedDocument ? (
         <DocumentPreviewDialog
@@ -371,12 +446,15 @@ export function OpportunityInlineFields({
   accounts,
   owners,
   confirmedDocument,
+  breakdown,
 }: {
   opportunity: OpportunityDTO;
   accounts: OpportunityAccountOption[];
   owners: OpportunityOwnerOption[];
   /** 예상 금액의 근거가 된 문서 (없으면 null) */
   confirmedDocument: { id: string; title: string } | null;
+  /** 그 문서 본문에서 뽑은 금액 내역 (문서가 없으면 null) — 부가세 표기의 유일한 출처 */
+  breakdown: AmountBreakdown | null;
 }) {
   const router = useRouter();
   const confirmed = useConfirmedDocument(opportunity.id);
@@ -505,6 +583,7 @@ export function OpportunityInlineFields({
               <ExpectedAmountValue
                 amount={opportunity.expectedAmount}
                 confirmedDocument={confirmedDocument}
+                breakdown={breakdown}
                 isPinned={opportunity.isConfirmedDocumentPinned}
                 isSaving={confirmed.isSaving}
                 onReleasePin={releasePin}
