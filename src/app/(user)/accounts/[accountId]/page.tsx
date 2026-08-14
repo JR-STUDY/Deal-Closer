@@ -5,12 +5,16 @@ import { toAccountDTO } from "@/lib/account";
 import { toContactDTO } from "@/lib/contact";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
-import { DetailColumns } from "@/components/detail-columns";
+import { DetailShell } from "@/components/detail-shell";
 import { NewOpportunityButton } from "@/components/opportunity/new-opportunity-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AccountContacts } from "./_components/account-contacts";
 import { AccountDetailActions } from "./_components/account-detail-actions";
-import { AccountRelatedTabs } from "./_components/account-related-tabs";
+import { AccountDocumentList } from "./_components/account-document-list";
+import {
+  AccountEmailList,
+  AccountOpportunityList,
+} from "./_components/account-related-panels";
 
 /** 기본 정보 한 줄 (값이 없으면 안내 문구를 대신 보여준다) */
 function InfoRow({ label, value }: { label: string; value: string | null }) {
@@ -31,9 +35,9 @@ function InfoRow({ label, value }: { label: string; value: string | null }) {
 /**
  * 거래처 상세 (F-103) — 기본 정보 + 담당자 + 메모 + 연관 기회·문서·이메일 이력 탭.
  *
- * **2단 레이아웃**이다 (2차 피드백 9) — 기회 상세와 같은 골격(`DetailColumns`)을 쓴다.
- * 좌측은 이 거래처가 "무엇인지", 우측은 "무슨 일이 있었는지"다. `lg` 미만에서는 한 단으로
- * 쌓여 좌측이 먼저 온다.
+ * 기회 상세와 **같은 골격**(`DetailShell`)을 쓴다 (3차 피드백 1). 본문(기본 정보·담당자·
+ * 메모)이 전체 폭을 쓰고, 연관 기회·문서·이메일 이력은 오른쪽에서 밀려 나오는 드로어에
+ * 담긴다 — 필요할 때만 꺼내고 트리거를 한 번 더 누르면 다시 들어간다.
  *
  * 여섯 조회는 서로 독립이라 병렬로 실행하고, 전부 orgId 로 스코프한다.
  */
@@ -111,10 +115,12 @@ export default async function AccountDetailPage({
       <PageHeader
         title={account.companyName}
         backHref="/accounts"
-        breadcrumb={[
-          { label: "거래처", href: "/accounts" },
-          { label: account.companyName },
-        ]}
+        /*
+         * 기회 상세와 **같은 2줄 구조**다 (3차 피드백 3) — 위 줄이 그 칸의 뜻(거래처),
+         * 아래 줄이 값(회사명)이다. 칸이 하나뿐이라 `>` 구분자는 나오지 않는다.
+         * caption 을 주지 않는 다른 화면(보관함 등)은 기존 한 줄 표기를 그대로 쓴다.
+         */
+        breadcrumb={[{ caption: "거래처", label: account.companyName }]}
         description={`${formatDate(account.createdAt)} 등록 · ${formatDateTime(account.updatedAt)} 최근 수정`}
         actions={
           <>
@@ -135,62 +141,77 @@ export default async function AccountDetailPage({
         }
       />
 
-      <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
-        {/*
-          2단 레이아웃 — 기회 상세와 **같은 골격**을 쓴다 (2차 피드백 9).
-          좌: 이 거래처가 무엇인지(기본 정보·담당자·메모) / 우: 무슨 일이 있었는지(연관 탭).
-          탭을 본문 아래로 늘어놓으면 좌우 공간이 남고 스크롤만 길어진다.
-        */}
-        <DetailColumns
-          left={
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">기본 정보</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <dl className="divide-y">
-                    <InfoRow label="회사명" value={account.companyName} />
-                    <InfoRow label="사업자등록번호" value={account.bizRegNo} />
-                  </dl>
-                </CardContent>
-              </Card>
-
-              {/* 담당자는 여러 명이므로 기본 정보 밖으로 뺀다 — 여기서 전원을 관리한다 (거래처-8) */}
-              <AccountContacts
-                accountId={account.id}
-                companyName={account.companyName}
-                contacts={contacts.map(toContactDTO)}
+      {/*
+        본문은 전체 폭을 쓰고 연관 데이터는 드로어로 뺀다 — 기회 상세와 **같은 골격**이다
+        (3차 피드백 1). 문서 `createdAt` 은 클라이언트 목록으로 넘기므로 ISO 문자열로 바꾼다
+        (REACT_BEST_PRACTICES: 직렬화 불가한 값을 클라이언트에 넘기지 않는다).
+      */}
+      <DetailShell
+        panels={[
+          {
+            id: "opportunities",
+            label: "영업 기회",
+            count: opportunities.length,
+            content: <AccountOpportunityList opportunities={opportunities} />,
+          },
+          {
+            id: "documents",
+            label: "문서",
+            count: documents.length,
+            content: (
+              <AccountDocumentList
+                documents={documents.map((document) => ({
+                  ...document,
+                  createdAt: document.createdAt.toISOString(),
+                }))}
               />
+            ),
+          },
+          {
+            id: "emails",
+            label: "이메일 이력",
+            count: emailLogs.length,
+            content: <AccountEmailList emailLogs={emailLogs} />,
+          },
+        ]}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">기본 정보</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="divide-y">
+              <InfoRow label="회사명" value={account.companyName} />
+              <InfoRow label="사업자등록번호" value={account.bizRegNo} />
+            </dl>
+          </CardContent>
+        </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">메모</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {account.memo ? (
-                    <p className="text-sm leading-relaxed whitespace-pre-line">
-                      {account.memo}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      아직 메모가 없습니다. 수정에서 영업 이력·특이사항을
-                      남겨두시면 팀원이 함께 볼 수 있습니다.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </>
-          }
-          right={
-            <AccountRelatedTabs
-              opportunities={opportunities}
-              documents={documents}
-              emailLogs={emailLogs}
-            />
-          }
+        {/* 담당자는 여러 명이므로 기본 정보 밖으로 뺀다 — 여기서 전원을 관리한다 (거래처-8) */}
+        <AccountContacts
+          accountId={account.id}
+          companyName={account.companyName}
+          contacts={contacts.map(toContactDTO)}
         />
-      </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">메모</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {account.memo ? (
+              <p className="text-sm leading-relaxed whitespace-pre-line">
+                {account.memo}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                아직 메모가 없습니다. 수정에서 영업 이력·특이사항을 남겨두시면
+                팀원이 함께 볼 수 있습니다.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </DetailShell>
     </>
   );
 }

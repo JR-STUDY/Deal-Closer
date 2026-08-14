@@ -14,16 +14,17 @@ import {
 import { formatDate, formatDateTime, formatKRW } from "@/lib/format";
 import type { StageHistoryEntry } from "@/lib/opportunity-progress";
 import { PageHeader } from "@/components/page-header";
-import { DetailColumns } from "@/components/detail-columns";
+import { DetailShell } from "@/components/detail-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OpportunityStageStepper } from "@/components/opportunity/opportunity-stage-stepper";
 import { OpportunityDetailActions } from "./_components/opportunity-detail-actions";
 import { OpportunityInlineFields } from "./_components/opportunity-inline-fields";
+import { OpportunityDocuments } from "./_components/opportunity-documents";
 import {
-  OpportunityDetailTabs,
+  OpportunityTimeline,
   type TimelineEntry,
-} from "./_components/opportunity-detail-tabs";
+} from "./_components/opportunity-timeline";
 
 /** 이력 한 줄에 붙일 문서 요약 (기회-13) */
 type TimelineDocumentInfo = {
@@ -100,9 +101,9 @@ function describeActivity(
 /**
  * 영업 기회 상세 (F-111 · F-112 · F-114) — 진행 단계 · 기본 정보 · 메모 · 이력 · 연관 문서.
  *
- * **2단 레이아웃**이다 (기회-4) — 좌측은 이 기회가 "무엇인지"(단계·기본 정보·메모),
- * 우측은 "무슨 일이 있었는지"(이력·연관 문서)다. 좁은 화면에서는 좌 → 우 순서로 쌓인다.
- * 값은 좌측에서 인라인으로 바로 고치고(기회-7), 단계는 스테퍼 노드를 눌러 옮긴다(기회-1).
+ * 본문(단계·기본 정보·메모)은 **전체 폭**을 쓰고, "무슨 일이 있었는지"(이력·연관 문서)는
+ * 오른쪽에서 밀려 나오는 **드로어**에 담긴다 (3차 피드백 1 — 거래처 상세와 같은 골격).
+ * 값은 본문에서 인라인으로 바로 고치고(기회-7), 단계는 스테퍼 노드를 눌러 옮긴다(기회-1).
  *
  * 다섯 조회는 서로 독립이라 병렬로 실행하고, 전부 orgId 로 스코프한다.
  */
@@ -221,7 +222,8 @@ export default async function OpportunityDetailPage({
       actorName: log.actor.name,
       occurredAt: log.occurredAt,
       detailText: describeActivity(log.eventType, detail),
-      documentHref: document ? `/editor/${document.id}` : null,
+      // 편집 화면 링크가 아니라 **미리보기 팝업**을 여는 데 쓴다 (3차 피드백 2)
+      documentId: document?.id ?? null,
       // 제목·종류는 현재 문서 값을 우선 쓰고, 없으면 이력에 남긴 당시 값을 보여준다 (기회-13)
       documentTitle: document?.title ?? text(detail, "documentTitle"),
       documentType: document?.type ?? text(detail, "documentType"),
@@ -289,48 +291,57 @@ export default async function OpportunityDetailPage({
         }
       />
 
-      <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
-        {/*
-          2단 레이아웃 (기회-4) — 좌: 이 기회가 무엇인지 / 우: 무슨 일이 있었는지.
-          lg 미만에서는 한 단으로 쌓여 좌측(단계·기본 정보·메모)이 먼저 보인다.
-        */}
-        <DetailColumns
-          left={
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">진행 단계</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <OpportunityStageStepper
-                    stage={dto.stage}
-                    lostReason={opportunity.lostReason}
-                    history={stageHistory}
-                    // 노드를 눌러 단계를 옮긴다 (기회-1) — 저장은 stage 전용 라우트만 경유한다
-                    action={{ opportunityId: dto.id, name: dto.name }}
-                  />
-                </CardContent>
-              </Card>
-
-              {/* 기본 정보·메모는 인라인으로 바로 고친다 (기회-7) — 예상 금액만 읽기 전용이다 */}
-              <OpportunityInlineFields
-                opportunity={dto}
-                accounts={accounts}
-                owners={owners}
-                confirmedDocument={confirmedDocument}
+      {/*
+        본문은 전체 폭을 쓰고, "무슨 일이 있었는지"(이력·연관 문서)는 오른쪽에서 밀려 나오는
+        드로어에 담는다 (3차 피드백 1). 거래처 상세와 **같은 골격**이라 화면을 옮겨도 트리거가
+        같은 자리에 있다. 열려 있어도 바탕을 막지 않으므로 왼쪽 값을 그대로 고칠 수 있다.
+      */}
+      <DetailShell
+        panels={[
+          {
+            id: "timeline",
+            label: "이력",
+            count: timeline.length,
+            content: <OpportunityTimeline timeline={timeline} />,
+          },
+          {
+            id: "documents",
+            label: "연관 문서",
+            count: documents.length,
+            // 연결·확정 지정·미리보기가 모두 여기 모인다 (기회-5 · 기회-6 ③ · 기회-19)
+            content: (
+              <OpportunityDocuments
+                opportunityId={dto.id}
+                documents={linkedDocuments}
+                confirmedDocumentId={dto.confirmedDocumentId}
               />
-            </>
-          }
-          right={
-            <OpportunityDetailTabs
-              timeline={timeline}
-              documents={linkedDocuments}
-              opportunityId={dto.id}
-              confirmedDocumentId={dto.confirmedDocumentId}
+            ),
+          },
+        ]}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">진행 단계</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <OpportunityStageStepper
+              stage={dto.stage}
+              lostReason={opportunity.lostReason}
+              history={stageHistory}
+              // 노드를 눌러 단계를 옮긴다 (기회-1) — 저장은 stage 전용 라우트만 경유한다
+              action={{ opportunityId: dto.id, name: dto.name }}
             />
-          }
+          </CardContent>
+        </Card>
+
+        {/* 기본 정보·메모는 인라인으로 바로 고친다 (기회-7) — 예상 금액만 읽기 전용이다 */}
+        <OpportunityInlineFields
+          opportunity={dto}
+          accounts={accounts}
+          owners={owners}
+          confirmedDocument={confirmedDocument}
         />
-      </div>
+      </DetailShell>
     </>
   );
 }

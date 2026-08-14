@@ -362,18 +362,24 @@ export function OpportunityDocuments({
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    {/*
+                      제목을 눌러도 편집 화면으로 가지 않고 **미리보기**가 뜬다
+                      (3차 피드백 2). 아래 `미리보기` 버튼과 같은 동작이라 문서를
+                      가리키는 클릭이 한 곳으로 모인다. 링크가 아니라 버튼이지만
+                      Tab 으로 닿고 Enter·Space 로 열린다 (정책 ACC_*).
+                    */}
+                    <button
+                      type="button"
+                      onClick={() => setPreview(document)}
+                      className="flex min-w-0 max-w-full items-center gap-2 rounded text-left font-medium transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    >
                       <FileText
                         className="size-4 shrink-0 text-muted-foreground"
                         aria-hidden="true"
                       />
-                      <Link
-                        href={`/editor/${document.id}`}
-                        className="truncate font-medium transition-colors hover:text-primary hover:underline"
-                      >
-                        {document.title}
-                      </Link>
-                    </div>
+                      <span className="truncate">{document.title}</span>
+                      <span className="sr-only"> — 미리보기 열기</span>
+                    </button>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {formatDate(document.createdAt)} 생성
                       {isConfirmed ? " · 이 문서가 예상 금액의 기준입니다" : ""}

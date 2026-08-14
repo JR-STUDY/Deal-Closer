@@ -358,8 +358,8 @@ function ExpectedAmountValue({
         ) : null
       ) : (
         <p className="text-xs text-muted-foreground">
-          오른쪽 &ldquo;연관 문서&rdquo; 에서 문서를 연결하시면 그 금액이 예상
-          금액이 됩니다.
+          오른쪽 위 &ldquo;연관 문서&rdquo; 를 열어 문서를 연결하시면 그 금액이
+          예상 금액이 됩니다.
         </p>
       )}
     </div>

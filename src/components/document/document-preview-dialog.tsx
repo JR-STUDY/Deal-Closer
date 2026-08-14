@@ -42,8 +42,8 @@ export function DocumentPreviewDialog({
         <DialogHeader>
           <DialogTitle className="truncate">미리보기 · {title}</DialogTitle>
           <DialogDescription>
-            저장된 내용을 그대로 보여드립니다. 내용을 고치시려면 편집 화면으로
-            이동해주세요.
+            저장된 내용을 그대로 보여드립니다. 내용을 고치시려면 아래 편집
+            바로가기를 눌러주세요.
           </DialogDescription>
         </DialogHeader>
 
@@ -65,7 +65,7 @@ export function DocumentPreviewDialog({
           <Button asChild>
             <Link href={`/editor/${documentId}`}>
               <PenLine className="size-4" aria-hidden="true" />
-              편집 화면으로 이동
+              편집 바로가기
             </Link>
           </Button>
         </DialogFooter>
