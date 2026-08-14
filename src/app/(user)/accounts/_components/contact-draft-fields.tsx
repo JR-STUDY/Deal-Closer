@@ -12,42 +12,40 @@ import {
   CONTACT_PHONE_MAX,
   CONTACT_POSITION_MAX,
   EMPTY_CONTACT_FORM,
-  resolveBatchIsPrimary,
+  withAppendPrimary,
   type ContactFormValues,
 } from "@/lib/contact";
 
 /**
- * 거래처 등록 팝업의 담당자 입력 묶음 (거래처-8 · 2차 피드백 8번).
+ * 담당자 여러 명을 한 번에 넣는 입력 묶음 (거래처-8 · 2차 피드백 8번 · 4차 피드백 2).
  *
- * 거래처를 만들 때 담당자를 **여러 명** 함께 넣는다. 저장 전에는 담당자를 붙일 자리가
- * 없어서, 등록 직후 상세로 들어가 한 명씩 다시 넣는 왕복이 생기기 때문이다.
+ * **거래처 등록 팝업과 거래처 상세의 "담당자 추가" 가 이 묶음을 함께 쓴다** — 같은 일을
+ * 하는 두 폼이 다르게 생기면 사용자가 화면마다 다시 배워야 한다.
  *
  * 대표는 **행마다 놓인 라디오**로 직접 고른다 — 라디오라 하나만 켜지고, 그 하나가
  * "담당자가 1명 이상이면 대표는 정확히 1명" 불변식을 화면에서 그대로 보여준다.
- * 판정 자체는 `@/lib/contact` 의 `resolveBatchIsPrimary` 가 단일 기준이며(아무도 고르지
- * 않으면 첫 담당자), 서버도 같은 함수를 쓴다. 담당자 0명도 정상이라 처음에는 빈 상태다.
+ * 판정 자체는 `@/lib/contact` 의 `resolveAppendIsPrimary` 가 단일 기준이고 서버도 같은
+ * 함수를 쓴다 — **이미 담당자가 있는 거래처**(`existingContactCount > 0`)에 덧붙일 때는
+ * 아무도 미리 켜지 않는다. 켜 두면 담당자를 한 명 더 넣었을 뿐인데 대표가 바뀐다.
  *
- * 값의 형식 검증은 여기서 하지 않는다 — 저장 직전에 `parseContactInputs` 한 곳을
+ * 값의 형식 검증은 여기서 하지 않는다 — 저장 직전에 `parseContactAdditions` 한 곳을
  * 통과시킨다. 폼과 API 가 같은 규칙을 쓰려면 규칙이 두 군데 있으면 안 된다.
  */
 
 /** 편집 중인 담당자 한 줄. `key` 는 React 목록 식별자이며 저장할 때는 보내지 않는다 */
 export type ContactDraft = ContactFormValues & { key: string };
 
-/** 대표를 정확히 1명으로 맞춘 새 목록 (첫 행 자동 대표·대표 삭제 시 승격을 함께 처리한다) */
-function withResolvedPrimary(rows: ContactDraft[]): ContactDraft[] {
-  const flags = resolveBatchIsPrimary(rows);
-  return rows.map((row, index) => ({ ...row, isPrimary: flags[index] }));
-}
-
 export function ContactDraftFields({
   rows,
   onChange,
   disabled,
+  existingContactCount = 0,
 }: {
   rows: ContactDraft[];
   onChange: (rows: ContactDraft[]) => void;
   disabled?: boolean;
+  /** 이 거래처에 이미 있는 담당자 수. 0 이면 첫 행이 자동으로 대표가 된다 */
+  existingContactCount?: number;
 }) {
   // 라디오 그룹 이름·입력 id 의 뿌리. 한 화면에 폼이 둘 있어도 서로 간섭하지 않는다
   const groupId = useId();
@@ -57,11 +55,21 @@ export function ContactDraftFields({
   const addRow = () => {
     const key = `row-${nextRowNo.current}`;
     nextRowNo.current += 1;
-    onChange(withResolvedPrimary([...rows, { ...EMPTY_CONTACT_FORM, key }]));
+    onChange(
+      withAppendPrimary(existingContactCount, [
+        ...rows,
+        { ...EMPTY_CONTACT_FORM, key },
+      ]),
+    );
   };
 
   const removeRow = (key: string) => {
-    onChange(withResolvedPrimary(rows.filter((row) => row.key !== key)));
+    onChange(
+      withAppendPrimary(
+        existingContactCount,
+        rows.filter((row) => row.key !== key),
+      ),
+    );
   };
 
   const patchRow = (key: string, patch: Partial<ContactFormValues>) => {

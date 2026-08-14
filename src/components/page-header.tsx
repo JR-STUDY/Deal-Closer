@@ -11,8 +11,36 @@ import { BackButton } from "@/components/back-button";
  * (예: `거래처` / `다올테크`). 한 칸이라도 caption 이 있으면 브레드크럼 전체가
  * **라벨 위 · 값 아래** 2줄 구조로 그려지고, `>` 는 값 줄 사이에만 놓인다 (기회-7).
  * caption 이 하나도 없으면 기존 한 줄 표기를 그대로 쓴다.
+ *
+ * `captionHref` 를 주면 **라벨도 링크**가 되어 그 분류의 목록으로 간다 (4차 피드백 1).
+ * 라벨과 값은 서로 다른 곳을 가리키므로 한 칸 안에 링크가 둘이다.
  */
-export type Crumb = { label: string; href?: string; caption?: string };
+export type Crumb = {
+  label: string;
+  href?: string;
+  caption?: string;
+  /** 라벨(caption)을 눌렀을 때 갈 곳. 주지 않으면 `CAPTION_LIST_HREF` 의 기본값을 쓴다 */
+  captionHref?: string;
+};
+
+/**
+ * 라벨 → 그 분류의 목록 경로 기본값.
+ *
+ * 호출한 화면이 `captionHref` 를 주지 않아도 `거래처`·`기회` 라벨은 목록으로 이어진다 —
+ * 라벨을 눌러 목록으로 가는 것은 **화면마다 고르는 취향이 아니라 브레드크럼의 뜻**이므로
+ * 기본값이 공용 컴포넌트에 있어야 두 상세(거래처·기회)의 동작이 갈라지지 않는다.
+ * 예외가 필요한 화면은 `captionHref` 로 덮어쓴다.
+ */
+const CAPTION_LIST_HREF: Record<string, string> = {
+  거래처: "/accounts",
+  기회: "/opportunities",
+};
+
+/** 그 칸의 라벨이 이어질 목록 경로 (없으면 라벨은 그냥 글씨로 남는다) */
+function captionHrefOf(crumb: Crumb): string | undefined {
+  if (crumb.captionHref) return crumb.captionHref;
+  return crumb.caption ? CAPTION_LIST_HREF[crumb.caption] : undefined;
+}
 
 type PageHeaderProps = {
   title: string;
@@ -36,8 +64,15 @@ type PageHeaderProps = {
  * 뒤섞여** 어느 것이 목록이고 어느 것이 이름인지 알 수 없다. 위 줄은 그 칸이 무엇인지,
  * 아래 줄은 실제 값이다. `>` 는 값끼리의 관계를 나타내므로 **값 줄에만** 둔다.
  *
- * 스크린리더에는 `거래처 다올테크, 기회 인프라 증설 1차` 로 읽힌다 — 라벨과 값을 같은
- * `<li>` 로 묶었기 때문이다. 구분자는 시각 장식이라 `aria-hidden` 이다 (정책 ACC_*).
+ * 라벨은 그 분류의 **목록으로 가는 링크**다 (4차 피드백 1) — `거래처` 를 누르면 거래처
+ * 목록, `기회` 를 누르면 기회 목록이다. 한 칸 안에 링크가 둘(라벨·값)이고 서로 다른 곳으로
+ * 가므로, 라벨 링크에는 `aria-label="거래처 목록으로 이동"` 처럼 **가는 곳을 밝힌 접근
+ * 이름**을 준다. 눈에 보이는 글자(`거래처`)를 접근 이름이 그대로 품으므로 음성 입력으로
+ * "거래처" 라고 말해도 이 링크가 잡힌다(WCAG 2.5.3 Label in Name).
+ *
+ * 스크린리더에는 `거래처 목록으로 이동(링크), 다올테크` 처럼 읽힌다 — 라벨과 값을 같은
+ * `<li>` 로 묶어 어느 값이 어느 분류의 것인지 함께 읽히게 했다.
+ * 구분자는 시각 장식이라 `aria-hidden` 이다 (정책 ACC_*).
  */
 function CaptionedBreadcrumb({ crumbs }: { crumbs: Crumb[] }) {
   return (
@@ -46,6 +81,8 @@ function CaptionedBreadcrumb({ crumbs }: { crumbs: Crumb[] }) {
         {crumbs.map((crumb, index) => {
           const isLast = index === crumbs.length - 1;
           const isLink = Boolean(crumb.href) && !isLast;
+          // 라벨은 마지막 칸(현재 위치)에서도 링크다 — 값은 여기지만 분류의 목록은 다른 곳이다
+          const captionHref = captionHrefOf(crumb);
           return (
             <Fragment key={crumb.href ?? crumb.label}>
               {index > 0 ? (
@@ -55,7 +92,16 @@ function CaptionedBreadcrumb({ crumbs }: { crumbs: Crumb[] }) {
                 </li>
               ) : null}
               <li className={isLast ? "flex min-w-0 flex-col" : "flex flex-col"}>
-                {crumb.caption ? (
+                {crumb.caption && captionHref ? (
+                  <Link
+                    href={captionHref}
+                    // 링크 영역을 글자에 맞춘다 — flex 열에서 늘어나면 옆의 빈 칸을 눌러도 이동한다
+                    aria-label={`${crumb.caption} 목록으로 이동`}
+                    className="w-fit rounded text-xs leading-4 font-medium text-muted-foreground transition-colors hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  >
+                    {crumb.caption}
+                  </Link>
+                ) : crumb.caption ? (
                   <span className="text-xs leading-4 font-medium text-muted-foreground">
                     {crumb.caption}
                   </span>
