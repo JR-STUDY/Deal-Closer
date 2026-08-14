@@ -107,7 +107,7 @@ export default async function LibraryPage({
         }
       />
 
-      <div className="flex-1 space-y-4 overflow-auto p-8">
+      <div className="flex-1 space-y-4 overflow-auto p-8 [scrollbar-gutter:stable]">
         {/* 검색 + 계약 단계 + 종류 필터 (한 줄에서 동시 적용) */}
         <Suspense fallback={<div className="h-9" />}>
           <LibraryToolbar />

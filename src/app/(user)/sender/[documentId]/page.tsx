@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { toTemplateDTO, visibleTemplatesWhere } from "@/lib/email-template";
 import { teamAddress } from "@/lib/mail-domain";
+import { findLinkedOpportunity } from "@/lib/opportunity-recipient";
 import { EMAIL_PROVIDER_LABELS, type EmailProvider } from "@/lib/constants";
 import { SenderClient, type SenderOption } from "./_components/sender-client";
 
@@ -17,7 +18,8 @@ export default async function SenderPage({
   // 문서·개인 발신 계정·메일 템플릿·인증 팀 도메인을 병렬 조회 (REACT_BEST_PRACTICES)
   const [document, personalAccount, templates, verifiedDomains] =
     await Promise.all([
-      prisma.document.findUnique({ where: { id: documentId } }),
+      // 다른 조직의 문서 id 가 들어와도 404 로 끝나야 한다 → orgId 로 좁힌다
+      prisma.document.findFirst({ where: { id: documentId, orgId: user.orgId } }),
       prisma.emailAccount
         .findFirst({ where: { userId: user.id, isDefault: true } })
         .then(
@@ -38,6 +40,15 @@ export default async function SenderPage({
   if (!document) {
     notFound();
   }
+
+  /*
+   * 연결된 기회 1건만 읽는다 (발송-11). 조직 전체 기회를 실어 보내던 옛 셀렉트와 달리
+   * 자동완성은 `GET /api/opportunities?q=` 로 그때그때 찾으므로 목록이 필요 없다.
+   * 이 조회는 문서의 opportunityId 에 기대므로 위 병렬 묶음에 넣을 수 없다.
+   */
+  const linkedOpportunity = document.opportunityId
+    ? await findLinkedOpportunity(document.opportunityId, user.orgId)
+    : null;
 
   // 발신 계정 선택지 — 개인 연동 계정 + 인증 팀 도메인 (발송 화면에서 바로 전환)
   const senderOptions: SenderOption[] = [
@@ -79,6 +90,7 @@ export default async function SenderPage({
         clientName: document.clientName,
         amount: document.amount,
       }}
+      linkedOpportunity={linkedOpportunity}
       senderOptions={senderOptions}
       initialSelectedValue={selectedValue}
       senderName={user.name}

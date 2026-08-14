@@ -45,7 +45,7 @@ export default async function TeamMembersPage() {
         actions={<InviteMemberDialog />}
       />
 
-      <div className="flex-1 space-y-6 overflow-auto p-8">
+      <div className="flex-1 space-y-6 overflow-auto p-8 [scrollbar-gutter:stable]">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">

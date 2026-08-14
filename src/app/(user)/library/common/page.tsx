@@ -76,7 +76,7 @@ export default async function CommonDocumentsPage({
         }
       />
 
-      <div className="flex-1 space-y-4 overflow-auto p-8">
+      <div className="flex-1 space-y-4 overflow-auto p-8 [scrollbar-gutter:stable]">
         {documents.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-20 text-center">
             <Users className="size-10 text-muted-foreground" />

@@ -24,6 +24,14 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   PROPOSAL: "제안서",
 };
 
+/**
+ * DB 의 `type` 컬럼은 String 이므로, 읽어온 값을 좁힐 때 사용한다.
+ * 발송 연동 전이(F-113)가 문서 종류별 규칙을 고르기 전에 통과시킨다.
+ */
+export function isDocumentType(value: string): value is DocumentType {
+  return (DOCUMENT_TYPES as readonly string[]).includes(value);
+}
+
 // ── 문서 상태 ──
 // DRAFT → SENT → COMPLETED 가 정상 흐름이며, 어느 상태에서든 VOID(폐기)로 보낼 수 있다.
 // 상태 전환은 편집 화면의 상태 드롭다운에서 수동으로 자유롭게 수행한다.
@@ -36,6 +44,14 @@ export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
   COMPLETED: "계약완료",
   VOID: "폐기",
 };
+
+/**
+ * DB 의 `status` 컬럼은 String 이므로, 읽어온 값을 좁힐 때 사용한다.
+ * 확정 문서 판정(`confirmed-document.ts`)이 폐기 문서를 후보에서 빼기 전에 통과시킨다.
+ */
+export function isDocumentStatus(value: string): value is DocumentStatus {
+  return (DOCUMENT_STATUSES as readonly string[]).includes(value);
+}
 
 /**
  * 폐기(VOID)를 제외한 진행 중 상태.
@@ -108,6 +124,14 @@ export function isClosedOpportunityStage(stage: OpportunityStage): boolean {
     stage,
   );
 }
+
+// ── 목록 페이지네이션 (거래처-3 · 기회-18) ──
+/**
+ * 목록 한 페이지에 보여줄 행 수. 거래처·기회 목록이 같은 값을 쓴다
+ * (두 화면의 페이지 감각이 다르면 같은 컴포넌트를 쓴 의미가 없다).
+ * 기회 칸반 보기는 페이지네이션 대상이 아니다 — 전체가 보여야 파이프라인이 성립한다.
+ */
+export const LIST_PAGE_SIZE = 10;
 
 // ── 활동 이력 이벤트 유형 (PRD F-114) ──
 export const ACTIVITY_EVENT_TYPES = [

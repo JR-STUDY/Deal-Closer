@@ -17,7 +17,7 @@ export default async function AdminProfilePage() {
         description="계정 정보와 보안, 알림 설정을 관리합니다."
       />
 
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
         <ProfileTabs
           name={user.name}
           email={user.email}

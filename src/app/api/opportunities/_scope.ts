@@ -25,6 +25,6 @@ export async function findRefScopeError(
   ]);
 
   if (!account) return "거래처를 찾을 수 없습니다.";
-  if (!owner) return "담당자를 찾을 수 없습니다.";
+  if (!owner) return "영업 담당자를 찾을 수 없습니다.";
   return null;
 }

@@ -2,10 +2,12 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Sparkles,
   MessageSquareText,
   Paperclip,
+  Target,
   X,
   FileText,
   FolderOpen,
@@ -97,6 +99,13 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
 
+/** 만든 문서를 붙일 영업 기회 (기회 상세에서 "문서 작성"으로 들어온 경우, 기회-2) */
+export type GeneratorOpportunity = {
+  id: string;
+  name: string;
+  accountName: string;
+};
+
 /** AI 대화형 문서 생성기 입력 폼 (클라이언트 전용 상태) */
 export function GeneratorForm({
   libraryDocuments,
@@ -106,6 +115,7 @@ export function GeneratorForm({
   models,
   defaultModel,
   mockProvider,
+  opportunity,
 }: {
   libraryDocuments: LibraryDoc[];
   templates: TemplateChoice[];
@@ -117,6 +127,8 @@ export function GeneratorForm({
   defaultModel: string;
   /** 목 프로바이더로 동작 중 */
   mockProvider: boolean;
+  /** 있으면 생성한 문서를 이 기회에 연결한다. 없으면 평소처럼 보관함에만 담긴다. */
+  opportunity: GeneratorOpportunity | null;
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -314,6 +326,11 @@ export function GeneratorForm({
     if (clientName.trim()) formData.append("clientName", clientName.trim());
     if (clientContact.trim()) formData.append("clientContact", clientContact.trim());
     if (clientEmail.trim()) formData.append("clientEmail", clientEmail.trim());
+    // 기회 상세에서 들어왔다면 만든 문서를 그 기회에 연결한다 (기회-2).
+    // 연결 여부·권한은 서버가 orgId 로 다시 확인한다 — 여기 값은 그대로 믿지 않는다.
+    if (opportunity) {
+      formData.append("opportunityId", opportunity.id);
+    }
 
     try {
       const res = await fetch("/api/generate", {
@@ -335,8 +352,17 @@ export function GeneratorForm({
         return;
       }
 
-      // 생성 요약(무엇을 어떻게 만들었는지)을 그대로 보여준다
-      toast.success(json?.data?.summary ?? "AI 초안을 생성했습니다.");
+      // 생성 요약(무엇을 어떻게 만들었는지)을 그대로 보여준다.
+      // 실제로 연결됐는지는 서버 응답으로 판단한다 — 요청에 실어 보낸 값이 아니라
+      // 서버가 확인해 되돌려준 값이라야 "연결됐다"고 말할 수 있다.
+      const linkedOpportunityId: string | null =
+        json?.data?.opportunityId ?? null;
+      const summary: string = json?.data?.summary ?? "AI 초안을 생성했습니다.";
+      toast.success(
+        linkedOpportunityId && opportunity
+          ? `${summary} ‘${opportunity.name}’ 기회에 연결했습니다.`
+          : summary,
+      );
       router.push(`/editor/${documentId}`);
       // 성공 시 페이지 이동하므로 isSubmitting 을 유지해 중복 제출을 막는다.
     } catch {
@@ -347,6 +373,29 @@ export function GeneratorForm({
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
+      {/* 어느 기회에 붙을 문서인지 먼저 알린다 (기회-2) — 만들고 나서야 알게 되면 늦다 */}
+      {opportunity ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border bg-muted/30 px-4 py-3 text-sm">
+          <Target className="size-4 shrink-0 text-primary" aria-hidden="true" />
+          <span>
+            <span className="font-medium">{opportunity.name}</span>
+            <span className="text-muted-foreground">
+              {" "}
+              · {opportunity.accountName}
+            </span>
+          </span>
+          <span className="text-muted-foreground">
+            기회에 연결할 문서를 만듭니다.
+          </span>
+          <Link
+            href={`/opportunities/${opportunity.id}`}
+            className="ml-auto shrink-0 rounded text-xs text-muted-foreground transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            기회로 돌아가기
+          </Link>
+        </div>
+      ) : null}
+
       <Card>
         <CardHeader className="items-center text-center">
           <CardTitle className="text-xl">

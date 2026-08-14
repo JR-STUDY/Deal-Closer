@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Target, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -22,6 +23,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toAccountFormValues, type AccountDTO } from "@/lib/account";
+import {
+  emptyOpportunityForm,
+  type OpportunityOwnerOption,
+} from "@/lib/opportunity";
+import { OpportunityFormDialog } from "@/components/opportunity/opportunity-form-dialog";
 import { AccountFormDialog } from "./account-form-dialog";
 
 /**
@@ -30,6 +36,11 @@ import { AccountFormDialog } from "./account-form-dialog";
  * 목록에서도 수정·삭제가 가능하다는 사실이 드러나야 해서 각 행 끝에 `⋯` 메뉴를 둔다.
  * 수정은 상세로 보내지 않고 목록에서 바로 폼 다이얼로그를 연다 — 그게 이 기능의 이유다.
  *
+ * **기회 생성**도 여기서 한다 (거래처-2) — 거래처를 보다가 "여기에 건이 하나 있다" 고
+ * 떠올렸을 때 기회 목록으로 건너가 거래처를 다시 고르게 하지 않는다. 거래처 상세의
+ * "새 기회" 버튼과 **같은 다이얼로그·같은 동선**이며, 이 행의 거래처가 미리 선택된 채로 열린다.
+ * 이름은 "연결" 이 아니라 **"생성"** 이다 — 기존 기회에 잇는 것이 아니라 새 기회를 만든다.
+ *
  * 삭제는 **누르기 전에** 차단 사유를 알린다. 연관 기회가 있으면 오류 토스트를 띄우는 대신
  * 다이얼로그에서 건수를 알리고 삭제 버튼을 아예 내린다 (서버도 409 로 거부하므로 이중 방어다).
  * 기회 건수는 목록이 이미 조회한 `_count` 를 그대로 받는다 (중복 쿼리 없음).
@@ -37,12 +48,19 @@ import { AccountFormDialog } from "./account-form-dialog";
 export function AccountRowActions({
   account,
   opportunityCount,
+  owners,
+  defaultOwnerId,
 }: {
   account: AccountDTO;
   opportunityCount: number;
+  /** 기회 등록 다이얼로그의 영업 담당자 후보 (목록이 한 번만 조회해 내려준다) */
+  owners: OpportunityOwnerOption[];
+  /** 기본 영업 담당자 — 현재 로그인 사용자 */
+  defaultOwnerId: string;
 }) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
+  const [isCreatingOpportunity, setIsCreatingOpportunity] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -83,6 +101,12 @@ export function AccountRowActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {/* 이 거래처가 선택된 채로 기회 등록 다이얼로그를 연다 (거래처-2) */}
+          <DropdownMenuItem onSelect={() => setIsCreatingOpportunity(true)}>
+            <Target aria-hidden="true" />
+            기회 생성
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setIsEditing(true)}>
             <Pencil aria-hidden="true" />
             수정
@@ -107,6 +131,21 @@ export function AccountRowActions({
           description={`"${account.companyName}" 의 정보를 수정합니다.`}
           onSaved={() => router.refresh()}
           onClose={() => setIsEditing(false)}
+        />
+      ) : null}
+
+      {isCreatingOpportunity ? (
+        <OpportunityFormDialog
+          owners={owners}
+          initial={emptyOpportunityForm({
+            accountId: account.id,
+            ownerId: defaultOwnerId,
+          })}
+          initialAccountName={account.companyName}
+          title="새 영업 기회 등록"
+          description={`"${account.companyName}" 에 새 영업 기회를 등록합니다. 예상 금액은 연결하신 문서에서 자동으로 정해집니다.`}
+          onSaved={() => router.refresh()}
+          onClose={() => setIsCreatingOpportunity(false)}
         />
       ) : null}
 

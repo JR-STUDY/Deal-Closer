@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Send, FileText, PenLine, Eye } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -31,11 +32,14 @@ import {
   type EmailTemplateDTO,
   type TemplateContext,
 } from "@/lib/email-template";
+// 타입만 가져온다 — server-only 모듈이지만 `import type` 은 컴파일 단계에서 지워진다.
+import type { LinkedOpportunity } from "@/lib/opportunity-recipient";
 import { DocTypeBadge } from "@/components/status-badge";
 import { SignaturePreview } from "@/components/signature-preview";
 import { EmailTemplateToolbar } from "./email-template-toolbar";
 import { SendPreview } from "./send-preview";
 import { SenderAccountBanner } from "./sender-account-banner";
+import { SenderOpportunityLink } from "./sender-opportunity-link";
 
 const DEFAULT_BODY =
   "안녕하세요, Rainmaker를 통해 생성된 문서를 전달드립니다. 첨부된 문서를 확인해주시기 바랍니다. 감사합니다.";
@@ -59,6 +63,11 @@ type SenderClientProps = {
     clientName: string | null;
     amount: number;
   };
+  /**
+   * 현재 연결된 영업 기회 (F-113 · 발송-11). null 이면 발송해도 단계가 바뀌지 않고,
+   * 발송 후에도 이 화면에 머문다.
+   */
+  linkedOpportunity: LinkedOpportunity | null;
   /** 발신 계정 선택지 (개인 계정 + 인증 팀 도메인). 비어 있으면 연동 필요 */
   senderOptions: SenderOption[];
   /** 초기 선택값 (SenderOption.value) — 없으면 null */
@@ -70,15 +79,23 @@ type SenderClientProps = {
   signature: string;
 };
 
-/** 이메일 발송 폼 — 헤더의 발송하기 버튼과 본문 입력값 상태를 함께 관리한다 (데모: 실제 발송 없음) */
+/**
+ * 이메일 발송 폼 — 헤더의 발송하기 버튼과 본문 입력값 상태를 함께 관리한다.
+ *
+ * 발송하면 `POST /api/documents/:id/send` 가 발송 이력(EmailLog)·문서 상태·연결된 기회의
+ * 단계 전이를 한 트랜잭션으로 처리한다 (F-113 · F-114). 실제 메일 전송과 PDF 첨부는
+ * Phase 5(F-232 · F-233) 범위라 아직 붙지 않았다 — 화면에서도 그렇게 안내한다.
+ */
 export function SenderClient({
   document,
+  linkedOpportunity,
   senderOptions,
   initialSelectedValue,
   senderName,
   templates,
   signature,
 }: SenderClientProps) {
+  const router = useRouter();
   const typeLabel =
     DOCUMENT_TYPE_LABELS[document.type as DocumentType] ?? document.type;
   const attachmentName = `[${typeLabel}] ${document.title}.pdf`;
@@ -97,9 +114,85 @@ export function SenderClient({
   const initialDefaultCc =
     senderOptions.find((o) => o.value === initialSelectedValue)?.defaultCc ?? "";
 
-  const [recipients, setRecipients] = useState("");
-  const [recipientName, setRecipientName] = useState("");
+  // 연결된 기회 — 연결 카드가 저장에 성공하면 갱신한다. 받는 사람 자동 채움(발송-12)과
+  // 발송 후 이동(발송-13)이 이 한 값을 본다.
+  const [linked, setLinked] = useState<LinkedOpportunity | null>(
+    linkedOpportunity,
+  );
+
+  // 받는 사람은 연결된 기회의 **대표 담당자**로 자동으로 채운다 (발송-12).
+  // 대표가 없거나 이메일이 비어 있으면 서버가 recipient 를 null 로 주므로 여기서도 비워 둔다 —
+  // 빈 값을 채운 척하면 담당자가 확인 없이 보낸다.
+  const [recipients, setRecipients] = useState(
+    () => linkedOpportunity?.recipient?.email ?? "",
+  );
+  const [recipientName, setRecipientName] = useState(
+    () => linkedOpportunity?.recipient?.name ?? "",
+  );
+  // 우리가 채워 넣은 값. 사용자가 손대지 않은 값인지 가려내는 기준이다 —
+  // 기회를 A → B 로 바꿨을 때 A 의 담당자가 남아 있으면 엉뚱한 곳으로 나간다.
+  const [autofilled, setAutofilled] = useState<{
+    name: string;
+    email: string;
+  } | null>(() => linkedOpportunity?.recipient ?? null);
+  // 어디서 온 값인지 화면에 밝힌다 (밝혀야 되돌릴 수 있다)
+  const [autofillNote, setAutofillNote] = useState<string | null>(() =>
+    linkedOpportunity?.recipient
+      ? `‘${linkedOpportunity.recipient.accountName}’ 의 대표 담당자 ${linkedOpportunity.recipient.name} 님을 받는 사람에 채웠습니다. 필요하면 수정해 주세요.`
+      : null,
+  );
   const [cc, setCc] = useState(() => initialDefaultCc);
+
+  /**
+   * 기회 연결이 바뀌었을 때 받는 사람을 다시 맞춘다 (발송-12).
+   *
+   * **사용자가 직접 넣은 값은 절대 덮지 않는다.** 비어 있거나, 직전에 우리가 채운 값
+   * 그대로일 때만 손댄다 — 후자를 함께 보지 않으면 기회를 바꿔도 이전 거래처의 담당자가
+   * 남는다. 손대지 못했으면 그 사실도 문구로 알린다.
+   */
+  const applyRecipientAutofill = (next: LinkedOpportunity | null) => {
+    const emailFree =
+      !recipients.trim() || recipients.trim() === autofilled?.email;
+    const nameFree =
+      !recipientName.trim() || recipientName.trim() === autofilled?.name;
+    const recipient = next?.recipient ?? null;
+
+    if (!recipient) {
+      // 우리가 채운 값만 거둬들인다 (사용자가 쓴 값은 그대로 둔다).
+      if (autofilled && emailFree) setRecipients("");
+      if (autofilled && nameFree) setRecipientName("");
+      setAutofilled(null);
+      setAutofillNote(
+        next
+          ? "연결한 기회의 거래처에 대표 담당자 이메일이 없어 받는 사람을 채우지 못했습니다. 직접 입력해 주세요."
+          : null,
+      );
+      return;
+    }
+
+    if (emailFree) {
+      setRecipients(recipient.email);
+      // 채운 주소는 형식을 통과한 값이다 — 직전 발송 시도의 오류 문구를 남겨 두지 않는다
+      setRecipientError(null);
+    }
+    if (nameFree) setRecipientName(recipient.name);
+
+    if (!emailFree && !nameFree) {
+      setAutofillNote(
+        `이미 입력하신 받는 사람이 있어 대표 담당자(${recipient.name} 님)로 바꾸지 않았습니다.`,
+      );
+      return;
+    }
+    setAutofilled({ name: recipient.name, email: recipient.email });
+    setAutofillNote(
+      `‘${recipient.accountName}’ 의 대표 담당자 ${recipient.name} 님을 받는 사람에 채웠습니다. 필요하면 수정해 주세요.`,
+    );
+  };
+
+  const handleOpportunityChange = (next: LinkedOpportunity | null) => {
+    setLinked(next);
+    applyRecipientAutofill(next);
+  };
 
   const changeSender = async (value: string) => {
     if (value === selectedValue || savingSender) return;
@@ -160,7 +253,9 @@ export function SenderClient({
   const composedSubject = applyTemplateVariables(subject, nameContext);
   const composedBody = applyTemplateVariables(body, nameContext);
 
-  const handleSend = () => {
+  const [isSending, setIsSending] = useState(false);
+
+  const handleSend = async () => {
     const { valid, invalid } = parseRecipients(recipients);
 
     if (valid.length === 0 && invalid.length === 0) {
@@ -181,7 +276,46 @@ export function SenderClient({
     }
 
     setRecipientError(null);
-    toast.success(`${valid.length}명에게 이메일이 발송되었습니다 (데모)`);
+    setIsSending(true);
+    try {
+      const res = await fetch(`/api/documents/${document.id}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipients: valid.join("; "),
+          subject: composedSubject,
+          body: composedBody,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(json?.error ?? "발송에 실패했습니다.");
+      }
+
+      // toast 는 루트 레이아웃의 Toaster 가 띄우므로 아래 화면 이동에도 사라지지 않는다.
+      toast.success(
+        `${valid.length}명에게 발송 처리했습니다. (실제 메일 전송은 준비 중입니다)`,
+      );
+
+      // 단계가 어떻게 됐는지 서버가 알려준다 (F-113) — 담당자가 결과를 바로 알 수 있게 띄운다
+      const stage = json?.data?.stage as { message?: string } | null | undefined;
+      if (stage?.message) toast.info(stage.message);
+
+      /*
+       * 발송 뒤에는 **연결된 기회 상세로 돌아간다** (발송-13). 보낸 다음 할 일은 그 기회를
+       * 이어서 관리하는 것이지, 같은 문서를 다시 보내는 것이 아니다.
+       * refresh 를 먼저 부르는 이유: 발송이 단계를 자동 전이시켰으므로(F-113) 라우터 캐시를
+       * 비우지 않으면 이동한 상세에 **전이 전 단계**가 그대로 보인다.
+       */
+      router.refresh();
+      if (linked) router.push(`/opportunities/${linked.id}`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "발송에 실패했습니다.",
+      );
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
@@ -196,15 +330,15 @@ export function SenderClient({
               <Eye className="size-4" />
               미리보기
             </Button>
-            <Button onClick={handleSend}>
+            <Button onClick={handleSend} disabled={isSending}>
               <Send className="size-4" />
-              발송하기
+              {isSending ? "발송 중…" : "발송하기"}
             </Button>
           </div>
         }
       />
 
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
         <div className="mx-auto flex max-w-2xl flex-col gap-6">
           <SenderAccountBanner
             options={senderOptions}
@@ -253,6 +387,14 @@ export function SenderClient({
             </CardContent>
           </Card>
 
+          {/* 단계 자동 전이가 일어나는 지점이라 발송 폼 안, 문서 요약 바로 아래에 둔다 */}
+          <SenderOpportunityLink
+            documentId={document.id}
+            documentType={document.type}
+            value={linked}
+            onChange={handleOpportunityChange}
+          />
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">받는 사람</CardTitle>
@@ -291,6 +433,15 @@ export function SenderClient({
                     className="text-sm text-destructive"
                   >
                     {recipientError}
+                  </p>
+                ) : null}
+                {/* 어디서 온 값인지 밝힌다 — 사용자의 조작(기회 연결)에 따라 바뀌므로 낭독기에도 알린다 */}
+                {autofillNote ? (
+                  <p
+                    role="status"
+                    className="text-xs text-muted-foreground"
+                  >
+                    {autofillNote}
                   </p>
                 ) : null}
               </div>

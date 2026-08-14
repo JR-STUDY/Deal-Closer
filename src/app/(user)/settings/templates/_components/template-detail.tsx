@@ -62,7 +62,7 @@ export function TemplateDetail({ template: initial }: { template: EmailTemplateD
           title="템플릿 수정"
           description={`"${template.name}" 템플릿을 수정합니다.`}
         />
-        <div className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
           <div className="mx-auto max-w-3xl">
             <TemplateEditor
               templateId={template.id}
@@ -106,7 +106,7 @@ export function TemplateDetail({ template: initial }: { template: EmailTemplateD
         }
       />
 
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
         <div className="mx-auto max-w-3xl space-y-6">
           <div className="flex items-center justify-between gap-3">
             <Link

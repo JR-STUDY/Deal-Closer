@@ -160,7 +160,7 @@ export default async function AnalyticsPage() {
         description="조직 전체의 영업 문서 실적을 분석합니다."
       />
 
-      <div className="flex-1 space-y-6 overflow-auto p-8">
+      <div className="flex-1 space-y-6 overflow-auto p-8 [scrollbar-gutter:stable]">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {kpis.map((kpi) => (
             <Card key={kpi.label}>

@@ -61,7 +61,7 @@ export default async function BillingPage() {
         actions={<ChargeCreditDialog />}
       />
 
-      <div className="flex-1 space-y-6 overflow-auto p-8">
+      <div className="flex-1 space-y-6 overflow-auto p-8 [scrollbar-gutter:stable]">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">

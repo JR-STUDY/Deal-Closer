@@ -7,6 +7,7 @@ import {
   computeAmount,
   extractClientName,
 } from "@/lib/editor-schema";
+import { syncOpportunityAmount } from "@/lib/opportunity-amount";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -118,7 +119,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       }
     }
 
-    return tx.document.update({
+    const updated = await tx.document.update({
       where: { id },
       data: {
         title: typeof body.title === "string" ? body.title.trim() : undefined,
@@ -148,17 +149,48 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       },
       include: { items: { orderBy: { sortOrder: "asc" } } },
     });
+
+    /*
+     * 문서의 **상태·금액이 바뀌면 연결된 기회의 예상 금액도 따라 바뀐다** (기회-6 ①).
+     * 재판정을 같은 트랜잭션에 넣어야 "문서는 계약완료인데 기회 금액은 옛 견적서" 같은
+     * 어긋남이 생기지 않는다. 어느 필드가 바뀌었는지 따로 따지지 않고 항상 부르는 이유는
+     * 총액이 items·contentJson·body.amount 세 경로에서 재계산되기 때문이다 —
+     * 실제로 달라진 값이 없으면 `syncOpportunityAmount` 가 쓰기를 건너뛴다.
+     */
+    if (existing.opportunityId) {
+      await syncOpportunityAmount(
+        { opportunityId: existing.opportunityId, orgId: existing.orgId },
+        tx,
+      );
+    }
+
+    return updated;
   });
 
   return ok(doc);
 }
 
-/** DELETE /api/documents/:id — 문서 삭제 */
+/**
+ * DELETE /api/documents/:id — 문서 삭제
+ *
+ * 삭제도 확정 문서 재판정 시점이다 (기회-6). 스키마의 `onDelete: SetNull` 이 연결만 끊어주고
+ * 금액은 그대로 남기므로, 지운 문서의 금액이 기회에 유령처럼 남지 않도록 같은 트랜잭션에서
+ * 다시 판정한다 — 남은 문서가 없으면 0 원이 된다.
+ */
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const { id } = await params;
   const existing = await prisma.document.findUnique({ where: { id } });
   if (!existing) return fail("문서를 찾을 수 없습니다.", 404);
 
-  await prisma.document.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.document.delete({ where: { id } });
+    if (existing.opportunityId) {
+      await syncOpportunityAmount(
+        { opportunityId: existing.opportunityId, orgId: existing.orgId },
+        tx,
+      );
+    }
+  });
+
   return ok({ id });
 }

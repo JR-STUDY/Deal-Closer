@@ -91,7 +91,7 @@ export default async function EmailTemplatesPage() {
         }
       />
 
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
         <div className="mx-auto max-w-4xl space-y-8">
           {templates.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-16 text-center">

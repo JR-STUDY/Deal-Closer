@@ -54,7 +54,7 @@ export default async function CatalogPage({
         actions={<CatalogActions />}
       />
 
-      <div className="flex-1 space-y-6 overflow-auto p-8">
+      <div className="flex-1 space-y-6 overflow-auto p-8 [scrollbar-gutter:stable]">
         {/* 카테고리 탭 */}
         <div className="flex flex-wrap gap-1 rounded-lg bg-muted p-1">
           {TABS.map((tab) => (

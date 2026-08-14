@@ -7,6 +7,8 @@ import { generateDocument } from "@/lib/ai/generate-document";
 import { aiErrorResponse } from "@/lib/ai/http";
 import { resolveRequestedModel } from "@/lib/ai/model-access";
 import type { PreparedFile } from "@/lib/ai/content";
+import { applyDocumentLinked } from "@/lib/opportunity-stage";
+import { syncOpportunityAmount } from "@/lib/opportunity-amount";
 import {
   CREDITS_PER_GENERATION,
   DOCUMENT_TYPES,
@@ -53,6 +55,18 @@ export async function POST(req: NextRequest) {
   const documentType = (DOCUMENT_TYPES as readonly string[]).includes(rawType)
     ? (rawType as DocumentType)
     : null;
+
+  // ── 연결할 영업 기회 (기회 상세의 "문서 작성"으로 들어온 경우, 기회-2) ──
+  // 요청 값은 조작될 수 있으므로 **현재 조직 소속인지** 확인한다. 찾지 못하면 조용히 넘기지
+  // 않고 실패시킨다 — 연결될 줄 알았는데 안 붙은 문서가 생기면 화면과 데이터가 어긋난다.
+  const opportunityId = String(form.get("opportunityId") ?? "").trim();
+  if (opportunityId) {
+    const opportunity = await prisma.opportunity.findFirst({
+      where: { id: opportunityId, orgId: user.orgId },
+      select: { id: true },
+    });
+    if (!opportunity) return fail("영업 기회를 찾을 수 없습니다.", 404);
+  }
 
   // ── 첨부 파일 검증 (정책 VAL_*) ──
   const files = form.getAll("files").filter((f): f is File => f instanceof File);
@@ -206,6 +220,7 @@ export async function POST(req: NextRequest) {
         templateId: template?.id ?? null,
         sourceDocumentId: sourceDocument?.id ?? null,
         // 라인아이템(레거시 폼 뷰·통계용)은 최종 본문에서 도출한 품목으로 채운다
+        opportunityId: opportunityId || null,
         items: {
           create: generated.items.map((item, index) => ({
             name: item.name,
@@ -259,6 +274,23 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // 기회에 붙였다면 그 기회의 타임라인에도 남긴다 — 연결과 이력은 한 트랜잭션이다 (F-114)
+    if (opportunityId) {
+      await applyDocumentLinked(
+        {
+          opportunityId,
+          orgId: user.orgId,
+          actorId: user.id,
+          documentId: created.id,
+          documentType: generated.documentType,
+          documentTitle: created.title,
+        },
+        tx,
+      );
+      // 문서 연결은 확정 문서 재판정 시점이다 (기회-6 ①) — 새 문서가 곧바로 후보가 된다
+      await syncOpportunityAmount({ opportunityId, orgId: user.orgId }, tx);
+    }
+
     return created;
   });
 
@@ -275,6 +307,7 @@ export async function POST(req: NextRequest) {
         size: r.size,
       })),
       referenceIds,
+      opportunityId: opportunityId || null,
     },
     { status: 201 },
   );

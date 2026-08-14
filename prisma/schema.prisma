@@ -37,6 +37,7 @@ model Organization {
   emailTemplates  EmailTemplate[]
   teamMailDomains TeamMailDomain[]
   accounts        Account[]
+  contacts        Contact[]
   opportunities   Opportunity[]
   activityLogs    ActivityLog[]
 
@@ -90,20 +91,18 @@ model Invite {
 // ===================== CRM (거래처 · 기회) =====================
 
 /// 거래처(Account) — 영업 대상 회사. 조직 공용 자산이며 Owner 를 두지 않는다. (F-101~103)
+/// 담당자는 단일 필드가 아니라 Contact 관계로 갖는다 — 한 회사에 여러 명이 붙는다 (거래처-8).
 model Account {
   id           String   @id @default(cuid())
   orgId        String
   org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   companyName  String   // 회사명
-  contactName  String?  // 담당자명
-  position     String?  // 직책
-  phone        String?  // 핸드폰 번호
-  email        String?  // 담당자 이메일
   bizRegNo     String?  // 사업자등록번호
   memo         String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  contacts      Contact[]
   opportunities Opportunity[]
 
   @@index([orgId])
@@ -111,11 +110,40 @@ model Account {
   @@map("accounts")
 }
 
+/// 거래처 담당자(Contact) — 한 거래처에 여러 명. 목록에는 대표 1명만 노출한다 (거래처-8).
+/// - 담당자 0명을 허용한다. 거래처를 먼저 등록하고 담당자를 나중에 넣는 흐름이 자연스럽다.
+/// - isPrimary(대표)는 **거래처당 최대 1명**이지만 DB 제약을 두지 않는다.
+///   `@@unique([accountId, isPrimary])` 는 "비대표도 1명뿐"이 되어 쓸 수 없고,
+///   SQLite 의 부분 유니크 인덱스는 Prisma 스키마로 표현되지 않는다.
+///   그래서 규칙은 앱 레벨이다 — 판정은 src/lib/contact.ts 순수 함수, 저장은 한 트랜잭션이다
+///   (대표 지정과 기존 대표 해제를 두 번의 update 로 나누면 중간에 대표가 2명이 된다).
+/// - orgId 는 Account 를 거치지 않고도 조직 스코프로 조회하기 위한 것이며,
+///   다른 모델과 같이 Organization FK 를 건다(값이 떠도는 문자열이 되지 않게).
+model Contact {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name      String   // 담당자명
+  position  String?  // 직책
+  phone     String?  // 핸드폰 번호
+  email     String?  // 담당자 이메일
+  isPrimary Boolean  @default(false) // 대표 담당자 (목록 노출 대상)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([accountId])
+  @@map("contacts")
+}
+
 /// 영업 기회(Opportunity) — 파이프라인의 단위. (F-111~117)
 /// - stage: INITIAL(초기) | PROPOSAL(제안) | NEGOTIATION(검토/협상) | WON(수주) | LOST(실주)
 ///   문서 발송 시 자동 전이한다(F-113). 전이 규칙은 src/lib/opportunity-stage.ts 한 곳에 모은다.
 /// - lostReason: LOST 일 때만 채운다(F-117). 이탈률 통계(F-405)의 분류 축이 된다.
 /// - previousOpportunityId: 수주 후 자동 생성되는 "다음 기회"가 직전 기회를 가리킨다(F-115·F-306).
+/// - expectedAmount 는 **입력값이 아니라 확정 문서에서 파생된 값**이다 (기회-6).
 model Opportunity {
   id                  String    @id @default(cuid())
   orgId               String
@@ -126,7 +154,25 @@ model Opportunity {
   owner               User      @relation(fields: [ownerId], references: [id])
   name                String    // 기회명
   stage               String    @default("INITIAL")
-  expectedAmount      Int       @default(0) // 예상 금액 (KRW 정수)
+  /// 예상 금액 (KRW 정수) — **확정 문서(confirmedDocument)의 금액을 복제한 파생 값**이다.
+  /// 사용자가 직접 입력하지 않으며, 확정 문서가 없으면 0 이다 (기회-6 ④).
+  /// 집계(파이프라인·대시보드·캘린더)가 기회 행만 읽고도 합계를 낼 수 있도록 비정규화해 둔다 —
+  /// 매번 문서를 조인해 확정 문서를 다시 고르면 목록 한 화면의 조인이 기회 수만큼 늘어난다.
+  /// 쓰기는 `src/lib/opportunity-amount.ts` 한 곳뿐이다.
+  expectedAmount      Int       @default(0)
+  /// 예상 금액의 출처가 되는 **확정 문서 1건** (기회-6). null 이면 확정 문서 없음 → 금액 0.
+  /// `Document.isConfirmed` 플래그 대신 여기에 FK 를 두는 이유는, 기회당 확정 문서가
+  /// **구조적으로 1건**임이 보장되어 "여러 문서가 동시에 확정" 상태가 만들어질 수 없기 때문이다.
+  /// @unique 는 한 문서가 두 기회의 금액을 동시에 좌우하지 못하게 막는다
+  /// (previousOpportunityId 와 같은 선례의 named relation 이다).
+  /// 문서가 지워지면 SetNull 로 끊기고, 라우트가 곧바로 재판정해 금액을 다시 맞춘다.
+  confirmedDocumentId String?   @unique
+  confirmedDocument   Document? @relation("ConfirmedDocument", fields: [confirmedDocumentId], references: [id], onDelete: SetNull)
+  /// 확정 문서를 **사용자가 직접 골랐는지** (기회-6 ③). true 면 자동 판정에서 제외(잠금)된다.
+  /// 잠금 여부를 다른 상태에서 추론하지 않고 별도 컬럼으로 두는 이유: 자동 판정 결과와 사용자의
+  /// 선택이 우연히 같을 수 있어, 플래그가 없으면 "내가 고른 것"과 "마침 그렇게 뽑힌 것"을
+  /// 구분할 수 없다 — 그 상태에서 문서가 하나 추가되면 사용자의 선택이 조용히 뒤집힌다.
+  isConfirmedDocumentPinned Boolean @default(false)
   expectedCloseDate   DateTime? // 예상 마감일
   actualCloseDate     DateTime? // 실제 수주/실주 확정일
   lostReason          String?   // 실주 사유 (LOST 일 때만)
@@ -193,8 +239,13 @@ model Document {
 
   // 연결된 영업 기회(선택). 기회 상세의 문서 목록·발송 시 단계 자동 전이(F-113)의 기준이 된다.
   // 기회 없이도 문서를 만들 수 있다(빠른 초안) — 통계·타임라인은 미연결 문서를 별도로 다룬다.
+  // 한 문서는 최대 한 기회에만 붙는다 — 그래야 문서 하나가 두 기회의 금액을 좌우하지 않는다 (기회-5).
   opportunityId String?
   opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  // 이 문서를 예상 금액의 근거(확정 문서)로 삼은 기회 (기회-6). 역방향이며 최대 1건이다.
+  // 아래 `isConfirmed`(버전 확정본, F-214)와는 다른 개념이다 — 저쪽은 "이 버전이 확정본인가",
+  // 이쪽은 "어느 기회가 이 문서를 금액의 근거로 삼았는가"다.
+  confirmedFor  Opportunity? @relation("ConfirmedDocument")
 
   // ───── 표준 양식 · 버전 이력 (PRD F-211 · F-213 · F-214) ─────
   /// 이 문서를 생성할 때 소스로 사용한 표준 양식. 양식이 삭제되면 링크만 끊긴다.

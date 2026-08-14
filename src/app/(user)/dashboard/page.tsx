@@ -176,7 +176,7 @@ export default async function DashboardPage() {
         }
       />
 
-      <div className="flex-1 space-y-6 overflow-auto p-8">
+      <div className="flex-1 space-y-6 overflow-auto p-8 [scrollbar-gutter:stable]">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {kpis.map((kpi) => (
             <Card key={kpi.label}>

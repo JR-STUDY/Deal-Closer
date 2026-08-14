@@ -25,7 +25,15 @@ import {
  */
 export type PipelineOpportunity = {
   stage: string;
-  /** 예상 금액 (KRW 정수) */
+  /**
+   * 예상 금액 (KRW 정수).
+   *
+   * **확정 문서에서 파생된 값**이다 (기회-6) — 담당자가 손으로 넣은 숫자가 아니라
+   * `@/lib/opportunity-amount` 가 확정 문서의 금액을 복제해 둔 것이고, 확정 문서가 없는
+   * 기회는 0 이다. 집계 방식 자체는 그대로다(합계는 여전히 단순 합) — 다만 합계가 줄었다면
+   * 계산이 틀린 게 아니라 **근거 문서가 없는 기회가 있다**는 뜻이므로, 화면은 0원 기회를
+   * "확정 문서 없음" 으로 안내해 문서를 붙이도록 유도한다.
+   */
   expectedAmount: number;
   /** 예상 마감일. null 이면 기간·월 집계 대상에서 빠진다. */
   expectedCloseDate: Date | null;
