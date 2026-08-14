@@ -314,12 +314,11 @@ export function opportunitiesWhere(
   return where;
 }
 
-/**
- * 목록 기본 정렬 — 예상 마감일 오름차순(임박한 것 먼저), 마감일 미정은 뒤로.
- * 같은 날짜끼리는 최근 수정 순으로 안정화한다.
+/*
+ * 정렬은 **이 모듈이 다루지 않는다** (2차 피드백 14 · 15).
+ * 기본값 상수 하나가 아니라 사용자가 표 머리글로 바꾸는 상태가 되었으므로,
+ * 파싱·전이·`orderBy` 변환은 `@/lib/opportunity-sort` 순수 함수가 단일 기준이다.
  */
-export const OPPORTUNITY_LIST_ORDER_BY: Prisma.OpportunityOrderByWithRelationInput[] =
-  [{ expectedCloseDate: { sort: "asc", nulls: "last" } }, { updatedAt: "desc" }];
 
 /** 목록·상세가 공유하는 select (DTO 변환에 필요한 최소 필드) */
 export const OPPORTUNITY_DTO_SELECT = {

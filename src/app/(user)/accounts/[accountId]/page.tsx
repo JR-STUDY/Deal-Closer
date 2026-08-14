@@ -5,6 +5,7 @@ import { toAccountDTO } from "@/lib/account";
 import { toContactDTO } from "@/lib/contact";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
+import { DetailColumns } from "@/components/detail-columns";
 import { NewOpportunityButton } from "@/components/opportunity/new-opportunity-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AccountContacts } from "./_components/account-contacts";
@@ -28,8 +29,13 @@ function InfoRow({ label, value }: { label: string; value: string | null }) {
 }
 
 /**
- * 거래처 상세 (F-103) — 기본 정보 + 수정·삭제 + 연관 기회·문서·이메일 이력 탭.
- * 네 조회는 서로 독립이라 병렬로 실행하고, 전부 orgId 로 스코프한다.
+ * 거래처 상세 (F-103) — 기본 정보 + 담당자 + 메모 + 연관 기회·문서·이메일 이력 탭.
+ *
+ * **2단 레이아웃**이다 (2차 피드백 9) — 기회 상세와 같은 골격(`DetailColumns`)을 쓴다.
+ * 좌측은 이 거래처가 "무엇인지", 우측은 "무슨 일이 있었는지"다. `lg` 미만에서는 한 단으로
+ * 쌓여 좌측이 먼저 온다.
+ *
+ * 여섯 조회는 서로 독립이라 병렬로 실행하고, 전부 orgId 로 스코프한다.
  */
 export default async function AccountDetailPage({
   params,
@@ -130,50 +136,60 @@ export default async function AccountDetailPage({
       />
 
       <div className="flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
-        <div className="mx-auto max-w-4xl space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">기본 정보</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <dl className="divide-y">
-                <InfoRow label="회사명" value={account.companyName} />
-                <InfoRow label="사업자등록번호" value={account.bizRegNo} />
-              </dl>
-            </CardContent>
-          </Card>
+        {/*
+          2단 레이아웃 — 기회 상세와 **같은 골격**을 쓴다 (2차 피드백 9).
+          좌: 이 거래처가 무엇인지(기본 정보·담당자·메모) / 우: 무슨 일이 있었는지(연관 탭).
+          탭을 본문 아래로 늘어놓으면 좌우 공간이 남고 스크롤만 길어진다.
+        */}
+        <DetailColumns
+          left={
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">기본 정보</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <dl className="divide-y">
+                    <InfoRow label="회사명" value={account.companyName} />
+                    <InfoRow label="사업자등록번호" value={account.bizRegNo} />
+                  </dl>
+                </CardContent>
+              </Card>
 
-          {/* 담당자는 여러 명이므로 기본 정보 밖으로 뺀다 — 여기서 전원을 관리한다 (거래처-8) */}
-          <AccountContacts
-            accountId={account.id}
-            companyName={account.companyName}
-            contacts={contacts.map(toContactDTO)}
-          />
+              {/* 담당자는 여러 명이므로 기본 정보 밖으로 뺀다 — 여기서 전원을 관리한다 (거래처-8) */}
+              <AccountContacts
+                accountId={account.id}
+                companyName={account.companyName}
+                contacts={contacts.map(toContactDTO)}
+              />
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">메모</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {account.memo ? (
-                <p className="text-sm leading-relaxed whitespace-pre-line">
-                  {account.memo}
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  아직 메모가 없습니다. 수정에서 영업 이력·특이사항을 남겨두시면
-                  팀원이 함께 볼 수 있습니다.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <AccountRelatedTabs
-            opportunities={opportunities}
-            documents={documents}
-            emailLogs={emailLogs}
-          />
-        </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">메모</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {account.memo ? (
+                    <p className="text-sm leading-relaxed whitespace-pre-line">
+                      {account.memo}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      아직 메모가 없습니다. 수정에서 영업 이력·특이사항을
+                      남겨두시면 팀원이 함께 볼 수 있습니다.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          }
+          right={
+            <AccountRelatedTabs
+              opportunities={opportunities}
+              documents={documents}
+              emailLogs={emailLogs}
+            />
+          }
+        />
       </div>
     </>
   );
