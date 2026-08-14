@@ -1,17 +1,20 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { SearchX, Target } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import {
   OPPORTUNITY_DTO_SELECT,
-  OPPORTUNITY_LIST_ORDER_BY,
   hasOpportunityFilter,
   opportunitiesWhere,
   parseOpportunityFilters,
   toOpportunityDTO,
 } from "@/lib/opportunity";
+import {
+  opportunityOrderBy,
+  opportunitySortParams,
+  parseOpportunitySort,
+} from "@/lib/opportunity-sort";
 import {
   pageHref,
   pageQueryRange,
@@ -19,29 +22,15 @@ import {
   resolvePagination,
 } from "@/lib/pagination";
 import { summarizeByStage } from "@/lib/pipeline";
-import { formatDate, formatKRW, formatNumber } from "@/lib/format";
+import { formatKRW, formatNumber } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
-import { StageBadge } from "@/components/status-badge";
 import { InfoHint } from "@/components/info-hint";
 import { ListPagination } from "@/components/list-pagination";
-import {
-  ROW_LINK_ABOVE,
-  ROW_LINK_ROW,
-  RowLink,
-} from "@/components/list-row-link";
 import { NewOpportunityButton } from "@/components/opportunity/new-opportunity-button";
 import { StageFlowGuide } from "@/components/opportunity/stage-flow-guide";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { OpportunitiesToolbar } from "./_components/opportunities-toolbar";
+import { OpportunitiesTable } from "./_components/opportunities-table";
 import { OpportunityBoard } from "./_components/opportunity-board";
-import { OpportunityRowActions } from "./_components/opportunity-row-actions";
 
 const LIST_HREF = "/opportunities";
 
@@ -58,9 +47,10 @@ const SUMMARY_SELECT = {
 /**
  * 영업 기회 목록·칸반 (F-111 · F-112) — 기회명·거래처·단계·예상 금액·예상 마감일·영업 담당자.
  *
- * 검색어·단계·영업 담당자·보기·페이지는 URL 쿼리(`?q=&stage=&owner=&view=&page=`)로 받는다.
+ * 검색어·단계·영업 담당자·보기·정렬·페이지는 URL 쿼리
+ * (`?q=&stage=&owner=&view=&sort=&dir=&page=`)로 받는다.
  * 조회 조건은 두 보기가 완전히 같고 표현만 다르다 — `?view=board` 면 칸반, 아니면 목록이다.
- * 정렬은 예상 마감일 오름차순(임박한 것 먼저)이고 마감일 미정은 뒤로 보낸다.
+ * 정렬 기본값은 **최근 수정일 내림차순**이고, 표 머리글을 눌러 바꾼다 (2차 피드백 14 · 15).
  *
  * **목록만 페이지로 자른다.** 칸반은 전체가 보여야 파이프라인이 성립하므로 자르지 않고,
  * 페이지네이션 UI 도 감춘다 (기회-18).
@@ -73,6 +63,8 @@ export default async function OpportunitiesPage({
     stage?: string;
     owner?: string;
     view?: string;
+    sort?: string;
+    dir?: string;
     page?: string;
   }>;
 }) {
@@ -80,6 +72,7 @@ export default async function OpportunitiesPage({
   const [params, user] = await Promise.all([searchParams, getCurrentUser()]);
   const filters = parseOpportunityFilters(params);
   const isBoard = params.view === "board";
+  const sort = parseOpportunitySort(params);
   const requestedPage = parsePageParam(params.page);
   // orgId 스코프는 표·합계 조회에 같은 조건으로 걸린다
   const where = opportunitiesWhere(user.orgId, filters);
@@ -90,7 +83,7 @@ export default async function OpportunitiesPage({
   const [opportunities, summaryRows, owners] = await Promise.all([
     prisma.opportunity.findMany({
       where,
-      orderBy: OPPORTUNITY_LIST_ORDER_BY,
+      orderBy: opportunityOrderBy(sort),
       select: OPPORTUNITY_DTO_SELECT,
       // 칸반은 전체를 넘긴다 (기회-18)
       ...(isBoard ? {} : { skip, take }),
@@ -120,10 +113,12 @@ export default async function OpportunitiesPage({
   const isFiltering = hasOpportunityFilter(filters);
 
   // 페이지를 나누는 목록에서만, 범위를 벗어난 페이지를 되돌린다 (칸반은 page 를 쓰지 않는다)
+  // 정렬도 함께 실어야 페이지를 넘겨도 같은 순서가 유지된다 (기본 정렬이면 빈 값이라 지워진다)
   const listQuery = {
     q: filters.query,
     stage: filters.stage ?? "",
     owner: filters.ownerId ?? "",
+    ...opportunitySortParams(sort),
   };
   if (!isBoard && pagination.isOutOfRange) {
     redirect(pageHref(LIST_HREF, listQuery, pagination.page));
@@ -199,120 +194,13 @@ export default async function OpportunitiesPage({
           <OpportunityBoard opportunities={opportunities.map(toOpportunityDTO)} />
         ) : (
           <>
-            <div className="overflow-hidden rounded-lg border">
-              {/*
-                컬럼 폭을 고정한다 (A-5). 표 기본값(table-layout: auto)은 그 페이지에 실제로 담긴
-                내용으로 폭을 다시 계산해서, 페이지를 넘기거나 필터를 걸 때마다 칸 경계가 옮겨간다.
-                `table-fixed` 는 **머리행에 적힌 폭만** 보므로 행 내용과 무관하게 같은 자리에 선다.
-
-                폭은 실제 값을 재서 잡았다. 남는 폭은 **기회명 한 칸만** 흡수한다(폭을 적지 않은
-                유일한 칸) — 행의 정체이자 가장 길고 들쭉날쭉한 값이라 여기에 몰아주는 편이 낫고,
-                나머지는 화면이 넓어져도 그대로라 시선 위치가 유지된다. 좁은 화면에서는 `min-w`
-                아래로 눌리는 대신 표 컨테이너(`overflow-x-auto`)가 가로로 스크롤된다.
-              */}
-              <Table className="min-w-[960px] table-fixed">
-                <TableHeader>
-                  <TableRow>
-                    {/* 폭 미지정 = 남는 폭 전부. `min-w` 에서 최소 224px 를 보장받는다 */}
-                    <TableHead>기회명</TableHead>
-                    {/* 208px: "(주)에이비씨 테크놀로지"·"Bluewave Systems Korea" 가 잘리지 않는 폭 */}
-                    <TableHead className="w-[208px]">거래처</TableHead>
-                    {/* 104px: 가장 긴 배지 "검토/협상" 기준. 배지 칸은 더 넓을 이유가 없다 */}
-                    <TableHead className="w-[104px]">단계</TableHead>
-                    {/* 144px: "₩1,800,000,000"(10억대)까지 한 줄로 들어가는 폭 */}
-                    <TableHead className="w-[144px] text-right">
-                      예상 금액
-                    </TableHead>
-                    {/* 112px: 값 "2026.08.15" 보다 머리글 "예상 마감일" 이 길어 머리글이 폭을 정한다 */}
-                    <TableHead className="w-[112px] text-right">
-                      예상 마감일
-                    </TableHead>
-                    {/* 거래처 담당자와 헷갈리지 않게 못박는다 (기회-14) */}
-                    {/* 112px: 이름(3~4자)보다 머리글이 길다 — 예상 마감일과 같은 폭으로 맞춘다 */}
-                    <TableHead className="w-[112px]">영업 담당자</TableHead>
-                    {/* 56px: ⋯ 버튼(32px) + 셀 좌우 여백(16px) */}
-                    <TableHead className="w-14">
-                      <span className="sr-only">관리</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {opportunities.map((opportunity) => (
-                    // 행 어디를 눌러도 상세로 간다 (거래처-1 과 같은 규칙) — 덮개는 기회명 링크가 만든다
-                    <TableRow key={opportunity.id} className={ROW_LINK_ROW}>
-                      {/* 말줄임·title 은 RowLink 안에서 처리된다 (덮개를 자르지 않는 자리) */}
-                      <TableCell className="font-medium">
-                        <RowLink
-                          href={`/opportunities/${opportunity.id}`}
-                          title={opportunity.name}
-                        >
-                          {opportunity.name}
-                        </RowLink>
-                      </TableCell>
-                      {/*
-                        거래처 링크는 덮개 위로 올려 자기 목적지(거래처 상세)를 지킨다.
-                        말줄임은 링크가 아니라 **칸**에 건다 — 잘린 자리(…)에 커서를 올려도
-                        title 이 뜨고, 링크에 overflow 를 걸지 않아 덮개와도 무관하다.
-                      */}
-                      <TableCell
-                        className={`truncate ${ROW_LINK_ABOVE}`}
-                        title={opportunity.account.companyName}
-                      >
-                        <Link
-                          href={`/accounts/${opportunity.accountId}`}
-                          className="rounded text-muted-foreground transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        >
-                          {opportunity.account.companyName}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <StageBadge stage={opportunity.stage} />
-                      </TableCell>
-                      {/*
-                        자릿수마다 글자폭이 같아야 칸을 고정한 보람이 있다 (tabular-nums).
-                        확정 문서가 없으면 0 원이다 (기회-6 ④) — 칸이 좁아 사유를 적을 자리가
-                        없으므로 흐린 글자 + title 로만 알리고, 자세한 안내는 상세에서 한다.
-                      */}
-                      <TableCell
-                        className={`text-right tabular-nums ${
-                          opportunity.confirmedDocumentId
-                            ? ""
-                            : "text-muted-foreground"
-                        }`}
-                        title={
-                          opportunity.confirmedDocumentId
-                            ? undefined
-                            : "확정 문서가 없어 0원입니다. 기회 상세에서 문서를 연결해주세요."
-                        }
-                      >
-                        {formatKRW(opportunity.expectedAmount)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {opportunity.expectedCloseDate ? (
-                          formatDate(opportunity.expectedCloseDate)
-                        ) : (
-                          <span title="예상 마감일을 아직 정하지 않았습니다.">
-                            미정
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="truncate" title={opportunity.owner.name}>
-                        {opportunity.owner.name}
-                      </TableCell>
-                      {/* 덮개 위로 올려 메뉴 클릭이 상세로 새지 않게 한다 */}
-                      <TableCell className={`text-right ${ROW_LINK_ABOVE}`}>
-                        <OpportunityRowActions
-                          opportunity={toOpportunityDTO(opportunity)}
-                          // 담당자 후보는 위에서 이미 조회한 값을 재사용한다
-                          owners={owners}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
+            <OpportunitiesTable
+              opportunities={opportunities}
+              owners={owners}
+              sort={sort}
+              basePath={LIST_HREF}
+              listQuery={listQuery}
+            />
             <ListPagination
               pagination={pagination}
               basePath={LIST_HREF}

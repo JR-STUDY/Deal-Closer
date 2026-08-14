@@ -4,12 +4,15 @@ import { getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 import {
   OPPORTUNITY_DTO_SELECT,
-  OPPORTUNITY_LIST_ORDER_BY,
   opportunitiesWhere,
   parseOpportunityFilters,
   parseOpportunityInput,
   toOpportunityDTO,
 } from "@/lib/opportunity";
+import {
+  opportunityOrderBy,
+  parseOpportunitySort,
+} from "@/lib/opportunity-sort";
 import { createOpportunity } from "@/lib/opportunity-stage";
 import { syncOpportunityAmount } from "@/lib/opportunity-amount";
 import {
@@ -22,7 +25,8 @@ import { findRefScopeError } from "./_scope";
 /**
  * GET /api/opportunities — 현재 조직의 영업 기회 목록 (F-111).
  * `?q=`(기회명·거래처명) · `?stage=` · `?owner=` 로 좁히고,
- * 예상 마감일 오름차순(미정은 뒤)으로 정렬한다.
+ * `?sort=&dir=` 로 정렬한다 — 기본은 최근 수정일 내림차순이다 (2차 피드백 14).
+ * 정렬 파싱은 목록 화면과 **같은 순수 함수**를 쓴다 (API 와 화면의 순서가 갈라지지 않게).
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -32,10 +36,14 @@ export async function GET(req: NextRequest) {
     stage: params.get("stage"),
     owner: params.get("owner"),
   });
+  const sort = parseOpportunitySort({
+    sort: params.get("sort"),
+    dir: params.get("dir"),
+  });
 
   const opportunities = await prisma.opportunity.findMany({
     where: opportunitiesWhere(user.orgId, filters),
-    orderBy: OPPORTUNITY_LIST_ORDER_BY,
+    orderBy: opportunityOrderBy(sort),
     select: OPPORTUNITY_DTO_SELECT,
   });
 
