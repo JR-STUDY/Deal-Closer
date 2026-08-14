@@ -11,7 +11,8 @@ import {
   isOpportunityStage,
   type ActivityEventType,
 } from "@/lib/constants";
-import { formatDate, formatDateTime, formatKRW } from "@/lib/format";
+import { formatKRW } from "@/lib/format";
+import { amountBreakdown } from "@/lib/amount-breakdown";
 import type { StageHistoryEntry } from "@/lib/opportunity-progress";
 import { PageHeader } from "@/components/page-header";
 import { DetailShell } from "@/components/detail-shell";
@@ -21,6 +22,7 @@ import { OpportunityStageStepper } from "@/components/opportunity/opportunity-st
 import { OpportunityDetailActions } from "./_components/opportunity-detail-actions";
 import { OpportunityInlineFields } from "./_components/opportunity-inline-fields";
 import { OpportunityDocuments } from "./_components/opportunity-documents";
+import { OpportunityTimestamps } from "./_components/opportunity-timestamps";
 import {
   OpportunityTimeline,
   type TimelineEntry,
@@ -200,13 +202,50 @@ export default async function OpportunityDetailPage({
       }),
     ),
   ];
-  if (detachedIds.length > 0) {
-    const detached = await prisma.document.findMany({
-      where: { id: { in: detachedIds }, orgId: user.orgId },
-      select: { id: true, title: true, type: true, amount: true },
-    });
-    for (const document of detached) documentById.set(document.id, document);
-  }
+
+  /**
+   * 예상 금액의 근거가 된 확정 문서 (기회-6).
+   * **이미 읽은 문서 목록에서 찾는다** — 확정 문서는 반드시 이 기회에 붙은 문서 중 하나라
+   * 다시 조회할 이유가 없다.
+   */
+  const confirmedDocument =
+    documents.find((document) => document.id === dto.confirmedDocumentId) ??
+    null;
+
+  /*
+   * 두 뒷조회는 서로 독립이라 함께 실행한다. 위 `Promise.all` 에 넣지 못하는 이유는 둘 다
+   * 앞선 결과(이력의 documentId · 확정 문서 id)가 있어야 대상이 정해지기 때문이다.
+   */
+  const [detached, confirmedBody] = await Promise.all([
+    detachedIds.length > 0
+      ? prisma.document.findMany({
+          where: { id: { in: detachedIds }, orgId: user.orgId },
+          select: { id: true, title: true, type: true, amount: true },
+        })
+      : [],
+    /*
+     * 부가세 표기에 쓸 본문 (4차 피드백 W-C 1) — **확정 문서 한 건의 contentJson 만** 읽는다.
+     * 위 문서 목록 select 에 넣으면 연결 문서 전부의 본문(수십 KB 단위)을 실어 오게 되는데,
+     * 화면이 쓰는 것은 확정 문서 하나의 요약 행뿐이다.
+     */
+    confirmedDocument
+      ? prisma.document.findFirst({
+          where: { id: confirmedDocument.id, orgId: user.orgId },
+          select: { contentJson: true },
+        })
+      : null,
+  ]);
+  for (const document of detached) documentById.set(document.id, document);
+
+  /*
+   * 금액 내역은 **순수 함수 한 곳**에서만 판정한다 — 화면이 라벨을 고쳐 쓰거나 10% 를 곱하지
+   * 않는다. 본문을 읽지 못하면 `unknown` 이 되어 아무 내역도 그리지 않는다.
+   */
+  const breakdown = confirmedDocument
+    ? // 넘기는 금액은 **화면에 뜨는 숫자**(expectedAmount)다 — 설명하려는 대상이 그것이므로,
+      // 본문에서 다시 계산한 총계가 이와 다르면 내역이 통째로 빠진다(틀린 설명보다 낫다).
+      amountBreakdown(confirmedBody?.contentJson, dto.expectedAmount)
+    : null;
 
   /**
    * 진행 단계 스테퍼가 쓸 전이 이력. **이미 조회한 활동 이력에서 파생**하므로 쿼리가 늘지 않는다.
@@ -251,15 +290,6 @@ export default async function OpportunityDetailPage({
     updatedAt: document.updatedAt.toISOString(),
   }));
 
-  /**
-   * 예상 금액의 근거가 된 확정 문서 (기회-6).
-   * **이미 읽은 문서 목록에서 찾는다** — 확정 문서는 반드시 이 기회에 붙은 문서 중 하나라
-   * 다시 조회할 이유가 없다.
-   */
-  const confirmedDocument =
-    documents.find((document) => document.id === dto.confirmedDocumentId) ??
-    null;
-
   const newDocumentHref = `/generator?opportunityId=${encodeURIComponent(dto.id)}`;
 
   return (
@@ -281,7 +311,18 @@ export default async function OpportunityDetailPage({
           },
           { caption: "기회", label: dto.name },
         ]}
-        description={`${formatDate(opportunity.createdAt)} 등록 · ${formatDateTime(opportunity.updatedAt)} 최근 수정`}
+        /*
+         * 등록·최근 수정 일시는 제목 아래(`description`)가 아니라 **헤더 우측 아래**에
+         * 작게 놓는다 (4차 피드백 W-C 2). 본문과 같은 크기로 제목 바로 밑에 있으면
+         * 기회명 다음으로 눈에 드는 값이 날짜 두 개가 되는데, 영업 판단에 쓰이는 값이 아니라
+         * "언제 만든 건이었지" 를 확인할 때만 보는 값이다. 시각은 툴팁으로 접는다.
+         */
+        meta={
+          <OpportunityTimestamps
+            createdAt={opportunity.createdAt.toISOString()}
+            updatedAt={opportunity.updatedAt.toISOString()}
+          />
+        }
         actions={
           <>
             {/* 이 기회에 연결될 새 문서를 만들러 가는 동선 (기회-2) */}
@@ -349,6 +390,7 @@ export default async function OpportunityDetailPage({
           accounts={accounts}
           owners={owners}
           confirmedDocument={confirmedDocument}
+          breakdown={breakdown}
         />
       </DetailShell>
     </>

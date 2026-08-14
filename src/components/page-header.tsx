@@ -50,6 +50,17 @@ type PageHeaderProps = {
   backHref?: string;
   /** 지정하면 제목 대신 경로(브레드크럼)를 표시한다 (파일 탐색기 스타일) */
   breadcrumb?: Crumb[];
+  /**
+   * 헤더 **우측 아래**에 작게 놓는 부차 정보 (등록·최근 수정 일시 등, 4차 피드백 W-C 2).
+   *
+   * `description` 과 자리를 바꿔 쓰는 것이 아니다 — `description` 은 그 화면이 무엇을 하는
+   * 곳인지 알려 주는 **본문 안내**라 제목 아래(왼쪽)가 맞고, 여기 오는 것은 "언제 만들어졌나"
+   * 처럼 **찾을 때만 보면 되는 값**이라 시선이 먼저 닿지 않는 자리에 작게 둔다.
+   *
+   * **주지 않으면 아무것도 그리지 않는다.** 화면마다 필요 여부가 다르므로(거래처 상세는
+   * 일시를 싣지 않기로 했다 — 3차 피드백) 공용 컴포넌트가 기본값으로 넣어 주지 않는다.
+   */
+  meta?: ReactNode;
 };
 
 /**
@@ -144,6 +155,7 @@ export function PageHeader({
   actions,
   backHref,
   breadcrumb,
+  meta,
 }: PageHeaderProps) {
   return (
     <header className="flex items-center justify-between gap-4 border-b px-8 py-4">
@@ -193,8 +205,23 @@ export function PageHeader({
           ) : null}
         </div>
       </div>
-      {actions ? (
-        <div className="flex shrink-0 items-center gap-2">{actions}</div>
+      {/*
+        우측 열은 위가 조작(actions), 아래가 부차 정보(meta)다. `meta` 를 넘기지 않는 화면은
+        예전과 같이 버튼 한 줄만 그려진다 (감싸는 열이 한 겹 생기지만 자식이 하나뿐이라
+        결과가 같다). `shrink-0` 이라 제목이 길어져도 이 열이 눌리지 않고, 대신 왼쪽 제목이
+        `truncate` 로 줄어든다 — 좁은 화면에서 둘이 겹치거나 뭉개지지 않는다.
+      */}
+      {actions || meta ? (
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {actions ? (
+            <div className="flex items-center gap-2">{actions}</div>
+          ) : null}
+          {meta ? (
+            <div className="text-xs whitespace-nowrap text-muted-foreground">
+              {meta}
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </header>
   );
