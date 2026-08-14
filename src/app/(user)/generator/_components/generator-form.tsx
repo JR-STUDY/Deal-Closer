@@ -58,36 +58,18 @@ import { AiModelSelect } from "@/components/ai-model-select";
 import type { AiModelOption } from "@/lib/ai/models";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { TemplatePicker } from "./template-picker";
+import type {
+  ConfirmedQuote,
+  GenerateMode,
+  OpportunityChoice,
+  TemplateChoice,
+} from "./types";
 
-/** 불러올 수 있는 표준 양식 (F-211) */
-export type TemplateChoice = {
-  id: string;
-  name: string;
-  type: string;
-  scope: string;
-  variables: { key: string; label: string; sample: string | null; required: boolean }[];
-};
+export type { ConfirmedQuote, OpportunityChoice, TemplateChoice } from "./types";
 
-/** 문서를 붙일 수 있는 영업 기회 (F-212) */
-export type OpportunityChoice = {
-  id: string;
-  name: string;
-  stage: string;
-  expectedAmount: number;
-  accountName: string;
-};
 
-/** 계약서의 소스로 고를 수 있는 확정 견적서 (F-213) */
-export type ConfirmedQuote = {
-  id: string;
-  title: string;
-  clientName: string | null;
-  amount: number;
-  version: number;
-};
 
-/** 생성 플로우 — 새로 작성 / 표준 양식으로 */
-type GenerateMode = "blank" | "template";
 
 /** 문서 종류 미지정 = AI 가 프롬프트를 보고 판단 */
 const AUTO_TYPE = "AUTO";
@@ -458,53 +440,12 @@ export function GeneratorForm({
           </Tabs>
 
           {mode === "template" ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="template-select" className="text-xs">
-                불러올 표준 양식
-              </Label>
-              <Select
-                value={templateId}
-                onValueChange={setTemplateId}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger id="template-select" className="w-full">
-                  <SelectValue placeholder="양식을 선택해주세요" />
-                </SelectTrigger>
-                <SelectContent>
-                  {templates.map((template) => (
-                    <SelectItem key={template.id} value={template.id}>
-                      {template.name} ·{" "}
-                      {TEMPLATE_SCOPE_LABELS[template.scope as TemplateScope] ??
-                        template.scope}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedTemplate ? (
-                <p className="text-xs text-muted-foreground">
-                  이 양식의 레이아웃·문구·공급자 정보는 그대로 두고 값만 채웁니다. 문서 종류는{" "}
-                  <Badge variant="secondary" className="align-middle">
-                    {DOCUMENT_TYPE_LABELS[selectedTemplate.type as DocumentType] ??
-                      selectedTemplate.type}
-                  </Badge>{" "}
-                  로 양식을 따릅니다.
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  양식을 고르면 문서 종류는 양식을 따릅니다.
-                </p>
-              )}
-            {/* 선택한 양식의 필수 변수 안내 (F-204) */}
-            {requiredVariables.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                이 양식의 필수 항목:{" "}
-                <span className="font-medium text-foreground">
-                  {requiredVariables.map((v) => v.label).join(", ")}
-                </span>{" "}
-                — 위 입력값이나 요청 내용에 포함해주세요.
-              </p>
-            )}
-            </div>
+            <TemplatePicker
+              templates={templates}
+              value={templateId === NO_TEMPLATE ? null : templateId}
+              onChange={setTemplateId}
+              disabled={isSubmitting}
+            />
           ) : (
             <div className="space-y-1.5">
               <Label htmlFor="type-select" className="text-xs">
