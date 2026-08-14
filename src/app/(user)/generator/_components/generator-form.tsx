@@ -56,6 +56,8 @@ import { formatKRW } from "@/lib/format";
 import { DocumentPicker, type LibraryDoc } from "./document-picker";
 import { AiModelSelect } from "@/components/ai-model-select";
 import type { AiModelOption } from "@/lib/ai/models";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 
 /** 불러올 수 있는 표준 양식 (F-211) */
 export type TemplateChoice = {
@@ -83,6 +85,9 @@ export type ConfirmedQuote = {
   amount: number;
   version: number;
 };
+
+/** 생성 플로우 — 새로 작성 / 표준 양식으로 */
+type GenerateMode = "blank" | "template";
 
 /** 문서 종류 미지정 = AI 가 프롬프트를 보고 판단 */
 const AUTO_TYPE = "AUTO";
@@ -144,6 +149,11 @@ export function GeneratorForm({
   const [templateId, setTemplateId] = useState<string>(
     initialTemplateId ?? NO_TEMPLATE,
   );
+  // 생성 플로우는 둘로 나뉜다: 새로 작성 / 표준 양식으로 (F-211 · F-212)
+  // 양식이 미리 지정돼 들어오면(?template=) 양식 모드로 연다.
+  const [mode, setMode] = useState<GenerateMode>(
+    initialTemplateId ? "template" : "blank",
+  );
   const [documentType, setDocumentType] = useState<string>(AUTO_TYPE);
   const [model, setModel] = useState<string>(defaultModel);
   // 기회 연결은 선택 — 고르지 않으면 "기회 미연결" 빠른 초안이 된다
@@ -184,10 +194,17 @@ export function GeneratorForm({
     .map((id) => libraryDocuments.find((d) => d.id === id))
     .filter((d): d is LibraryDoc => Boolean(d));
 
+  // 양식 모드가 아니면 양식은 적용하지 않는다 (모드와 전송값이 어긋나지 않게)
   const selectedTemplate =
-    templateId === NO_TEMPLATE
+    mode !== "template" || templateId === NO_TEMPLATE
       ? null
       : (templates.find((t) => t.id === templateId) ?? null);
+
+  const changeMode = (next: GenerateMode) => {
+    setMode(next);
+    // 새로 작성으로 돌아가면 양식 선택을 비운다 — 숨은 채로 적용되면 사용자가 알 수 없다
+    if (next === "blank") setTemplateId(NO_TEMPLATE);
+  };
 
   // 양식을 고르면 그 양식의 문서 종류를 따른다 (수동 선택이 있으면 그 값 우선)
   const effectiveType =
@@ -328,7 +345,7 @@ export function GeneratorForm({
       formData.append("saveAsCommon", "true");
     }
     // 표준 양식 불러오기 (F-211)
-    if (templateId !== NO_TEMPLATE) {
+    if (mode === "template" && templateId !== NO_TEMPLATE) {
       formData.append("templateId", templateId);
     }
     if (effectiveType !== AUTO_TYPE) {
@@ -424,25 +441,111 @@ export function GeneratorForm({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {/* 어떤 방식으로 만들지 먼저 고른다 — 두 플로우의 입력이 다르다 */}
+          <Tabs value={mode} onValueChange={(v) => changeMode(v as GenerateMode)}>
+            <TabsList className="w-full">
+              <TabsTrigger value="blank" disabled={isSubmitting} className="flex-1">
+                새로 작성
+              </TabsTrigger>
+              <TabsTrigger
+                value="template"
+                disabled={isSubmitting || templates.length === 0}
+                className="flex-1"
+              >
+                표준 양식으로
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {mode === "template" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="template-select" className="text-xs">
+                불러올 표준 양식
+              </Label>
+              <Select
+                value={templateId}
+                onValueChange={setTemplateId}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger id="template-select" className="w-full">
+                  <SelectValue placeholder="양식을 선택해주세요" />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {template.name} ·{" "}
+                      {TEMPLATE_SCOPE_LABELS[template.scope as TemplateScope] ??
+                        template.scope}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedTemplate ? (
+                <p className="text-xs text-muted-foreground">
+                  이 양식의 레이아웃·문구·공급자 정보는 그대로 두고 값만 채웁니다. 문서 종류는{" "}
+                  <Badge variant="secondary" className="align-middle">
+                    {DOCUMENT_TYPE_LABELS[selectedTemplate.type as DocumentType] ??
+                      selectedTemplate.type}
+                  </Badge>{" "}
+                  로 양식을 따릅니다.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  양식을 고르면 문서 종류는 양식을 따릅니다.
+                </p>
+              )}
+            {/* 선택한 양식의 필수 변수 안내 (F-204) */}
+            {requiredVariables.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                이 양식의 필수 항목:{" "}
+                <span className="font-medium text-foreground">
+                  {requiredVariables.map((v) => v.label).join(", ")}
+                </span>{" "}
+                — 위 입력값이나 요청 내용에 포함해주세요.
+              </p>
+            )}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="type-select" className="text-xs">
+                문서 종류
+              </Label>
+              <Select
+                value={documentType}
+                onValueChange={setDocumentType}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger id="type-select" className="w-full">
+                  <SelectValue placeholder="AI 가 판단" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={AUTO_TYPE}>AI 가 판단</SelectItem>
+                  {DOCUMENT_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {DOCUMENT_TYPE_LABELS[type]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value.slice(0, MAX_LENGTH))}
             maxLength={MAX_LENGTH}
             disabled={isSubmitting}
-            placeholder="예: 협력사에게 받은 견적서에 마진 20%를 붙여서 견적서를 만들어줘"
+            placeholder={
+              mode === "template"
+                ? "예: 라이선스 30명, 1년 계약으로 채워줘 (이번 건에서 달라지는 점만 적으면 됩니다)"
+                : "예: 협력사에게 받은 견적서에 마진 20%를 붙여서 견적서를 만들어줘"
+            }
             className="min-h-40 resize-none text-base"
           />
 
-          {/* 문서 설정 — AI 모델 · 표준 양식 불러오기(F-211) · 문서 종류 · 거래처 정보 */}
+          {/* 추가 설정 — 기회 연결 · 근거 문서 · 거래처 · AI 모델 */}
           <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-            <AiModelSelect
-              models={models}
-              value={model}
-              onChange={setModel}
-              disabled={isSubmitting}
-              mock={mockProvider}
-            />
-
+            <p className="text-xs font-medium text-muted-foreground">추가 설정</p>
             <div className="space-y-1.5">
               <Label htmlFor="opportunity-select" className="text-xs">
                 영업 기회 연결
@@ -474,58 +577,6 @@ export function GeneratorForm({
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="template-select" className="text-xs">
-                  표준 양식 불러오기
-                </Label>
-                <Select
-                  value={templateId}
-                  onValueChange={setTemplateId}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger id="template-select" className="w-full">
-                    <SelectValue placeholder="양식 없이 생성" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_TEMPLATE}>양식 없이 생성</SelectItem>
-                    {templates.map((template) => (
-                      <SelectItem key={template.id} value={template.id}>
-                        {template.name} ·{" "}
-                        {DOCUMENT_TYPE_LABELS[template.type as DocumentType] ??
-                          template.type}
-                        {" · "}
-                        {TEMPLATE_SCOPE_LABELS[template.scope as TemplateScope] ??
-                          template.scope}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="type-select" className="text-xs">
-                  문서 종류
-                </Label>
-                <Select
-                  value={documentType}
-                  onValueChange={setDocumentType}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger id="type-select" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={AUTO_TYPE}>AI 가 판단</SelectItem>
-                    {DOCUMENT_TYPES.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {DOCUMENT_TYPE_LABELS[type]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
 
             {/* 계약서: 확정된 견적서를 소스로 지정 (F-213) */}
             {showQuoteSource && (
@@ -603,16 +654,14 @@ export function GeneratorForm({
             </div>
             )}
 
-            {/* 선택한 양식의 필수 변수 안내 (F-204) */}
-            {requiredVariables.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                이 양식의 필수 항목:{" "}
-                <span className="font-medium text-foreground">
-                  {requiredVariables.map((v) => v.label).join(", ")}
-                </span>{" "}
-                — 위 입력값이나 요청 내용에 포함해주세요.
-              </p>
-            )}
+
+            <AiModelSelect
+              models={models}
+              value={model}
+              onChange={setModel}
+              disabled={isSubmitting}
+              mock={mockProvider}
+            />
           </div>
 
           {/* 파일/폴더 첨부 — 클릭 시 [파일 선택 / 폴더 선택] 메뉴, 드롭도 지원 */}
