@@ -39,6 +39,8 @@ export type DocRow = {
   version: number;
   /** 확정본 여부 (F-214) */
   isConfirmed: boolean;
+  /** 연결된 영업 기회. null 이면 기회 미연결 문서(빠른 초안) */
+  opportunity: { name: string } | null;
 };
 
 type FolderOption = { id: string; name: string };
@@ -191,6 +193,13 @@ export function DocumentList({
                       {doc.clientName}
                     </p>
                   ) : null}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {doc.opportunity ? (
+                      <>기회: {doc.opportunity.name}</>
+                    ) : (
+                      <span className="italic">기회 미연결</span>
+                    )}
+                  </p>
                 </div>
                 <div className="flex items-baseline justify-between pt-1">
                   <span className="text-lg font-semibold tabular-nums">
@@ -248,6 +257,13 @@ export function DocumentList({
                         {doc.clientName}
                       </div>
                     ) : null}
+                    <div className="text-xs text-muted-foreground">
+                      {doc.opportunity ? (
+                        <>기회: {doc.opportunity.name}</>
+                      ) : (
+                        <span className="italic">기회 미연결</span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-center">
                     <DocTypeBadge type={doc.type} />

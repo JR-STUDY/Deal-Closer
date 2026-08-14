@@ -135,6 +135,8 @@ export function TemplateUploadDialog({
           <DialogDescription>
             기존에 쓰던 양식 파일을 올리면 AI 가 재사용 가능한 표준 양식으로 정리하고,
             문서마다 채워야 하는 변수 항목까지 뽑아 줍니다.
+            고객사명·금액처럼 거래처마다 달라지는 값은 <strong className="font-medium">비워 둡니다</strong> —
+            그 값은 나중에 기회에서 문서를 만들 때 채워집니다.
           </DialogDescription>
         </DialogHeader>
 
