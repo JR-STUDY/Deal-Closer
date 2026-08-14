@@ -103,7 +103,8 @@ const MATRIX: Record<
   LOST: {
     // 검토/협상을 거치지 않고 제안에서 마감한 기회 (시드의 `백업 스토리지 교체`)
     history: historyOf("INITIAL", "PROPOSAL", "LOST"),
-    track: ["done", "done", "upcoming"],
+    // 마감했으므로 검토/협상은 "남은" 곳이 아니라 **건너뛴** 곳이다 (기회-16)
+    track: ["done", "done", "skipped"],
     outcomeStage: "LOST",
     outcomeStatus: "current",
     outcomeLabel: OPPORTUNITY_STAGE_LABELS.LOST,
@@ -111,8 +112,16 @@ const MATRIX: Record<
   },
 };
 
-/** 트랙 상태는 이 순서를 거스르지 않는다 — 기준점은 하나뿐이다 */
-const STATUS_ORDER: StageNodeStatus[] = ["done", "current", "upcoming"];
+/**
+ * 트랙 상태는 이 순서를 거스르지 않는다 — 기준점은 하나뿐이다.
+ * `skipped` 와 `upcoming` 은 둘 다 "기준점 뒤"라 같은 자리다 (기회가 끝났는지만 다르다).
+ */
+const STATUS_RANK: Record<StageNodeStatus, number> = {
+  done: 0,
+  current: 1,
+  skipped: 2,
+  upcoming: 2,
+};
 
 // ── 5단계 전수: 트랙·마감 노드 상태 ──
 for (const stage of OPPORTUNITY_STAGES) {
@@ -167,11 +176,28 @@ for (const stage of OPPORTUNITY_STAGES) {
     progress.track.every(
       (node, index) =>
         index === 0 ||
-        STATUS_ORDER.indexOf(node.status) >=
-          STATUS_ORDER.indexOf(progress.track[index - 1].status),
+        STATUS_RANK[node.status] >=
+          STATUS_RANK[progress.track[index - 1].status],
     ),
     true,
     `${stage}: 트랙 상태가 뒤섞이지 않는다`,
+  );
+
+  /*
+   * 건너뜀은 **마감된 기회에만** 나타난다 (기회-16).
+   * 진행 중인 기회의 앞 단계는 앞으로 갈 곳이므로 `upcoming` 이어야 한다 —
+   * 여기서 skipped 가 새면 "아직 갈 수 있는 단계"가 지나쳤다고 표시된다.
+   */
+  check(
+    progress.track.some((node) => node.status === "skipped") &&
+      !expected.isClosed,
+    false,
+    `${stage}: 진행 중인 기회에는 건너뛴 단계가 없다`,
+  );
+  check(
+    progress.outcome.status === "skipped",
+    false,
+    `${stage}: 마감 노드는 건너뜀이 될 수 없다`,
   );
 
   // 안내 문구는 비어 있지 않고 존댓말로 끝난다 (COPY-TONE)
@@ -217,13 +243,13 @@ const lostAtProposal = historyOf("INITIAL", "PROPOSAL", "LOST");
 check(
   shape("LOST", lostAtProposal),
   {
-    track: ["done", "done", "upcoming"],
+    track: ["done", "done", "skipped"],
     outcomeStage: "LOST",
     outcomeStatus: "current",
     outcomeLabel: "실주",
     isClosed: true,
   },
-  "제안에서 실주: 검토/협상은 지나온 단계가 아니다",
+  "제안에서 실주: 검토/협상은 지나온 단계가 아니라 건너뛴 단계",
 );
 check(
   reachedOpenStage("LOST", lostAtProposal),
@@ -267,13 +293,13 @@ check(
 check(
   shape("LOST", historyOf("INITIAL", "LOST")),
   {
-    track: ["done", "upcoming", "upcoming"],
+    track: ["done", "skipped", "skipped"],
     outcomeStage: "LOST",
     outcomeStatus: "current",
     outcomeLabel: "실주",
     isClosed: true,
   },
-  "초기에서 바로 실주: 초기만 지나온 단계",
+  "초기에서 바로 실주: 초기만 지나오고 제안·검토/협상은 건너뛴다",
 );
 check(
   reachedOpenStage("LOST", historyOf("INITIAL", "LOST")),
@@ -300,7 +326,8 @@ for (const stage of CLOSED_OPPORTUNITY_STAGES) {
   check(
     shape(stage, []),
     {
-      track: ["done", "upcoming", "upcoming"],
+      // 마감된 기회라 나머지는 "남은" 이 아니라 건너뛴 단계다
+      track: ["done", "skipped", "skipped"],
       outcomeStage: stage,
       outcomeStatus: "current",
       outcomeLabel: OPPORTUNITY_STAGE_LABELS[stage],
@@ -339,6 +366,93 @@ check(
   shape("PROPOSAL", historyOf("INITIAL", "PROPOSAL", "LOST", "PROPOSAL")),
   { track: ["done", "current", "upcoming"], ...PENDING_OUTCOME },
   "실주를 풀어 제안으로 되돌리면 진행 중 표시로 돌아온다",
+);
+
+// ── 검증 필수 케이스 6: 건너뛴 단계 (기회-16) ──
+// 마감된 기회에서 **도달 지점보다 뒤**의 진행 단계는 `upcoming` 이 아니라 `skipped` 다.
+// "아직 안 온 곳"과 "영영 안 갈 곳"이 같아 보이면, 지나가지 않은 단계가 지나온 것처럼 읽힌다.
+
+/** 트랙에서 건너뛴 단계만 뽑는다 */
+function skippedStages(stage: OpportunityStage, history?: StageHistoryEntry[]) {
+  return opportunityProgress(stage, history)
+    .track.filter((node) => node.status === "skipped")
+    .map((node) => node.stage);
+}
+
+// 제안 → 수주 : 검토/협상 한 칸만 건너뛴다
+const wonFromProposal = historyOf("INITIAL", "PROPOSAL", "WON");
+check(
+  shape("WON", wonFromProposal),
+  {
+    track: ["done", "done", "skipped"],
+    outcomeStage: "WON",
+    outcomeStatus: "current",
+    outcomeLabel: "수주",
+    isClosed: true,
+  },
+  "제안에서 수주: 검토/협상은 건너뛴 단계",
+);
+check(
+  skippedStages("WON", wonFromProposal),
+  ["NEGOTIATION"],
+  "제안에서 수주: 건너뛴 단계는 검토/협상 하나",
+);
+
+// 초기 → 수주 : 제안·검토/협상 두 칸을 건너뛴다
+const wonFromInitial = historyOf("INITIAL", "WON");
+check(
+  shape("WON", wonFromInitial),
+  {
+    track: ["done", "skipped", "skipped"],
+    outcomeStage: "WON",
+    outcomeStatus: "current",
+    outcomeLabel: "수주",
+    isClosed: true,
+  },
+  "초기에서 바로 수주: 제안·검토/협상을 건너뛴다",
+);
+check(
+  skippedStages("WON", wonFromInitial),
+  ["PROPOSAL", "NEGOTIATION"],
+  "초기에서 바로 수주: 건너뛴 단계는 제안·검토/협상",
+);
+
+// 초기 → 실주 : 수주와 같은 모양이어야 한다 (결과만 다르다)
+check(
+  skippedStages("LOST", historyOf("INITIAL", "LOST")),
+  ["PROPOSAL", "NEGOTIATION"],
+  "초기에서 바로 실주: 건너뛴 단계는 수주와 같다",
+);
+check(
+  opportunityProgress("LOST", historyOf("INITIAL", "LOST")).track.map(
+    (node) => node.status,
+  ),
+  opportunityProgress("WON", historyOf("INITIAL", "WON")).track.map(
+    (node) => node.status,
+  ),
+  "결과(수주·실주)가 달라도 지나온·건너뛴 구간의 모양은 같다",
+);
+
+// 검토/협상 → 수주 : 전부 거쳤으므로 건너뛴 단계가 **하나도 없다**
+check(
+  skippedStages("WON", wonFullPath),
+  [],
+  "전 단계를 거친 수주: 건너뛴 단계 없음",
+);
+
+// 진행 중인 기회는 마감 전이라 앞 단계가 여전히 "앞으로 갈 곳"이다
+for (const stage of OPEN_OPPORTUNITY_STAGES) {
+  check(
+    skippedStages(stage, MATRIX[stage].history),
+    [],
+    `${stage}: 진행 중이면 건너뛴 단계가 없다`,
+  );
+}
+// 마감을 풀어 되돌리면 건너뜀 표시도 함께 풀린다 (다시 앞으로 갈 수 있다)
+check(
+  skippedStages("PROPOSAL", historyOf("INITIAL", "PROPOSAL", "LOST", "PROPOSAL")),
+  [],
+  "실주를 풀어 되돌리면 건너뜀 표시가 사라진다",
 );
 
 // ── 단계와 무관한 이력은 무시한다 ──

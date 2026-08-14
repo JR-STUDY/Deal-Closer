@@ -17,8 +17,15 @@ import {
   type OpportunityStage,
 } from "./constants";
 
-/** 스테퍼 노드의 상태 — 지나온 / 현재 / 남은 */
-export type StageNodeStatus = "done" | "current" | "upcoming";
+/**
+ * 스테퍼 노드의 상태 — 지나온 / 현재 / 건너뛴 / 남은.
+ *
+ * `skipped` 와 `upcoming` 을 나누는 이유는 둘이 **다른 사실**이기 때문이다.
+ * `upcoming` 은 "아직 안 온 곳"(앞으로 갈 수 있다), `skipped` 는 "영영 안 갈 곳"이다 —
+ * 제안에서 바로 수주한 기회의 검토/협상은 앞으로 갈 곳이 아니라 지나쳐 버린 곳이다.
+ * 둘을 같은 표현으로 그리면 마감된 기회의 트랙이 아직 진행 중인 것처럼 읽힌다 (기회-16).
+ */
+export type StageNodeStatus = "done" | "current" | "skipped" | "upcoming";
 
 /**
  * 스테퍼가 그리는 노드 공통 모양.
@@ -119,6 +126,10 @@ export function reachedOpenStage(
  *
  * 마감을 풀어 되돌린 기회(검토/협상 → 제안)는 현재 단계가 기준점이라 검토/협상이 다시
  * **남은 단계**로 보인다. 트랙에 기준점이 둘일 수는 없고, 되돌린 사실은 아래 이력에 남는다.
+ *
+ * 도달 지점 **뒤**는 기회가 끝났는지에 따라 뜻이 갈린다 (기회-16).
+ * 진행 중이면 `upcoming`(앞으로 갈 곳)이지만, 마감된 기회에는 앞으로가 없으므로 `skipped`
+ * (지나치고 마감한 곳)다 — 제안에서 바로 수주한 기회의 검토/협상이 여기 해당한다.
  */
 export function opportunityProgress(
   stage: OpportunityStage,
@@ -133,7 +144,7 @@ export function opportunityProgress(
     if (index === reachedIndex) {
       return toNode(openStage, isClosed ? "done" : "current");
     }
-    return toNode(openStage, "upcoming");
+    return toNode(openStage, isClosed ? "skipped" : "upcoming");
   });
 
   return {

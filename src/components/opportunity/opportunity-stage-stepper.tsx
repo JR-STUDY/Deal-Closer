@@ -33,6 +33,8 @@ import {
  * 진행 중이면 회색 `수주/실주`(앞으로 갈 곳), 마감되면 실제 결과 하나가 채워진다.
  * 수주·실주를 두 줄 갈래(2step)로 벌리지 않는다 (기회-11).
  * 지나온 단계는 채워진 노드·연결선, 현재 단계는 링으로 강조, 남은 단계는 빈 노드·흐린 선이다.
+ * **건너뛴 단계**(마감된 기회가 지나치고 만 단계)는 점선 노드·점선 연결선·취소선 라벨이다 —
+ * "아직 안 온 곳"과 "영영 안 갈 곳"이 같아 보이면 안 된다 (기회-16).
  *
  * 지나온 구간은 `stage` 하나로 알 수 없다 — 마감된 기회는 어느 단계에서 마감했는지가
  * **활동 이력에만** 남는다. 그래서 상세 페이지가 이미 조회한 이력을 그대로 받아 넘긴다.
@@ -80,7 +82,12 @@ function accent(node: ProgressNode) {
   return node.stage ? STAGE_ACCENTS[node.stage] : undefined;
 }
 
-/** 노드 점 — 남은 단계도 테두리를 뚜렷하게 유지한다 (명도대비, ACC_*) */
+/**
+ * 노드 점 — 남은 단계도 테두리를 뚜렷하게 유지한다 (명도대비, ACC_*).
+ *
+ * 건너뛴 단계는 **점선 테두리**로 그린다 (기회-16). 색만 흐리게 하면 남은 단계와 구별되지
+ * 않으므로 형태로도 갈라 놓는다 — 색을 유일한 구분 수단으로 쓰지 않는다 (정책 ACC_*).
+ */
 function StageDot({ node }: { node: ProgressNode }) {
   if (node.status === "current") {
     return (
@@ -101,6 +108,14 @@ function StageDot({ node }: { node: ProgressNode }) {
       />
     );
   }
+  if (node.status === "skipped") {
+    return (
+      <span
+        aria-hidden="true"
+        className="size-3 shrink-0 rounded-full border-2 border-dashed border-muted-foreground/50 bg-transparent"
+      />
+    );
+  }
   return (
     <span
       aria-hidden="true"
@@ -109,35 +124,56 @@ function StageDot({ node }: { node: ProgressNode }) {
   );
 }
 
-/** 노드 라벨 — 현재 단계는 굵게 강조한다 */
+/**
+ * 노드 라벨 — 현재 단계는 굵게 강조하고, 건너뛴 단계에는 취소선을 둔다.
+ * 취소선은 색과 별개인 **형태** 신호라 명도대비에 기대지 않고도 구분된다 (ACC_*).
+ */
 function stageLabelClass(node: ProgressNode): string {
   if (node.status === "current") {
     return cn("font-semibold", accent(node)?.label ?? "text-foreground");
   }
-  return node.status === "done" ? "text-foreground" : "text-muted-foreground";
+  if (node.status === "done") return "text-foreground";
+  if (node.status === "skipped") {
+    return "text-muted-foreground line-through decoration-muted-foreground/60";
+  }
+  return "text-muted-foreground";
 }
 
 /** 점·선은 aria-hidden 이라 상태가 읽히지 않는다 → 라벨에 보충한다 (ACC_*) */
 function statusHint(node: ProgressNode): string {
-  if (node.status === "current") return " (현재 단계)";
-  return node.status === "done" ? " (지나온 단계)" : " (남은 단계)";
+  switch (node.status) {
+    case "current":
+      return " (현재 단계)";
+    case "done":
+      return " (지나온 단계)";
+    case "skipped":
+      return " (건너뛴 단계)";
+    case "upcoming":
+      return " (남은 단계)";
+  }
 }
 
 /**
- * 연결선 — 색은 이 선이 **들어가는** 노드에서 정한다 (기회-9).
- * 도달한 노드로 들어가는 선은 채우고, 마감 결과로 들어가는 선은 그 결과 색을 그대로 쓴다.
- * 아직 도달하지 않은 노드로 들어가는 선만 흐리게 남는다.
+ * 연결선의 표현 — **양 끝 노드의 상태에서 파생한다** (기회-9 · 기회-16).
+ *
+ * 들어가는 노드만 보면 `제안 → 수주` 처럼 건너뛴 구간을 가로질러 결과 색이 칠해져,
+ * 지나가지 않은 검토/협상이 지나온 것처럼 읽힌다. 그래서 **한쪽이라도 건너뛴 노드면 그 구간
+ * 전체를 건너뜀(점선)으로** 그린다 — 건너뛴 구간이 트랙에서 통째로 끊겨 보이게 된다.
  */
-function Connector({ into }: { into: ProgressNode }) {
+function connectorClass(from: ProgressNode, into: ProgressNode): string {
+  if (from.status === "skipped" || into.status === "skipped") {
+    // 점선은 배경이 아니라 테두리로 그린다 (bg 로는 파선을 만들 수 없다)
+    return "h-0 border-t-2 border-dashed border-muted-foreground/40";
+  }
+  if (into.status === "upcoming") return "h-0.5 rounded-full bg-border";
+  return cn("h-0.5 rounded-full", accent(into)?.line ?? "bg-primary");
+}
+
+function Connector({ from, into }: { from: ProgressNode; into: ProgressNode }) {
   return (
     <span
       aria-hidden="true"
-      className={cn(
-        "h-0.5 min-w-6 flex-1 rounded-full",
-        into.status === "upcoming"
-          ? "bg-border"
-          : (accent(into)?.line ?? "bg-primary"),
-      )}
+      className={cn("min-w-6 flex-1", connectorClass(from, into))}
     />
   );
 }
@@ -280,7 +316,9 @@ export function OpportunityStageStepper({
           const isCurrent = node.stage === currentStage;
           return (
             <Fragment key={node.stage}>
-              {index > 0 ? <Connector into={node} /> : null}
+              {index > 0 ? (
+                <Connector from={progress.track[index - 1]} into={node} />
+              ) : null}
               {/* 트랙 끝에 마감 노드가 항상 붙으므로 마지막 트랙 노드도 가운데 정렬이다 */}
               {action ? (
                 <StageMarkButton
@@ -288,10 +326,14 @@ export function OpportunityStageStepper({
                   align={align}
                   isCurrent={isCurrent}
                   disabled={isCurrent || stageChange.isSaving}
+                  /*
+                   * aria-label 은 버튼 안의 글자를 대신 읽히므로 라벨 옆 sr-only 상태 안내가
+                   * 묻힌다 → 상태를 여기에 함께 싣는다 (특히 "건너뛴 단계", 정책 ACC_*).
+                   */
                   label={
                     isCurrent
                       ? `${node.label} — 현재 단계`
-                      : `${node.label} 단계로 변경`
+                      : `${node.label}${statusHint(node)} — 이 단계로 변경`
                   }
                   onClick={() => selectStage(node.stage)}
                 />
@@ -307,7 +349,10 @@ export function OpportunityStageStepper({
           갈래로 벌리지 않는다 (기회-11). 회색 여부는 노드 status 가 정하므로 여기서 분기하지 않는다.
           누를 때는 어느 결과인지 정해야 하므로 수주·실주를 메뉴로 고른다.
         */}
-        <Connector into={progress.outcome} />
+        <Connector
+          from={progress.track[progress.track.length - 1]}
+          into={progress.outcome}
+        />
         {action ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild disabled={stageChange.isSaving}>
