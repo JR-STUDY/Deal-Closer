@@ -39,3 +39,13 @@ export type OpportunityChoice = {
 
 /** 생성 플로우 — 새로 작성 / 표준 양식으로 */
 export type GenerateMode = "blank" | "template";
+
+/** 끌어다 놓은 폴더 (내용은 읽지 않고 이름만 보관 — 데모 일괄 변환 트리거용) */
+export type FolderAttach = { name: string; fileNames: string[] };
+
+/** 바이트 크기를 사람이 읽는 형태로 */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
