@@ -8,6 +8,7 @@ import {
   pageItems,
   type Pagination,
 } from "@/lib/pagination";
+import { ListPageJump } from "@/components/list-page-jump";
 
 /**
  * 목록 페이지네이션 UI — 거래처 목록·기회 목록 공용 (거래처-3 · 기회-18).
@@ -20,6 +21,11 @@ import {
  * 들썩이고, 이 목록이 페이지로 나뉘는 화면인지조차 알 수 없다 (기회-18 · 거래처-3 보완).
  * 결과가 0건일 때만 그리지 않는다 — 나눌 페이지가 없고, 호출측이 그 자리에 빈 상태 안내를
  * 대신 띄운다. "총 0건 중 0–0번째" 는 안내가 아니라 소음이다.
+ *
+ * **이동 묶음은 화면 가운데에 선다** (4차 피드백 1). 좌우를 `1fr` 로 잡은 3열 격자를 쓰고
+ * 좌측 칸에만 건수 문구를 둔다 — `justify-between` 으로 밀어내면 건수 문구의 길이(검색 여부·
+ * 자릿수)에 따라 이동 묶음의 위치가 매번 달라져, 같은 자리를 두 번 누를 수 없다.
+ * 우측 칸은 일부러 비워 둔 균형추다.
  */
 
 const BOX =
@@ -54,13 +60,15 @@ export function ListPagination({
   return (
     <nav
       aria-label={label}
-      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+      className="grid items-center gap-x-4 gap-y-2 sm:grid-cols-[1fr_auto_1fr]"
     >
-      <p className="text-xs text-muted-foreground tabular-nums">
+      <p className="text-center text-xs text-muted-foreground tabular-nums sm:text-left">
         총 {formatNumber(totalCount)}
         {unit} 중 {formatNumber(from)}–{formatNumber(to)}번째
       </p>
 
+      {/* 번호 이동과 직접 입력을 한 묶음으로 둔다 — 둘 다 "페이지를 옮기는 길"이다 */}
+      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
       <ul className="flex flex-wrap items-center gap-1">
         <li>
           {hasPrev ? (
@@ -128,6 +136,21 @@ export function ListPagination({
           )}
         </li>
       </ul>
+
+        {/*
+          번호 목록 **옆**이다 (대체가 아니다). 번호는 이웃 페이지로 가는 한 번의 클릭,
+          입력은 멀리 건너뛰는 길 — 역할이 달라 둘 다 남긴다. 1페이지뿐이어도 함께 그려
+          이 화면이 어떻게 나뉘는지(= "/ 1")를 그대로 보여준다.
+        */}
+        <ListPageJump
+          basePath={basePath}
+          query={query}
+          totalPages={totalPages}
+        />
+      </div>
+
+      {/* 좌측 건수 문구와 균형을 맞춰 가운데 묶음을 정중앙에 세우는 빈 칸 */}
+      <span aria-hidden="true" className="hidden sm:block" />
     </nav>
   );
 }

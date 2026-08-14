@@ -12,9 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { OPPORTUNITY_STAGES, OPPORTUNITY_STAGE_LABELS } from "@/lib/constants";
 import { ALL_FILTER_VALUE, nextListSearch } from "@/lib/pagination";
 import type { OpportunityOwnerOption } from "@/lib/opportunity";
+import { StageFlowHint } from "@/components/opportunity/stage-flow-hint";
 
 const DEBOUNCE_MS = 350;
 const LIST_HREF = "/opportunities";
@@ -24,9 +24,12 @@ const ALL = ALL_FILTER_VALUE;
 const BOARD_VIEW = "board";
 
 /**
- * 영업 기회 목록 툴바 (F-111 · F-112) — 검색 + 단계별·영업 담당자별 필터 + 목록/칸반 전환.
+ * 영업 기회 목록 툴바 (F-111 · F-112) — 검색 + 영업 담당자별 필터 + 목록/칸반 전환.
  * 조건은 URL 쿼리(`?q=&stage=&owner=&view=&page=`)에 담아 서버 컴포넌트가 조회 조건으로 쓰게 한다
  * (새로고침·공유 시에도 같은 결과·같은 보기가 나온다).
+ *
+ * **단계 필터는 여기 없다** — 표의 단계 머리글로 옮겼다 (4차 피드백 6). 거르는 대상이 그 칸의
+ * 값이므로 조건도 그 칸 위에 있는 편이 찾기 쉽다. 쿼리 키(`?stage=`)와 page 리셋 규칙은 같다.
  *
  * `children` 으로 총 건수·예상 금액 합계를 받아 **검색란과 같은 줄 우측**에 둔다 (기회-15).
  * 좁은 화면에서는 `flex-wrap` 으로 아래 줄로 내려가 겹치지 않는다.
@@ -48,16 +51,10 @@ export function OpportunitiesToolbar({
   const [q, setQ] = useState(() => searchParams.get("q") ?? "");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const stage = searchParams.get("stage") ?? ALL;
   const owner = searchParams.get("owner") ?? ALL;
   const isBoard = searchParams.get("view") === BOARD_VIEW;
 
-  function push(next: {
-    q?: string;
-    stage?: string;
-    owner?: string;
-    view?: string;
-  }) {
+  function push(next: { q?: string; owner?: string; view?: string }) {
     // 검색·필터를 바꾸면 page 를 1로 되돌린다. 보기 전환은 결과 집합이 같아 page 를 유지한다.
     const qs = nextListSearch(searchParams.toString(), next);
     router.push(qs ? `${LIST_HREF}?${qs}` : LIST_HREF);
@@ -99,19 +96,9 @@ export function OpportunitiesToolbar({
         ) : null}
       </div>
 
-      <Select value={stage} onValueChange={(value) => push({ stage: value })}>
-        <SelectTrigger className="w-36" aria-label="단계 필터">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>단계 전체</SelectItem>
-          {OPPORTUNITY_STAGES.map((value) => (
-            <SelectItem key={value} value={value}>
-              {OPPORTUNITY_STAGE_LABELS[value]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {/* 단계 흐름 안내 — 검색칸 바로 옆에 접어 둔다 (4차 피드백 7).
+          단계 **필터**는 이 자리에 없다: 표의 단계 머리글로 옮겼다 (4차 피드백 6) */}
+      <StageFlowHint />
 
       {/* 거래처 담당자와 헷갈리지 않도록 "영업 담당자" 로 못박는다 (기회-14) */}
       <Select value={owner} onValueChange={(value) => push({ owner: value })}>
