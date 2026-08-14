@@ -22,12 +22,12 @@ import {
   resolvePagination,
 } from "@/lib/pagination";
 import { summarizeByStage } from "@/lib/pipeline";
+import { OPPORTUNITY_STAGES, OPPORTUNITY_STAGE_LABELS } from "@/lib/constants";
 import { formatKRW, formatNumber } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { InfoHint } from "@/components/info-hint";
 import { ListPagination } from "@/components/list-pagination";
 import { NewOpportunityButton } from "@/components/opportunity/new-opportunity-button";
-import { StageFlowGuide } from "@/components/opportunity/stage-flow-guide";
 import { OpportunitiesToolbar } from "./_components/opportunities-toolbar";
 import { OpportunitiesTable } from "./_components/opportunities-table";
 import { OpportunityBoard } from "./_components/opportunity-board";
@@ -124,6 +124,24 @@ export default async function OpportunitiesPage({
     redirect(pageHref(LIST_HREF, listQuery, pagination.page));
   }
 
+  /**
+   * 단계 필터 선택지 — 주소를 **서버에서** 만든다 (4차 피드백 6).
+   * 머리글 메뉴는 진짜 `<Link>` 목록이라야 새 탭·주소 복사·뒤로가기가 살고, 클라이언트가
+   * `useSearchParams` 를 읽지 않아도 된다(표 전체를 Suspense 로 감쌀 이유가 사라진다).
+   * `pageHref(..., 1)` 이 page 파라미터를 지우므로 **필터를 바꾸면 1페이지로 돌아간다** —
+   * 3페이지에 머문 채 조건을 좁히면 결과가 있는데도 빈 화면이 뜬다 (`nextListSearch` 와 같은 규칙).
+   */
+  const stageOptions = [
+    { value: "", label: "단계 전체" },
+    ...OPPORTUNITY_STAGES.map((value) => ({
+      value,
+      label: OPPORTUNITY_STAGE_LABELS[value],
+    })),
+  ].map((option) => ({
+    ...option,
+    href: pageHref(LIST_HREF, { ...listQuery, stage: option.value }, 1),
+  }));
+
   return (
     <>
       <PageHeader
@@ -137,9 +155,8 @@ export default async function OpportunitiesPage({
       {/* scrollbar-gutter: 스크롤바가 생겼다 사라지며 본문 폭이 통째로 흔들리는 것을 막는다.
           표 폭을 고정해도 이 컨테이너가 좁아지면 잔여 폭을 흡수하는 칸이 따라 움직인다. */}
       <div className="flex-1 space-y-4 overflow-auto p-8 [scrollbar-gutter:stable]">
-        {/* 단계가 몇 개인지·어떤 순서인지 목록에서 바로 보이도록 흐름을 먼저 안내한다 */}
-        <StageFlowGuide />
-
+        {/* 단계 흐름 안내는 상단 붙박이 배너에서 검색칸 옆 ? 툴팁으로 옮겼다 (4차 피드백 7) —
+            한 번 익히면 되는 설명에 세로 공간을 상시로 내주지 않는다 */}
         <Suspense fallback={<div className="h-9" />}>
           {/* 총 건수·합계는 검색란과 같은 줄 우측에 둔다 — 세로 공간을 아낀다 (기회-15) */}
           <OpportunitiesToolbar owners={owners}>
@@ -200,6 +217,8 @@ export default async function OpportunitiesPage({
               sort={sort}
               basePath={LIST_HREF}
               listQuery={listQuery}
+              stageOptions={stageOptions}
+              activeStage={filters.stage ?? ""}
             />
             <ListPagination
               pagination={pagination}

@@ -12,14 +12,16 @@ import {
   type OpportunitySort,
   type OpportunitySortKey,
 } from "@/lib/opportunity-sort";
-import { formatDate, formatDateTime, formatKRW } from "@/lib/format";
+import { formatDate, formatDateTimeSeconds, formatKRW } from "@/lib/format";
 import { StageBadge } from "@/components/status-badge";
 import { SortableHead } from "@/components/list-sort-header";
+import { HintTooltip } from "@/components/hint-tooltip";
 import {
   ROW_LINK_ABOVE,
   ROW_LINK_ROW,
   RowLink,
 } from "@/components/list-row-link";
+import { StageFilterHead, type StageFilterOption } from "./stage-filter-head";
 import {
   Table,
   TableBody,
@@ -48,6 +50,8 @@ export function OpportunitiesTable({
   sort,
   basePath,
   listQuery,
+  stageOptions,
+  activeStage,
 }: {
   opportunities: OpportunityRow[];
   owners: OpportunityOwnerOption[];
@@ -56,6 +60,10 @@ export function OpportunitiesTable({
   basePath: string;
   /** 정렬을 바꿔도 유지할 검색·필터 (page 는 `opportunitySortHref` 가 1로 되돌린다) */
   listQuery: Readonly<Record<string, string>>;
+  /** 단계 머리글 필터의 선택지 — 주소는 서버가 미리 만든다 (4차 피드백 6) */
+  stageOptions: readonly StageFilterOption[];
+  /** 지금 걸린 단계 (없으면 빈 문자열) */
+  activeStage: string;
 }) {
   /**
    * 머리글 하나를 그릴 재료. 같은 컬럼이면 방향만 뒤집고, 다른 컬럼이면 그 컬럼의 기본
@@ -85,8 +93,14 @@ export function OpportunitiesTable({
         정렬 머리글은 아이콘 자리를 **항상** 차지하므로(`SortableHead`) 눌러도 폭이
         흔들리지 않는다. 대신 아이콘(14px)+간격(4px) 만큼 머리글이 길어져, 값보다
         머리글이 폭을 정하던 날짜 칸 두 개를 112 → 124px 로 넓혔다.
+
+        4차 피드백 5·6 으로 폭을 다시 나눴다 — 영업 담당자 칸(112px)을 지우고 단계 칸을
+        필터 아이콘 자리만큼 104 → 128px 로 넓혔다. 순증감은 -88px 이라 `min-w` 를
+        1096 → 1008px 로 낮춘다. **남는 폭은 그대로 기회명이 흡수한다** — 원래 잔여 폭을
+        먹는 유일한 칸이고, 행의 정체이자 가장 길어 잘리면 손해가 큰 값이라 옮길 이유가 없다.
+        (다른 칸에 나눠 주면 값보다 넓은 빈 칸만 늘어난다.)
       */}
-      <Table className="min-w-[1096px] table-fixed">
+      <Table className="min-w-[1008px] table-fixed">
         <TableHeader>
           <TableRow>
             {/* 폭 미지정 = 남는 폭 전부. `min-w` 에서 최소 224px 를 보장받는다 */}
@@ -99,10 +113,15 @@ export function OpportunitiesTable({
             />
             {/*
               단계는 정렬하지 않는다 — DB 가 String 이라 알파벳 순으로 서고(파이프라인
-              순서가 아니다), 단계로 좁히는 일은 툴바 필터가 더 정확히 해낸다.
-              104px: 가장 긴 배지 "검토/협상" 기준. 배지 칸은 더 넓을 이유가 없다
+              순서가 아니다). 대신 이 머리글이 **필터**를 맡는다 (4차 피드백 6): 정렬을
+              애초에 하지 않는 칸이라 두 동작이 한 자리에서 부딪히지 않는다.
+              128px: 가장 긴 배지/필터 라벨 "검토/협상" + 필터 아이콘(14px)+간격 기준
             */}
-            <TableHead className="w-[104px]">단계</TableHead>
+            <StageFilterHead
+              options={stageOptions}
+              activeValue={activeStage}
+              className="w-[128px]"
+            />
             {/* 144px: "₩1,800,000,000"(10억대)까지 한 줄로 들어가는 폭 */}
             <SortableHead
               label="예상 금액"
@@ -127,11 +146,12 @@ export function OpportunitiesTable({
               className="w-[124px]"
               {...sortHead("updatedAt")}
             />
-            {/* 거래처 담당자와 헷갈리지 않게 못박는다 (기회-14) */}
-            {/* 담당자도 정렬하지 않는다 — 가나다순은 목록을 훑는 데 보탬이 되지 않고,
-                "그 사람의 기회만" 은 툴바의 영업 담당자 필터가 해결한다.
-                112px: 이름(3~4자)보다 머리글이 길어 머리글이 폭을 정한다 */}
-            <TableHead className="w-[112px]">영업 담당자</TableHead>
+            {/*
+              영업 담당자 칸은 뺐다 (4차 피드백 5) — 한 조직의 목록에서 담당자 이름이 매 행에
+              반복되면 훑는 데 보탬이 되지 않는다. **툴바의 영업 담당자 필터는 남긴다**:
+              거르는 것(누구의 기회만 볼지)과 보여주는 것(행마다 이름을 싣기)은 다른 요구다.
+              정렬 대상도 아니었으므로 정렬 규칙은 그대로다.
+            */}
             {/* 56px: ⋯ 버튼(32px) + 셀 좌우 여백(16px) */}
             <TableHead className="w-14">
               <span className="sr-only">관리</span>
@@ -179,31 +199,45 @@ export function OpportunitiesTable({
                 className={`text-right tabular-nums ${
                   opportunity.confirmedDocumentId ? "" : "text-muted-foreground"
                 }`}
-                title={
-                  opportunity.confirmedDocumentId
-                    ? undefined
-                    : "확정 문서가 없어 0원입니다. 기회 상세에서 문서를 연결해주세요."
-                }
               >
-                {formatKRW(opportunity.expectedAmount)}
+                {opportunity.confirmedDocumentId ? (
+                  formatKRW(opportunity.expectedAmount)
+                ) : (
+                  // 사유는 칸에 적을 자리가 없어 툴팁으로 접는다. `title` 로는 뜨지 않는다 —
+                  // 행 덮개가 위를 지나가므로 트리거를 덮개 위로 올려야 한다 (HintTooltip 참고)
+                  <HintTooltip
+                    className={`inline-block ${ROW_LINK_ABOVE}`}
+                    content="확정 문서가 없어 ₩0 입니다. 기회 상세에서 문서를 연결하시면 그 문서의 금액이 반영됩니다."
+                  >
+                    {formatKRW(opportunity.expectedAmount)}
+                  </HintTooltip>
+                )}
               </TableCell>
               <TableCell className="text-right tabular-nums text-muted-foreground">
                 {opportunity.expectedCloseDate ? (
                   formatDate(opportunity.expectedCloseDate)
                 ) : (
-                  <span title="예상 마감일을 아직 정하지 않았습니다.">미정</span>
+                  <HintTooltip
+                    className={`inline-block ${ROW_LINK_ABOVE}`}
+                    content="예상 마감일을 아직 정하지 않았습니다."
+                  >
+                    미정
+                  </HintTooltip>
                 )}
               </TableCell>
-              {/* 기본 정렬의 근거값. 시각까지 적으면 칸이 넘치므로 날짜만 보이고
-                  정확한 시각은 title 로 알린다 (상세 머리글에도 같은 값이 있다) */}
-              <TableCell
-                className="text-right tabular-nums text-muted-foreground"
-                title={`${formatDateTime(opportunity.updatedAt)} 최근 수정`}
-              >
-                {formatDate(opportunity.updatedAt)}
-              </TableCell>
-              <TableCell className="truncate" title={opportunity.owner.name}>
-                {opportunity.owner.name}
+              {/*
+                기본 정렬의 근거값. 시각까지 적으면 칸이 넘치므로 날짜만 보이고, 호버·초점에
+                **초 단위까지** 툴팁으로 알린다 (4차 피드백 8) — 같은 날 여러 번 손댄 기회는
+                날짜만으로 순서를 확인할 수 없고, 분까지 같아지는 경우도 있다.
+                거래처 목록의 담당자 툴팁과 **같은 컴포넌트**라 생김새가 어긋나지 않는다.
+              */}
+              <TableCell className="text-right tabular-nums text-muted-foreground">
+                <HintTooltip
+                  className={`inline-block ${ROW_LINK_ABOVE}`}
+                  content={`${formatDateTimeSeconds(opportunity.updatedAt)} 최근 수정`}
+                >
+                  {formatDate(opportunity.updatedAt)}
+                </HintTooltip>
               </TableCell>
               {/* 덮개 위로 올려 메뉴 클릭이 상세로 새지 않게 한다 */}
               <TableCell className={`text-right ${ROW_LINK_ABOVE}`}>

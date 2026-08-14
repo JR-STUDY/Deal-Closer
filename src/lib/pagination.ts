@@ -119,6 +119,66 @@ export function resolvePagination({
   };
 }
 
+/**
+ * 사람이 **직접 입력한** 페이지 번호의 판정 결과 (4차 피드백 1).
+ *
+ * `parsePageParam` 과 일부러 다르게 판정한다 — 주소창의 `?page=` 는 손으로 고쳤든 오래된
+ * 링크든 조용히 1페이지로 떨어뜨리는 편이 낫지만(화면이 깨지지 않는 것이 우선),
+ * 사람이 칸에 적어 넣은 값은 **왜 못 갔는지 말해 줘야** 한다. 말없이 1페이지로 보내면
+ * 입력이 먹힌 것인지 무시된 것인지 알 수 없다.
+ */
+export type PageInputResult =
+  | { ok: true; page: number }
+  | {
+      ok: false;
+      /** 화면이 문구를 새로 짜지 않도록 사유와 문구를 함께 돌려준다 */
+      reason: "empty" | "invalid" | "outOfRange";
+      /** 그대로 보여줄 안내 문구 (한국어 존댓말, COPY-TONE) */
+      message: string;
+    };
+
+/**
+ * 입력 칸에 적은 페이지 번호를 검증한다 (4차 피드백 1).
+ *
+ * 공백·빈 값, 숫자가 아닌 값, 1 미만·총 페이지 초과를 각각 구분해 막는다.
+ * **범위를 넘는 값을 마지막 페이지로 조용히 당겨 주지 않는다** — 30을 적었는데 5페이지가
+ * 뜨면 입력이 반영된 것인지 무시된 것인지 구분할 수 없다. 안내하고 그 자리에 둔다.
+ */
+export function parsePageInput(
+  raw: string | null | undefined,
+  totalPages: number,
+): PageInputResult {
+  const total = Math.max(1, Math.trunc(totalPages));
+  const trimmed = raw?.trim() ?? "";
+
+  if (!trimmed) {
+    return {
+      ok: false,
+      reason: "empty",
+      message: "이동할 페이지 번호를 입력해주세요.",
+    };
+  }
+  // 부호·소수점·천 단위 쉼표·지수 표기를 모두 막는다 (페이지 번호는 자연수뿐이다)
+  if (!/^\d+$/.test(trimmed)) {
+    return {
+      ok: false,
+      reason: "invalid",
+      message: "페이지 번호는 숫자만 입력해주세요.",
+    };
+  }
+
+  const value = Number(trimmed);
+  if (!Number.isSafeInteger(value) || value < 1 || value > total) {
+    return {
+      ok: false,
+      reason: "outOfRange",
+      message: `1부터 ${total}까지의 번호를 입력해주세요.`,
+    };
+  }
+
+  return { ok: true, page: value };
+}
+
 /** 페이지 번호 목록의 생략 표식 */
 export const PAGE_GAP = "gap" as const;
 export type PageItem = number | typeof PAGE_GAP;
