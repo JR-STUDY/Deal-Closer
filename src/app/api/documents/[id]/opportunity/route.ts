@@ -5,6 +5,7 @@ import { ok, fail } from "@/lib/api";
 import { isDocumentType } from "@/lib/constants";
 import { applyDocumentLinked } from "@/lib/opportunity-stage";
 import { syncOpportunityAmounts } from "@/lib/opportunity-amount";
+import { findLinkedOpportunity } from "@/lib/opportunity-recipient";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -47,7 +48,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   if (document.opportunityId === nextOpportunityId) {
-    return ok({ id: document.id, opportunityId: nextOpportunityId });
+    // 바뀐 것이 없어도 화면이 쓸 요약은 같은 모양으로 돌려준다 (분기마다 응답이 다르면 화면이 갈라진다).
+    return ok({
+      id: document.id,
+      opportunityId: nextOpportunityId,
+      opportunity: nextOpportunityId
+        ? await findLinkedOpportunity(nextOpportunityId, user.orgId)
+        : null,
+      amountSync: null,
+    });
   }
 
   const amountSync = await prisma.$transaction(async (tx) => {
@@ -86,5 +95,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return nextOpportunityId ? (synced.at(-1) ?? null) : null;
   });
 
-  return ok({ id: document.id, opportunityId: nextOpportunityId, amountSync });
+  /*
+   * 연결된 기회의 요약(대표 담당자 포함)을 함께 돌려준다 (발송-12).
+   * 화면이 기회 조회를 한 번 더 하게 두면 "무엇을 연결했는가" 와 "누구에게 보내는가" 가
+   * 서로 다른 시점의 데이터가 된다. 트랜잭션 밖에서 읽어 확정된 결과만 싣는다.
+   */
+  const opportunity = nextOpportunityId
+    ? await findLinkedOpportunity(nextOpportunityId, user.orgId)
+    : null;
+
+  return ok({
+    id: document.id,
+    opportunityId: nextOpportunityId,
+    opportunity,
+    amountSync,
+  });
 }
