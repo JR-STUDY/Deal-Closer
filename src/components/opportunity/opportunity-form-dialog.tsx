@@ -141,16 +141,24 @@ export function OpportunityFormDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-h-[90svh] gap-5 overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
+      {/*
+        높이는 내용에 맞추고 **화면을 넘길 때에만** 스크롤한다 (2차 피드백 1번).
+        스크롤은 본문(form)만 진다 — 다이얼로그 전체에 overflow 를 걸면 제목·저장 버튼·
+        닫기(×)까지 함께 밀려 올라가 내용이 조금만 길어도 "작은 창" 처럼 읽힌다.
+        폭도 한 단계 넓힌다(lg → xl) — 연결할 문서 목록이 들어가는 폼이라 좁으면
+        문서 제목이 곧바로 잘린다.
+      */}
+      <DialogContent className="flex max-h-[90svh] flex-col gap-4 overflow-hidden sm:max-w-xl">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{title}</DialogTitle>
           {description ? (
             <DialogDescription>{description}</DialogDescription>
           ) : null}
         </DialogHeader>
 
+        {/* -mx-4 px-4 : 스크롤바는 팝업 가장자리에 두고 입력의 포커스 링은 잘리지 않게 한다 */}
         <form
-          className="space-y-4"
+          className="-mx-4 min-h-0 flex-1 space-y-4 overflow-y-auto px-4"
           onSubmit={(e) => {
             e.preventDefault();
             if (canSubmit) handleSubmit();
@@ -265,7 +273,7 @@ export function OpportunityFormDialog({
           </div>
         </form>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose} disabled={isSaving}>
             취소
           </Button>

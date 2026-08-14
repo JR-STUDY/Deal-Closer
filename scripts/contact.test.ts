@@ -15,8 +15,13 @@ import assert from "node:assert/strict";
 import {
   compareContacts,
   demotionTargetIds,
+  isBlankContactForm,
+  isPhone,
+  normalizePhone,
   parseContactInput,
+  parseContactInputs,
   primaryContact,
+  resolveBatchIsPrimary,
   resolveCreateIsPrimary,
   resolveDeletion,
   resolveUpdateIsPrimary,
@@ -31,6 +36,13 @@ function check(actual: unknown, expected: unknown, message: string) {
 }
 
 type Row = ContactOrderRef & { name: string };
+
+/** 배열 검증 결과에서 대표 플래그만 뽑는다 (실패했으면 메시지를 그대로 돌려 검사에서 드러나게 한다) */
+function batchPrimaryFlags(
+  result: ReturnType<typeof parseContactInputs>,
+): boolean[] | { error: string } {
+  return Array.isArray(result) ? result.map((one) => one.isPrimary) : result;
+}
 
 const at = (day: number) =>
   `2026-08-${String(day).padStart(2, "0")}T00:00:00.000Z`;
@@ -362,6 +374,234 @@ check(
   parseContactInput({ name: "이서준", isPrimary: "true" }),
   { name: "이서준", position: null, phone: null, email: null, isPrimary: false },
   "문자열 'true' 는 대표 요청이 아니다 (엄격히 true 만 받는다)",
+);
+
+// ──────────────────── 연락처 정규화 (normalizePhone) ────────────────────
+// 저장 표기를 하나로 모은다 — 같은 번호가 입력 방식마다 다르게 남으면 목록에서 다른 번호처럼 보인다.
+check(normalizePhone("01012345678"), "010-1234-5678", "하이픈 없이 쳐도 붙여준다");
+check(
+  normalizePhone("010 1234 5678"),
+  "010-1234-5678",
+  "공백 구분도 같은 값이 된다",
+);
+check(
+  normalizePhone("010.1234.5678"),
+  "010-1234-5678",
+  "점 구분도 같은 값이 된다",
+);
+check(
+  normalizePhone("  010-1234-5678  "),
+  "010-1234-5678",
+  "앞뒤 공백을 다듬는다",
+);
+check(
+  normalizePhone("+82 10-1234-5678"),
+  "010-1234-5678",
+  "국가번호(+82)는 떼고 앞자리 0 을 되살린다",
+);
+check(
+  normalizePhone("0082 10 1234 5678"),
+  "010-1234-5678",
+  "국제전화 접두(0082)도 같게 본다",
+);
+check(normalizePhone("0212345678"), "02-1234-5678", "서울 지역번호는 2자리");
+check(normalizePhone("021234567"), "02-123-4567", "서울 7자리 번호");
+check(
+  normalizePhone("+82 2 123 4567"),
+  "02-123-4567",
+  "국가번호를 뗀 뒤에도 지역번호 0 을 되살린다",
+);
+check(normalizePhone("0311234567"), "031-123-4567", "경기 지역번호는 3자리");
+check(normalizePhone("15881234"), "1588-1234", "대표번호는 4-4 로 끊는다");
+check(
+  normalizePhone("+82 1588 1234"),
+  "1588-1234",
+  "대표번호에는 0 을 붙이지 않는다",
+);
+check(
+  normalizePhone("0505-123-4567"),
+  "0505-123-4567",
+  "안심번호(050X)는 식별번호가 4자리",
+);
+check(normalizePhone(""), "", "빈 값은 빈 값 그대로");
+check(normalizePhone("   "), "", "공백뿐이면 빈 값");
+check(
+  normalizePhone("+1 415 555 2671"),
+  "+1 415 555 2671",
+  "해외 번호는 국내 규칙으로 재단하지 않고 원본을 둔다",
+);
+check(
+  normalizePhone("내선 1234"),
+  "내선 1234",
+  "정규화할 수 없는 값은 원본을 돌려주고 판정은 isPhone 이 한다",
+);
+
+// ──────────────────────── 연락처 형식 (isPhone) ────────────────────────
+check(isPhone("010-1234-5678"), true, "휴대전화");
+check(isPhone("02-123-4567"), true, "서울 7자리");
+check(isPhone("031-123-4567"), true, "지역번호 3자리");
+check(isPhone("1588-1234"), true, "대표번호");
+check(isPhone("+1 415 555 2671"), true, "국가번호를 밝힌 해외 번호는 받는다");
+check(isPhone("01012345678"), false, "정규화 전 값은 통과시키지 않는다");
+check(isPhone("010-1234-56789"), false, "자릿수가 넘치면 거른다");
+check(isPhone("전화번호"), false, "숫자가 아니면 거른다");
+check(isPhone("1234"), false, "짧은 숫자는 번호가 아니다");
+
+// ─────────────── 입력 검증에 연락처가 걸린다 (parseContactInput) ───────────────
+check(
+  parseContactInput({ name: "이서준", phone: " 01012345678 " }),
+  {
+    name: "이서준",
+    position: null,
+    phone: "010-1234-5678",
+    email: null,
+    isPrimary: false,
+  },
+  "저장 전에 연락처를 정규화한다",
+);
+check(
+  parseContactInput({ name: "이서준", phone: "1234" }),
+  { error: "연락처는 010-1234-5678 형식으로 입력해주세요." },
+  "연락처 형식은 값이 있을 때만 본다 — 틀리면 거른다",
+);
+check(
+  "error" in parseContactInput({ name: "이서준", phone: "" }),
+  false,
+  "연락처는 비워도 된다",
+);
+check(
+  parseContactInput({ name: "이서준", phone: "0".repeat(31) }),
+  { error: "연락처은(는) 30자 이내여야 합니다." },
+  "연락처 길이 상한",
+);
+
+// ─────── 여러 명 한 번에 등록: 대표는 정확히 1명 (resolveBatchIsPrimary) ───────
+check(resolveBatchIsPrimary([]), [], "0명이면 대표도 없다");
+check(
+  resolveBatchIsPrimary([{ isPrimary: false }, { isPrimary: false }]),
+  [true, false],
+  "아무도 고르지 않으면 첫 담당자가 대표",
+);
+check(
+  resolveBatchIsPrimary([
+    { isPrimary: false },
+    { isPrimary: true },
+    { isPrimary: false },
+  ]),
+  [false, true, false],
+  "고른 사람이 대표",
+);
+check(
+  resolveBatchIsPrimary([{ isPrimary: true }, { isPrimary: true }]),
+  [true, false],
+  "둘 이상 들어와도 앞의 한 명만 남긴다 (API 로는 여러 개가 올 수 있다)",
+);
+
+// ──────────────── 빈 줄은 없는 것으로 본다 (isBlankContactForm) ────────────────
+check(
+  isBlankContactForm({
+    name: "  ",
+    position: "",
+    phone: " ",
+    email: "",
+    isPrimary: false,
+  }),
+  true,
+  "네 칸이 모두 비면 추가만 눌러 둔 줄이다",
+);
+check(
+  isBlankContactForm({
+    name: "",
+    position: "과장",
+    phone: "",
+    email: "",
+    isPrimary: false,
+  }),
+  false,
+  "한 칸이라도 채워졌으면 검증 대상이다 (담당자명 누락으로 걸린다)",
+);
+
+// ────────── 거래처 등록과 함께 오는 담당자 배열 (parseContactInputs) ──────────
+check(parseContactInputs(undefined), [], "담당자를 안 보내면 0명");
+check(parseContactInputs(null), [], "null 도 0명으로 본다");
+check(parseContactInputs([]), [], "빈 배열도 0명");
+check(
+  parseContactInputs("이서준"),
+  { error: "담당자 목록 형식이 올바르지 않습니다." },
+  "배열이 아니면 거부한다",
+);
+check(
+  parseContactInputs([{ name: "김대리" }, { name: "이과장" }]),
+  [
+    {
+      name: "김대리",
+      position: null,
+      phone: null,
+      email: null,
+      isPrimary: true,
+    },
+    {
+      name: "이과장",
+      position: null,
+      phone: null,
+      email: null,
+      isPrimary: false,
+    },
+  ],
+  "아무도 고르지 않으면 첫 담당자가 대표",
+);
+check(
+  batchPrimaryFlags(
+    parseContactInputs([
+      { name: "김대리" },
+      { name: "이과장", isPrimary: true },
+    ]),
+  ),
+  [false, true],
+  "고른 사람만 대표가 된다",
+);
+check(
+  batchPrimaryFlags(
+    parseContactInputs([
+      { name: "김대리", isPrimary: true },
+      { name: "이과장", isPrimary: true },
+    ]),
+  ),
+  [true, false],
+  "여러 명이 대표로 들어와도 한 명만 남는다",
+);
+check(
+  parseContactInputs([{ name: "김대리" }, {}]),
+  { error: "담당자 2: 담당자명을 입력해주세요." },
+  "어느 줄이 잘못됐는지 순번으로 알린다",
+);
+check(
+  parseContactInputs([{ name: "김대리", email: "seojun" }]),
+  { error: "담당자 1: 담당자 이메일 형식이 올바르지 않습니다." },
+  "이메일 검증은 한 명짜리와 같은 규칙",
+);
+check(
+  parseContactInputs([{ name: "김대리", phone: "1234" }]),
+  { error: "담당자 1: 연락처는 010-1234-5678 형식으로 입력해주세요." },
+  "연락처 검증도 같은 규칙",
+);
+check(
+  parseContactInputs([null]),
+  { error: "담당자 1: 입력값을 확인해주세요." },
+  "객체가 아닌 줄은 안전하게 실패한다",
+);
+check(
+  parseContactInputs([{ name: "김대리", phone: "+82 10-1234-5678" }]),
+  [
+    {
+      name: "김대리",
+      position: null,
+      phone: "010-1234-5678",
+      email: null,
+      isPrimary: true,
+    },
+  ],
+  "배열로 들어와도 연락처를 정규화한다",
 );
 
 console.log(`contact: ${checks}건 검증 통과`);

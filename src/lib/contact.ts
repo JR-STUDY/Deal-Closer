@@ -22,6 +22,9 @@ export const CONTACT_POSITION_MAX = 60;
 export const CONTACT_PHONE_MAX = 30;
 export const CONTACT_EMAIL_MAX = 200;
 
+/** 연락처 표기 형식 — 화면 안내·placeholder·오류 문구에 함께 쓴다 */
+export const CONTACT_PHONE_FORMAT = "010-1234-5678";
+
 /** 클라이언트·서버 공용 담당자 표현 (날짜는 직렬화 안전한 ISO 문자열) */
 export type ContactDTO = {
   id: string;
@@ -89,6 +92,80 @@ export function toContactFormValues(contact: ContactDTO): ContactFormValues {
   };
 }
 
+// ─────────────────────── 연락처 정규화·검증 (순수 함수) ───────────────────────
+
+/**
+ * 국내 표기(0으로 시작하는 숫자열)로 맞춘다.
+ * 국가번호(+82 · 0082 · 82)는 떼고 국내 표기의 앞자리 0 을 되살린다 —
+ * 명함에서 옮겨 적은 `+82 10-1234-5678` 과 손으로 친 `010-1234-5678` 이
+ * 같은 사람의 같은 번호인데 목록에서 다르게 보이면 곤란하다.
+ * 대표번호(15xx·16xx·18xx)는 0 으로 시작하지 않으므로 그대로 둔다.
+ */
+function toLocalPhoneDigits(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  const stripped = digits.startsWith("0082")
+    ? digits.slice(4)
+    : digits.startsWith("82")
+      ? digits.slice(2)
+      : null;
+  if (stripped === null) return digits;
+  // 8자리 1xxx-xxxx 는 대표번호라 앞에 0 을 붙이면 안 된다
+  if (stripped.startsWith("0")) return stripped;
+  if (stripped.length === 8 && stripped.startsWith("1")) return stripped;
+  return `0${stripped}`;
+}
+
+/**
+ * 연락처를 하이픈 표기로 정규화한다 (사업자등록번호 `normalizeBizRegNo` 와 같은 선례).
+ *
+ * **저장 시 정규화한다** — 같은 번호가 `01012345678` · `010 1234 5678` ·
+ * `+82-10-1234-5678` 로 제각각 저장되면 목록·상세의 표기가 입력 방식에 따라 갈리고,
+ * 나중에 번호로 찾거나 중복을 가려낼 방법도 사라진다. 표기를 하나로 모으는 비용은
+ * 이 함수 하나뿐이고, 되돌릴 필요도 없다(사람이 읽는 값이라 원본 보존의 이득이 없다).
+ *
+ * 입력은 너그럽게 받는다 — 하이픈·공백·괄호·점 구분, 국가번호, 대표번호를 모두 받는다.
+ * 정규화할 수 없는 값(해외 번호·내선 포함 등)은 **원본을 그대로 돌려주고**,
+ * 형식 판정은 `isPhone` 이 맡는다.
+ */
+export function normalizePhone(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+
+  const digits = toLocalPhoneDigits(trimmed);
+
+  // 대표번호 15xx-xxxx · 16xx-xxxx · 18xx-xxxx
+  if (/^1\d{7}$/.test(digits)) {
+    return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  }
+  if (!digits.startsWith("0")) return trimmed;
+
+  // 지역·서비스 식별번호 길이: 서울 02 는 2자리, 안심번호 050X 는 4자리, 나머지는 3자리
+  const areaLength = digits.startsWith("02")
+    ? 2
+    : /^050\d/.test(digits)
+      ? 4
+      : 3;
+  const rest = digits.slice(areaLength);
+  if (rest.length !== 7 && rest.length !== 8) return trimmed;
+
+  const head = rest.slice(0, rest.length - 4);
+  return `${digits.slice(0, areaLength)}-${head}-${rest.slice(-4)}`;
+}
+
+/** 국내 표기: 0XX(X)-XXX(X)-XXXX · 대표번호 1XXX-XXXX */
+const PHONE_RE = /^(?:0\d{1,3}-\d{3,4}-\d{4}|1\d{3}-\d{4})$/;
+/**
+ * 해외 번호는 국내 규칙으로 재단하지 않는다. `+` 로 시작하면 국가번호를 명시한 것이므로
+ * 숫자·공백·하이픈만으로 이루어졌는지만 본다 — 나라마다 자릿수가 달라 더 좁히면 오탐이 난다.
+ */
+const INTL_PHONE_RE = /^\+\d[\d -]{6,18}\d$/;
+
+/** 연락처 형식 여부 (빈 값 허용 판단은 호출자가 한다. 정규화한 값을 넘긴다) */
+export function isPhone(value: string): boolean {
+  const trimmed = value.trim();
+  return PHONE_RE.test(trimmed) || INTL_PHONE_RE.test(trimmed);
+}
+
 /** 검증을 통과한 담당자 입력값 (선택 항목은 빈 값이면 null) */
 export type ContactInput = {
   name: string;
@@ -117,7 +194,7 @@ export function parseContactInput(
 
   const name = text("name");
   const position = text("position");
-  const phone = text("phone");
+  const phone = normalizePhone(text("phone"));
   const email = text("email");
 
   if (!name) return { error: "담당자명을 입력해주세요." };
@@ -125,11 +202,16 @@ export function parseContactInput(
   const lengthError =
     tooLong("담당자명", name, CONTACT_NAME_MAX) ??
     tooLong("직책", position, CONTACT_POSITION_MAX) ??
-    tooLong("핸드폰 번호", phone, CONTACT_PHONE_MAX) ??
+    tooLong("연락처", phone, CONTACT_PHONE_MAX) ??
     tooLong("담당자 이메일", email, CONTACT_EMAIL_MAX);
   if (lengthError) return { error: lengthError };
 
-  // 이메일은 빈 값을 허용하고, 값이 있을 때만 형식을 본다 (정책 VAL_*)
+  // 연락처·이메일은 빈 값을 허용하고, 값이 있을 때만 형식을 본다 (정책 VAL_*)
+  if (phone && !isPhone(phone)) {
+    return {
+      error: `연락처는 ${CONTACT_PHONE_FORMAT} 형식으로 입력해주세요.`,
+    };
+  }
   if (email && !isEmail(email)) {
     return { error: "담당자 이메일 형식이 올바르지 않습니다." };
   }
@@ -250,4 +332,58 @@ export function resolveDeletion<T extends ContactOrderRef>(
   // 남은 사람 중 이미 대표인 사람이 있으면 그를 유지한다(어긋난 데이터 대비)
   const promoted = primaryContact(remaining) ?? sortContacts(remaining)[0];
   return { deleted, remaining, promoted };
+}
+
+// ──────────────── 여러 명 한 번에 등록 (거래처 등록 팝업, 거래처-8) ────────────────
+
+/** 네 칸이 모두 빈 행 — "추가"만 눌러 두고 채우지 않은 자리다. 저장 대상에서 뺀다 */
+export function isBlankContactForm(values: ContactFormValues): boolean {
+  return (
+    !values.name.trim() &&
+    !values.position.trim() &&
+    !values.phone.trim() &&
+    !values.email.trim()
+  );
+}
+
+/**
+ * 한 번에 등록하는 담당자들의 대표 여부. **정확히 한 명만 true** 다.
+ * 아무도 고르지 않았으면 첫 담당자가 대표가 되고(`resolveCreateIsPrimary` 와 같은 규칙),
+ * 여러 명을 골랐으면 **가장 앞의 한 명만** 남긴다 — 화면의 라디오는 하나만 고르게 하지만
+ * API 로는 여러 개가 들어올 수 있고, 그때 대표가 2명인 상태를 만들면 안 된다.
+ */
+export function resolveBatchIsPrimary(
+  requests: readonly { isPrimary: boolean }[],
+): boolean[] {
+  if (requests.length === 0) return [];
+  const requested = requests.findIndex((one) => one.isPrimary);
+  const primaryIndex = requested === -1 ? 0 : requested;
+  return requests.map((_, index) => index === primaryIndex);
+}
+
+/**
+ * 거래처 등록 시 함께 보낸 담당자 배열을 검증한다 (한 명씩은 `parseContactInput` 이 본다).
+ * 어느 줄이 잘못됐는지 알려야 고칠 수 있으므로 메시지에 순번을 붙인다.
+ * 대표는 이 함수가 확정한다 — 호출자가 다시 판단하면 규칙이 갈라진다.
+ */
+export function parseContactInputs(
+  value: unknown,
+): ContactInput[] | { error: string } {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    return { error: "담당자 목록 형식이 올바르지 않습니다." };
+  }
+
+  const parsed: ContactInput[] = [];
+  for (const [index, row] of value.entries()) {
+    if (typeof row !== "object" || row === null || Array.isArray(row)) {
+      return { error: `담당자 ${index + 1}: 입력값을 확인해주세요.` };
+    }
+    const one = parseContactInput(row as Record<string, unknown>);
+    if ("error" in one) return { error: `담당자 ${index + 1}: ${one.error}` };
+    parsed.push(one);
+  }
+
+  const flags = resolveBatchIsPrimary(parsed);
+  return parsed.map((one, index) => ({ ...one, isPrimary: flags[index] }));
 }
