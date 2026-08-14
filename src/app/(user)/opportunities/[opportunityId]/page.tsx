@@ -149,6 +149,15 @@ export default async function OpportunityDetailPage({
           // 연결 해제 시 "다음 확정 문서가 무엇인지"를 화면에서 미리 판정하는 데 쓴다
           // (동순위는 최근 수정이 앞선다 — `@/lib/confirmed-document`)
           updatedAt: true,
+          /*
+           * 버전 묶음 필드 — 서버 재판정(`@/lib/opportunity-amount`)이 넘기는 것과 같아야 한다.
+           * 여기서 빠지면 확인창이 예고한 금액과 실제로 저장된 금액이 갈라진다 (기회-6).
+           * `isConfirmed` 는 **버전 확정본**(F-214)이고, 아래 `confirmedDocumentId`
+           * (예상 금액의 기준 문서)와는 다른 개념이다.
+           */
+          rootId: true,
+          version: true,
+          isConfirmed: true,
         },
       }),
       prisma.account.findMany({

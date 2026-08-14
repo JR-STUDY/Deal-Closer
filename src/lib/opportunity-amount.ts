@@ -71,6 +71,10 @@ const SYNC_SELECT = {
       status: true,
       amount: true,
       updatedAt: true,
+      // 버전 묶음 판정에 필요하다 — 빠지면 같은 견적서의 v1·v2 가 서로 경쟁한다 (기회-6)
+      rootId: true,
+      version: true,
+      isConfirmed: true,
     },
   },
 } satisfies Prisma.OpportunitySelect;
@@ -173,12 +177,19 @@ export function clearConfirmedDocumentPin(
 
 // ────────────────────────────── 내부 구현 ──────────────────────────────
 
-/** 재판정에 넘기는 문서의 최소 모양 */
+/**
+ * 재판정에 넘기는 문서의 최소 모양.
+ * 버전 필드는 `ConfirmableDocument` 가 요구한다 (같은 묶음의 여러 버전을 하나로 묶기 위해).
+ */
 type SyncDocument = {
   id: string;
   status: string;
   amount: number;
   updatedAt: Date;
+  rootId: string | null;
+  version: number;
+  /** 버전 확정본 플래그(F-214) — 기회의 확정 문서(금액 기준)와 다른 개념이다 */
+  isConfirmed: boolean;
 };
 
 /** 재판정 방식 — 자동 판정·수동 고정·잠금 해제가 이 모양을 공유한다 */
