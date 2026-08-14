@@ -53,7 +53,7 @@ export default async function AccountsPage({
   const { skip, take } = pageQueryRange(requestedPage);
 
   // 건수는 페이지네이션과 "총 N곳" 표시가 함께 쓴다 → 목록 조회와 병렬로 돌린다.
-  // 담당자 후보는 행의 `⋯ › 기회 연결` 다이얼로그가 쓴다 (거래처-2) — 행마다 조회하지 않도록
+  // 담당자 후보는 행의 `⋯ › 기회 생성` 다이얼로그가 쓴다 (거래처-2) — 행마다 조회하지 않도록
   // 여기서 한 번만 읽어 내려보낸다.
   const [totalCount, accounts, owners] = await Promise.all([
     prisma.account.count({ where }),
@@ -260,7 +260,7 @@ export default async function AccountsPage({
                           account={toAccountDTO(account)}
                           // 목록이 이미 읽은 건수를 재사용한다 (삭제 차단 안내용)
                           opportunityCount={account._count.opportunities}
-                          // `⋯ › 기회 연결` 이 쓸 담당자 후보 (거래처-2)
+                          // `⋯ › 기회 생성` 이 쓸 담당자 후보 (거래처-2)
                           owners={owners}
                           defaultOwnerId={user.id}
                         />
