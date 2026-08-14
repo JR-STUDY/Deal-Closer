@@ -14,6 +14,7 @@ import {
 import { formatDate, formatDateTime, formatKRW } from "@/lib/format";
 import type { StageHistoryEntry } from "@/lib/opportunity-progress";
 import { PageHeader } from "@/components/page-header";
+import { DetailColumns } from "@/components/detail-columns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OpportunityStageStepper } from "@/components/opportunity/opportunity-stage-stepper";
@@ -293,41 +294,42 @@ export default async function OpportunityDetailPage({
           2단 레이아웃 (기회-4) — 좌: 이 기회가 무엇인지 / 우: 무슨 일이 있었는지.
           lg 미만에서는 한 단으로 쌓여 좌측(단계·기본 정보·메모)이 먼저 보인다.
         */}
-        <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-6 lg:grid-cols-2">
-          <div className="min-w-0 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">진행 단계</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <OpportunityStageStepper
-                  stage={dto.stage}
-                  lostReason={opportunity.lostReason}
-                  history={stageHistory}
-                  // 노드를 눌러 단계를 옮긴다 (기회-1) — 저장은 stage 전용 라우트만 경유한다
-                  action={{ opportunityId: dto.id, name: dto.name }}
-                />
-              </CardContent>
-            </Card>
+        <DetailColumns
+          left={
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">진행 단계</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <OpportunityStageStepper
+                    stage={dto.stage}
+                    lostReason={opportunity.lostReason}
+                    history={stageHistory}
+                    // 노드를 눌러 단계를 옮긴다 (기회-1) — 저장은 stage 전용 라우트만 경유한다
+                    action={{ opportunityId: dto.id, name: dto.name }}
+                  />
+                </CardContent>
+              </Card>
 
-            {/* 기본 정보·메모는 인라인으로 바로 고친다 (기회-7) — 예상 금액만 읽기 전용이다 */}
-            <OpportunityInlineFields
-              opportunity={dto}
-              accounts={accounts}
-              owners={owners}
-              confirmedDocument={confirmedDocument}
-            />
-          </div>
-
-          <div className="min-w-0">
+              {/* 기본 정보·메모는 인라인으로 바로 고친다 (기회-7) — 예상 금액만 읽기 전용이다 */}
+              <OpportunityInlineFields
+                opportunity={dto}
+                accounts={accounts}
+                owners={owners}
+                confirmedDocument={confirmedDocument}
+              />
+            </>
+          }
+          right={
             <OpportunityDetailTabs
               timeline={timeline}
               documents={linkedDocuments}
               opportunityId={dto.id}
               confirmedDocumentId={dto.confirmedDocumentId}
             />
-          </div>
-        </div>
+          }
+        />
       </div>
     </>
   );
