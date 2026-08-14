@@ -9,6 +9,7 @@
  *  ③ 동순위는 최근 수정 순, 그마저 같으면 id 순 (같은 데이터면 항상 같은 결과)
  *  ④ 후보가 없으면 확정 문서 없음 → 0 원
  *  ⑤ 수동 잠금이 자동 판정을 이기고, 잠긴 문서가 사라지면 잠금이 풀린다
+ *  ⑥ **버전 묶음** — 같은 견적서의 v1·v2 는 서로 경쟁하지 않는다 (묶음마다 대표 1건)
  */
 
 import assert from "node:assert/strict";
@@ -16,6 +17,7 @@ import {
   confirmableDocuments,
   isConfirmableDocument,
   pinConfirmedDocument,
+  representativeByVersionGroup,
   resolveConfirmedDocument,
   sortByConfirmPriority,
   unpinConfirmedDocument,
@@ -33,14 +35,47 @@ function ok(condition: boolean, message: string) {
   checks += 1;
 }
 
-/** 합성 문서 한 건 — 시각은 ISO 문자열로 준다 (테스트가 로컬 타임존에 흔들리지 않도록) */
+/**
+ * 합성 문서 한 건 — 시각은 ISO 문자열로 준다 (테스트가 로컬 타임존에 흔들리지 않도록).
+ * 버전을 다루지 않는 케이스는 **v1 단독 묶음**(rootId=null · version=1)으로 본다 —
+ * 실제 데이터에서도 버전을 만들지 않은 문서가 그 모양이다.
+ */
 function doc(
   id: string,
   status: string,
   amount: number,
   updatedAt: string,
 ): ConfirmableDocument {
-  return { id, status, amount, updatedAt: new Date(updatedAt) };
+  return {
+    id,
+    status,
+    amount,
+    updatedAt: new Date(updatedAt),
+    rootId: null,
+    version: 1,
+    isConfirmed: false,
+  };
+}
+
+/**
+ * 버전 묶음에 속한 문서 한 건.
+ * `rootId` 를 명시하면 그 묶음의 후속 버전이고, null 이면 이 문서가 묶음의 뿌리(v1)다.
+ */
+function versioned(
+  id: string,
+  status: string,
+  amount: number,
+  updatedAt: string,
+  version: number,
+  rootId: string | null,
+  isConfirmed = false,
+): ConfirmableDocument {
+  return {
+    ...doc(id, status, amount, updatedAt),
+    version,
+    rootId,
+    isConfirmed,
+  };
 }
 
 /** 자동 판정 상태 (잠금 없음) */
@@ -243,5 +278,202 @@ check(
   },
   "되돌린 결과가 같은 문서면 금액은 그대로이고 잠금만 풀린다",
 );
+
+// ═══════════════ ⑥ 버전 묶음 — 같은 견적서의 v1·v2 는 경쟁하지 않는다 ═══════════════
+//
+// 버전은 별도 테이블이 아니라 Document 행을 하나 더 만드는 방식이라(F-214), 아무 처리도
+// 하지 않으면 v1·v2 가 서로 다른 문서인 척 겨룬다. 묶음마다 대표 1건을 먼저 뽑고
+// 대표들끼리만 기존 우선순위로 겨루는지 본다.
+
+/** 견적서 묶음 A — v1 이 뿌리(rootId=null), v2·v3 는 rootId 로 v1 을 가리킨다 */
+const A1 = versioned("doc_a1", "DRAFT", 10_000_000, "2026-08-01T09:00:00Z", 1, null);
+const A2 = versioned("doc_a2", "DRAFT", 12_000_000, "2026-08-02T09:00:00Z", 2, "doc_a1");
+const A3 = versioned("doc_a3", "DRAFT", 13_000_000, "2026-08-03T09:00:00Z", 3, "doc_a1");
+
+// ── 상태가 버전 번호를 이긴다 (latestVersionsOnly 를 쓰면 안 되는 이유) ──
+const A1_DONE = { ...A1, status: "COMPLETED", amount: 40_000_000 };
+check(
+  resolveConfirmedDocument([A1_DONE, A2], AUTO).confirmedDocumentId,
+  "doc_a1",
+  "v1 이 계약완료면 뒤에 v2 초안이 생겨도 v1 이 기준이다 (서명된 금액을 잃지 않는다)",
+);
+check(
+  resolveConfirmedDocument([A1_DONE, A2], AUTO).amount,
+  40_000_000,
+  "그때 금액도 계약된 v1 의 금액이다",
+);
+check(
+  resolveConfirmedDocument([A2, A1_DONE], AUTO).confirmedDocumentId,
+  "doc_a1",
+  "입력 순서를 바꿔도 같다",
+);
+
+// ── 상태가 같으면 버전 번호가 갈라준다 (updatedAt 이 아니다) ──
+check(
+  resolveConfirmedDocument([A1, A2], AUTO).confirmedDocumentId,
+  "doc_a2",
+  "v1·v2 가 둘 다 초안이면 뒤 버전(v2)이 대표다",
+);
+// v1 을 나중에 열어 고쳐도 v2 가 후속본이라는 사실은 변하지 않는다.
+const A1_TOUCHED = { ...A1, updatedAt: new Date("2026-08-09T09:00:00Z") };
+check(
+  resolveConfirmedDocument([A1_TOUCHED, A2], AUTO).confirmedDocumentId,
+  "doc_a2",
+  "v1 을 나중에 수정해도 묶음 안에서는 버전 번호가 기준이다 (updatedAt 이 아니다)",
+);
+check(
+  resolveConfirmedDocument([A1, A2, A3], AUTO).confirmedDocumentId,
+  "doc_a3",
+  "버전이 셋이면 가장 높은 번호가 대표다",
+);
+
+// ── 버전 확정본(isConfirmed)이 상태·버전보다 앞선다 ──
+const A1_MARKED = { ...A1, isConfirmed: true };
+check(
+  resolveConfirmedDocument([A1_MARKED, A2, A3], AUTO).confirmedDocumentId,
+  "doc_a1",
+  "낮은 버전이라도 버전 확정본으로 표시돼 있으면 그것이 대표다",
+);
+const A1_MARKED_DRAFT = { ...A1, isConfirmed: true };
+const A2_SENT = { ...A2, status: "SENT" };
+check(
+  resolveConfirmedDocument([A1_MARKED_DRAFT, A2_SENT], AUTO).confirmedDocumentId,
+  "doc_a1",
+  "상태가 더 낮은 버전에 확정본이 붙어 있어도 그 표시를 따른다 (사용자가 직접 고른 신호)",
+);
+
+// ── 확정본이 여러 버전에 붙을 수 있다 → 상태 → 버전 번호로 이어서 가른다 ──
+check(
+  resolveConfirmedDocument(
+    [{ ...A1, isConfirmed: true }, { ...A2, isConfirmed: true }],
+    AUTO,
+  ).confirmedDocumentId,
+  "doc_a2",
+  "확정본이 둘이면 (상태가 같으므로) 뒤 버전이 대표다",
+);
+check(
+  resolveConfirmedDocument(
+    [
+      { ...A1, isConfirmed: true, status: "SENT" },
+      { ...A2, isConfirmed: true },
+    ],
+    AUTO,
+  ).confirmedDocumentId,
+  "doc_a1",
+  "확정본이 둘이면 그다음은 상태 우선순위로 가른다 (발송완료 > 초안)",
+);
+
+// ── 묶음 2개가 경쟁 — 대표끼리만 기존 우선순위로 겨룬다 ──
+const B1 = versioned("doc_b1", "SENT", 20_000_000, "2026-07-20T09:00:00Z", 1, null);
+const B2 = versioned("doc_b2", "DRAFT", 25_000_000, "2026-08-05T09:00:00Z", 2, "doc_b1");
+check(
+  resolveConfirmedDocument([A1, A2, B1, B2], AUTO).confirmedDocumentId,
+  "doc_b1",
+  "묶음 B 의 대표(발송완료 v1)가 묶음 A 의 대표(초안 v2)를 이긴다",
+);
+check(
+  resolveConfirmedDocument([A1, A2, B1, B2], AUTO).amount,
+  20_000_000,
+  "금액도 이긴 묶음의 대표 문서에서 온다",
+);
+check(
+  representativeByVersionGroup([A1, A2, A3, B1, B2]).map((d) => d.id),
+  ["doc_a3", "doc_b1"],
+  "묶음마다 대표가 정확히 1건씩 나온다 (묶음 수만큼)",
+);
+check(
+  representativeByVersionGroup([B2, A2, B1, A1, A3]).map((d) => d.id).sort(),
+  ["doc_a3", "doc_b1"],
+  "입력 순서가 달라도 같은 대표가 뽑힌다",
+);
+
+// ── rootId=null 인 v1 단독 — 자기 자신이 묶음 키다 ──
+check(
+  representativeByVersionGroup([A1]).map((d) => d.id),
+  ["doc_a1"],
+  "rootId 가 null 인 v1 단독 문서는 자기 자신이 묶음이 되어 그대로 대표가 된다",
+);
+check(
+  resolveConfirmedDocument([A1], AUTO).confirmedDocumentId,
+  "doc_a1",
+  "v1 단독이면 그 문서가 확정 문서다",
+);
+check(
+  representativeByVersionGroup([DRAFT, SENT, COMPLETED]).map((d) => d.id),
+  ["doc_draft", "doc_sent", "doc_done"],
+  "버전을 만들지 않은 문서들은 각자 별개 묶음이라 하나도 걸러지지 않는다",
+);
+
+// ── 폐기 버전은 묶음 안에서도 제외된다 ──
+const A2_VOID = { ...A2, status: "VOID", amount: 999_000_000 };
+check(
+  resolveConfirmedDocument([A1, A2_VOID], AUTO).confirmedDocumentId,
+  "doc_a1",
+  "뒤 버전이 폐기되면 앞 버전이 그 묶음의 대표가 된다",
+);
+check(
+  resolveConfirmedDocument([A1, A2_VOID], AUTO).amount,
+  10_000_000,
+  "폐기된 v2 의 금액이 새어 들어오지 않는다",
+);
+check(
+  resolveConfirmedDocument(
+    [{ ...A1, status: "VOID" }, A2_VOID],
+    AUTO,
+  ),
+  { confirmedDocumentId: null, isPinned: false, amount: 0, hasChanged: false },
+  "묶음의 모든 버전이 폐기면 그 묶음은 대표가 없다 (확정 문서 없음 · 0원)",
+);
+check(
+  resolveConfirmedDocument([{ ...A1, isConfirmed: true, status: "VOID" }, A2], AUTO)
+    .confirmedDocumentId,
+  "doc_a2",
+  "폐기된 버전은 확정본 표시가 붙어 있어도 후보가 아니다",
+);
+
+// ── 수동 고정은 묶음이 아니라 그 버전을 가리킨다 ──
+const PINNED_A1: ConfirmedDocumentState = {
+  confirmedDocumentId: "doc_a1",
+  isPinned: true,
+};
+check(
+  resolveConfirmedDocument([A1, A2, A3], PINNED_A1).confirmedDocumentId,
+  "doc_a1",
+  "고정한 버전은 대표로 뽑히지 못했어도 그대로 유지된다 (직접 지정의 뜻)",
+);
+check(
+  resolveConfirmedDocument([A1, A2, A3], PINNED_A1).amount,
+  10_000_000,
+  "그때 금액도 고정한 그 버전의 금액이다 — 뒤 버전이 생겨도 따라가지 않는다",
+);
+check(
+  resolveConfirmedDocument([A2, A3], PINNED_A1).confirmedDocumentId,
+  "doc_a3",
+  "고정한 버전이 사라지면(삭제·해제) 같은 묶음의 새 대표로 자동 판정이 돌아간다",
+);
+check(
+  resolveConfirmedDocument([A2, A3], PINNED_A1).isPinned,
+  false,
+  "그때 고정도 함께 풀린다 (없는 버전을 계속 가리키지 않는다)",
+);
+check(
+  resolveConfirmedDocument([{ ...A1, status: "VOID" }, A2], PINNED_A1)
+    .confirmedDocumentId,
+  "doc_a2",
+  "고정한 버전이 폐기되면 후보에서 빠지므로 고정이 풀리고 다시 판정한다",
+);
+
+// 고정 지정도 버전을 가리지 않는다 — 후보이기만 하면 어느 버전이든 지정할 수 있다.
+const pinOldVersion = pinConfirmedDocument([A1, A2, A3], "doc_a1", AUTO);
+ok(!("error" in pinOldVersion), "뒤 버전이 있어도 앞 버전을 확정 문서로 지정할 수 있다");
+if (!("error" in pinOldVersion)) {
+  check(
+    pinOldVersion.amount,
+    10_000_000,
+    "지정한 버전의 금액이 그대로 예상 금액이 된다",
+  );
+}
+const pinVoidVersion = pinConfirmedDocument([A1, A2_VOID], "doc_a2", AUTO);
+ok("error" in pinVoidVersion, "폐기된 버전은 확정 문서로 지정할 수 없다");
 
 console.log(`✅ 확정 문서 판정 검증 통과 — ${checks}건`);
