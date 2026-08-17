@@ -4,6 +4,7 @@ import { getCurrentOrg } from "@/lib/session";
 import { parseContentJson, seedTemplate } from "@/lib/editor-schema";
 import { DocumentEditorLoader } from "./_components/document-editor-loader";
 import { availableModels } from "@/lib/ai/model-access";
+import { documentEditLock } from "@/lib/document-edit";
 
 export default async function EditorPage({
   params,
@@ -63,6 +64,8 @@ export default async function EditorPage({
       catalog={catalog}
       version={document.version}
       isConfirmed={document.isConfirmed}
+      // 잠금 판정은 서버(PATCH)와 같은 순수 함수를 쓴다 — 화면과 API 가 갈라지지 않게
+      lock={documentEditLock(document)}
       models={models}
       defaultModel={defaultModel}
       mockProvider={mock}

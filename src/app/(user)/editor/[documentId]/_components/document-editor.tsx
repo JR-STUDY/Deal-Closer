@@ -63,6 +63,9 @@ import { EditorToolbar } from "./editor-toolbar";
 import { EditorPreview } from "./editor-preview";
 import { BlockInspector, ContentForm } from "./block-inspector";
 import { useDocHistory } from "./use-doc-history";
+import { useCreateVersion } from "./use-create-version";
+import type { DocumentEditLock } from "@/lib/document-edit";
+import { Lock } from "lucide-react";
 import { DocumentStatusControl } from "./document-status-control";
 import { DocumentVersionControl } from "./document-version-control";
 import type { AiModelOption } from "@/lib/ai/models";
@@ -79,6 +82,8 @@ type Props = {
   version: number;
   /** 확정본 여부 (F-214) */
   isConfirmed: boolean;
+  /** 본문 편집 잠금 (발송·계약완료·확정본·폐기) — 서버 PATCH 와 같은 판정 */
+  lock: DocumentEditLock;
   /** 선택 가능한 AI 모델 (AI 부분 재작성용) */
   models: AiModelOption[];
   defaultModel: string;
@@ -94,6 +99,7 @@ export function DocumentEditor({
   catalog,
   version,
   isConfirmed,
+  lock,
   models,
   defaultModel,
   mockProvider,
@@ -147,6 +153,25 @@ export function DocumentEditor({
   } | null>(null);
   const router = useRouter();
 
+  /*
+   * 잠긴 문서(발송·계약완료·확정본·폐기)는 본문을 고치지 않는다 (진단 3).
+   * 모든 편집을 이 래퍼 한 곳으로 모아 통과시킨다 — 핸들러마다 검사를 흩어 두면
+   * 하나를 빠뜨렸을 때 그 경로로만 조용히 편집된다. UI 비활성은 안내이고,
+   * 실제 방어선은 이 래퍼와 서버의 PATCH 판정이다.
+   */
+  const locked = lock.locked;
+  const editDoc = useCallback(
+    (updater: (previous: EditorDoc) => EditorDoc, options?: { coalesceKey?: string }) => {
+      if (locked) {
+        toast.error(lock.reason);
+        return;
+      }
+      setDoc(updater, options);
+      setDirty(true);
+    },
+    [locked, lock.reason, setDoc],
+  );
+
   const selectedBlock = useMemo(
     () => doc.blocks.find((b) => b.id === selectedId) ?? null,
     [doc.blocks, selectedId],
@@ -160,17 +185,20 @@ export function DocumentEditor({
 
   const handleAdd = useCallback(
     (type: BlockType, pos?: { x: number; y: number }) => {
+      if (locked) {
+        toast.error(lock.reason);
+        return;
+      }
       // 팔레트 클릭 추가는 현재 보이는 화면 기준 위치에 놓는다
       const block = createBlock(type, pos ?? { x: 40, y: addYRef.current });
       // 사용자가 '블록 추가' 탭에서 수정한 기본 속성이 있으면 그걸로 시작
       const override = baseDefaultsRef.current?.[type];
       if (override) block.props = structuredClone(override);
-      setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
+      editDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
       setSelectedId(block.id);
       setSidebarTab("inspector");
-      setDirty(true);
     },
-    [setDoc],
+    [editDoc, locked, lock.reason],
   );
 
   // '블록 추가' 탭의 기본 블록 수정 (#3) — 타입별 기본 속성 편집
@@ -196,23 +224,22 @@ export function DocumentEditor({
   const handleGeometry = useCallback(
     (id: string, geo: Geometry) => {
       // 방향키 이동은 누를 때마다 호출된다 — 연속 이동을 되돌리기 한 건으로 묶는다
-      setDoc(
+      editDoc(
         (d) => ({
           ...d,
           blocks: d.blocks.map((b) => (b.id === id ? { ...b, ...geo } : b)),
         }),
         { coalesceKey: `move:${id}` },
       );
-      setDirty(true);
     },
-    [setDoc],
+    [editDoc],
   );
 
   const handleChangeBlock = useCallback(
     (patch: Partial<Block>) => {
       if (!selectedId) return;
       // 인스펙터의 x·y·w·h 숫자 입력은 글자마다 호출된다 — 한 건으로 묶는다
-      setDoc(
+      editDoc(
         (d) => ({
           ...d,
           blocks: d.blocks.map((b) =>
@@ -221,16 +248,15 @@ export function DocumentEditor({
         }),
         { coalesceKey: `block:${selectedId}:${Object.keys(patch).join(",")}` },
       );
-      setDirty(true);
     },
-    [selectedId, setDoc],
+    [selectedId, editDoc],
   );
 
   const handleChangeProps = useCallback(
     (propsPatch: Record<string, unknown>) => {
       if (!selectedId) return;
       // 같은 속성을 이어서 고치면(텍스트 타이핑 등) 한 건, 다른 속성으로 옮기면 새 건
-      setDoc(
+      editDoc(
         (d) => ({
           ...d,
           blocks: d.blocks.map((b) =>
@@ -243,27 +269,29 @@ export function DocumentEditor({
           coalesceKey: `props:${selectedId}:${Object.keys(propsPatch).join(",")}`,
         },
       );
-      setDirty(true);
     },
-    [selectedId, setDoc],
+    [selectedId, editDoc],
   );
 
   const handleRemove = useCallback(
     (id: string) => {
-      setDoc((d) => ({ ...d, blocks: d.blocks.filter((b) => b.id !== id) }));
+      if (locked) {
+        toast.error(lock.reason);
+        return;
+      }
+      editDoc((d) => ({ ...d, blocks: d.blocks.filter((b) => b.id !== id) }));
       setSelectedId(null);
-      setDirty(true);
       // 삭제는 확인창 없이 즉시 일어난다 — 되돌릴 수 있다는 사실을 여기서 알린다
       toast.success("블록을 삭제했습니다.", {
         action: { label: "되돌리기", onClick: () => undo() },
       });
     },
-    [setDoc, undo],
+    [editDoc, undo, locked, lock.reason],
   );
 
   // 겹친 블록의 앞뒤 순서(z) 조작 (#4)
   const handleZOrder = useCallback((id: string, action: ZOrderAction) => {
-    setDoc((d) => {
+    editDoc((d) => {
       const zs = d.blocks.map((b) => b.z);
       const maxZ = Math.max(1, ...zs);
       const minZ = Math.min(1, ...zs);
@@ -283,8 +311,7 @@ export function DocumentEditor({
         }),
       };
     });
-    setDirty(true);
-  }, [setDoc]);
+  }, [editDoc]);
 
   const handleZOrderSelected = useCallback(
     (action: ZOrderAction) => {
@@ -306,11 +333,14 @@ export function DocumentEditor({
       locked: false,
       props: structuredClone(cb.props),
     };
-    setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
+    if (locked) {
+      toast.error(lock.reason);
+      return;
+    }
+    editDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
     setSelectedId(block.id);
     setSidebarTab("inspector");
-    setDirty(true);
-  }, [setDoc]);
+  }, [editDoc, locked, lock.reason]);
 
   const handleSaveAsCustom = useCallback(() => {
     if (!selectedBlock) return;
@@ -369,6 +399,10 @@ export function DocumentEditor({
   }
 
   const handleLoadTemplate = useCallback((t: DocTemplate) => {
+    if (locked) {
+      toast.error(lock.reason);
+      return;
+    }
     // 문서를 통째로 갈아치우므로 되돌리기 히스토리도 새로 시작한다
     replaceDoc({
       version: 1,
@@ -378,33 +412,35 @@ export function DocumentEditor({
     setSelectedId(null);
     setDirty(true);
     toast.success(`템플릿 '${t.name}'을(를) 불러왔습니다.`);
-  }, [replaceDoc]);
+  }, [replaceDoc, locked, lock.reason]);
 
   const handleDeleteTemplate = useCallback((id: string) => {
     setTemplates(deleteTemplate(id));
   }, []);
 
-  const handleTitleChange = useCallback((v: string) => {
-    setDocTitle(v);
-    setDirty(true);
-  }, []);
+  const handleTitleChange = useCallback(
+    (v: string) => {
+      if (locked) return;
+      setDocTitle(v);
+      setDirty(true);
+    },
+    [locked],
+  );
 
   // ── 페이지 (#8) ──
   const handleAddPage = useCallback(() => {
-    setDoc((d) => ({
+    editDoc((d) => ({
       ...d,
       canvas: { ...d.canvas, pages: (d.canvas.pages ?? 1) + 1 },
     }));
-    setDirty(true);
-  }, [setDoc]);
+  }, [editDoc]);
 
   const handleRemovePage = useCallback(() => {
-    setDoc((d) => ({
+    editDoc((d) => ({
       ...d,
       canvas: { ...d.canvas, pages: Math.max(1, (d.canvas.pages ?? 1) - 1) },
     }));
-    setDirty(true);
-  }, [setDoc]);
+  }, [editDoc]);
 
   /** 실제 저장. 성공 여부를 돌려준다 (이탈 시 저장→이동 판단에 쓴다). */
   const performSave = useCallback(async (): Promise<boolean> => {
@@ -450,12 +486,16 @@ export function DocumentEditor({
    * (품목표 블록이 아예 없으면 서버가 저장된 금액을 보존하므로 물어볼 것이 없다.)
    */
   const handleSave = useCallback(async () => {
+    if (locked) {
+      toast.error(lock.reason);
+      return;
+    }
     if (deriveAmount(doc) === 0 && savedAmountRef.current > 0) {
       setZeroWarning({ from: savedAmountRef.current, then: null });
       return;
     }
     await performSave();
-  }, [doc, performSave]);
+  }, [doc, performSave, locked, lock.reason]);
 
   /** AI 재작성·새 버전 저장 입력으로 쓰는 현재 본문 스냅샷 */
   const getContentJson = useCallback(() => JSON.stringify(doc), [doc]);
@@ -471,6 +511,16 @@ export function DocumentEditor({
     },
     [router],
   );
+
+  /*
+   * 잠긴 문서를 고치는 **유일한 길** — 지금 내용을 새 버전(초안)으로 떠서 그리로 이동한다.
+   * 버전 이력 다이얼로그의 "새 버전으로 저장"과 같은 훅을 써 동작·문구를 맞춘다.
+   */
+  const { createVersion, saving: creatingVersion } = useCreateVersion({
+    documentId,
+    getContentJson,
+    onNavigate: goToVersion,
+  });
 
   // 미저장 이탈 경고 (정책 STATE_)
   useEffect(() => {
@@ -644,8 +694,27 @@ export function DocumentEditor({
               status={initialStatus}
             />
           </div>
+          {/* 잠긴 문서 안내 + 고치는 유일한 길 (진단 3) */}
+          {locked ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-amber-500/40 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+              <Lock className="size-4 shrink-0" aria-hidden />
+              <p className="min-w-0 flex-1">{lock.reason}</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={createVersion}
+                disabled={creatingVersion}
+                className="shrink-0 bg-background"
+              >
+                {creatingVersion
+                  ? "새 버전 만드는 중…"
+                  : "이 내용으로 새 버전 만들어 편집"}
+              </Button>
+            </div>
+          ) : null}
           <EditorToolbar
             documentId={documentId}
+            locked={locked}
             dirty={dirty}
             saving={saving}
             onSave={handleSave}
@@ -666,6 +735,7 @@ export function DocumentEditor({
         </div>
         <EditorCanvas
           doc={doc}
+          locked={locked}
           selectedId={selectedId}
           onSelect={handleSelect}
           onGeometry={handleGeometry}
@@ -680,6 +750,8 @@ export function DocumentEditor({
       </div>
       <EditorSidebar
         tab={sidebarTab}
+        locked={locked}
+        lockReason={lock.reason}
         onTabChange={(v) => setSidebarTab(v as "palette" | "inspector")}
         onAdd={handleAdd}
         onEditBase={handleEditBase}
@@ -796,6 +868,8 @@ export function DocumentEditor({
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-auto">
             <BlockInspector
+              readOnly={locked}
+              readOnlyReason={lock.reason}
               block={selectedBlock}
               catalog={catalog}
               onChange={handleChangeBlock}

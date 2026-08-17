@@ -9,6 +9,8 @@ import { useAutoHideScroll } from "./use-auto-hide-scroll";
 
 type Props = {
   doc: EditorDoc;
+  /** 본문이 잠긴 문서 — 드래그·리사이즈·드롭·블록 액션을 모두 막는다 (진단 3) */
+  locked: boolean;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onGeometry: (id: string, geo: Geometry) => void;
@@ -23,6 +25,7 @@ const SNAP_GAP = 6; // 정렬 가이드/스냅 허용 오차(px)
 
 export function EditorCanvas({
   doc,
+  locked,
   selectedId,
   onSelect,
   onGeometry,
@@ -101,6 +104,7 @@ export function EditorCanvas({
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
+    if (locked) return;
     const type = e.dataTransfer.getData("application/x-block-type") as BlockType;
     if (!BLOCK_TYPES.includes(type)) return;
     const rect = ref.current?.getBoundingClientRect();
@@ -164,6 +168,7 @@ export function EditorCanvas({
           <CanvasBlock
             key={b.id}
             block={b}
+            locked={locked}
             selected={b.id === selectedId}
             onSelect={onSelect}
             onGeometry={onGeometry}

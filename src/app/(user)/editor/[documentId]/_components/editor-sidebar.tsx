@@ -14,6 +14,9 @@ import type { CustomBlock, DocTemplate } from "./template-store";
 
 type Props = {
   tab: string;
+  /** 본문이 잠긴 문서 — 팔레트를 감추고 인스펙터를 읽기 전용으로 (진단 3) */
+  locked: boolean;
+  lockReason: string;
   onTabChange: (v: string) => void;
   onAdd: (type: BlockType) => void;
   onEditBase: (type: BlockType) => void;
@@ -37,6 +40,8 @@ type Props = {
 /** 블록 추가(팔레트) + 블록 속성(인스펙터)를 하나의 우측 사이드바에 탭으로 통합 (#1) */
 export function EditorSidebar({
   tab,
+  locked,
+  lockReason,
   onTabChange,
   onAdd,
   onEditBase,
@@ -78,6 +83,9 @@ export function EditorSidebar({
           onScroll={onScroll}
         >
           <TabsContent value="palette" className="mt-0">
+            {locked ? (
+              <p className="text-sm text-muted-foreground">{lockReason}</p>
+            ) : (
             <BlockPalette
               onAdd={onAdd}
               onEditBase={onEditBase}
@@ -89,9 +97,12 @@ export function EditorSidebar({
               onLoadTemplate={onLoadTemplate}
               onDeleteTemplate={onDeleteTemplate}
             />
+            )}
           </TabsContent>
           <TabsContent value="inspector" className="mt-0">
             <BlockInspector
+              readOnly={locked}
+              readOnlyReason={lockReason}
               block={block}
               catalog={catalog}
               onChange={onChange}

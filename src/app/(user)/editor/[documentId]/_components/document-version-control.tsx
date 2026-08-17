@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatDateTime, formatKRW } from "@/lib/format";
+import { useCreateVersion } from "./use-create-version";
 import { DOCUMENT_STATUS_LABELS, type DocumentStatus } from "@/lib/constants";
 
 type VersionRow = {
@@ -53,9 +54,13 @@ export function DocumentVersionControl({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [versions, setVersions] = useState<VersionRow[] | null>(null);
   const [confirmedNow, setConfirmedNow] = useState(isConfirmed);
+  const { createVersion, saving } = useCreateVersion({
+    documentId,
+    getContentJson,
+    onNavigate,
+  });
 
   /** 다이얼로그를 열 때 목록을 불러온다 (마운트 시 fetch 하지 않는다) */
   const handleOpenChange = async (next: boolean) => {
@@ -109,35 +114,10 @@ export function DocumentVersionControl({
     }
   };
 
-  /** 현재 편집 내용을 새 버전으로 저장 */
-  const createVersion = async () => {
-    if (saving) return;
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/documents/${documentId}/versions`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ contentJson: getContentJson() }),
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok) {
-        toast.error(json?.error ?? "새 버전 저장에 실패했습니다.");
-        return;
-      }
-      const newId: string | undefined = json?.data?.document?.id;
-      const newVersion: number | undefined = json?.data?.document?.version;
-      if (!newId) {
-        toast.error("새 버전을 찾을 수 없습니다.");
-        return;
-      }
-      toast.success(`v${newVersion} 으로 저장했습니다.`);
-      setOpen(false);
-      onNavigate(newId);
-    } catch {
-      toast.error("네트워크 오류로 새 버전 저장에 실패했습니다.");
-    } finally {
-      setSaving(false);
-    }
+  /** 현재 편집 내용을 새 버전으로 저장 — 잠긴 문서의 "새 버전 만들어 편집"과 같은 동작 */
+  const handleCreateVersion = async () => {
+    setOpen(false);
+    await createVersion();
   };
 
   return (
@@ -230,7 +210,7 @@ export function DocumentVersionControl({
         )}
 
         <div className="flex justify-end">
-          <Button variant="outline" onClick={createVersion} disabled={saving}>
+          <Button variant="outline" onClick={handleCreateVersion} disabled={saving}>
             {saving ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (

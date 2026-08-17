@@ -22,6 +22,7 @@
     "test:contact": "tsx --tsconfig tsconfig.scripts.json scripts/contact.test.ts",
     "test:confirmed-document": "tsx --tsconfig tsconfig.scripts.json scripts/confirmed-document.test.ts",
     "test:editor-amount": "tsx --tsconfig tsconfig.scripts.json scripts/editor-amount.test.ts",
+    "test:document-edit": "tsx --tsconfig tsconfig.scripts.json scripts/document-edit.test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",

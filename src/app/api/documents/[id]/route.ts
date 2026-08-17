@@ -8,6 +8,7 @@ import {
   extractClientName,
 } from "@/lib/editor-schema";
 import { syncOpportunityAmount } from "@/lib/opportunity-amount";
+import { documentEditLock, isContentMutation } from "@/lib/document-edit";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -59,6 +60,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const existing = await prisma.document.findUnique({ where: { id } });
   if (!existing) return fail("문서를 찾을 수 없습니다.", 404);
+
+  /*
+   * 발송·계약완료·확정본·폐기 문서의 **본문**은 고치지 않는다 (진단 3).
+   * 화면에서만 막으면 API 로는 그대로 통하므로 서버가 같은 순수 함수로 다시 판정한다.
+   * 상태·확정본·폴더 변경은 통과시킨다 — 발송 라우트가 상태를 올리고, 확정본 해제가
+   * 잠금을 푸는 길이다. 여기서 그것까지 막으면 문서를 영영 잠긴 채로 둔다.
+   */
+  const lock = documentEditLock(existing);
+  if (lock.locked && isContentMutation(body)) {
+    return fail(lock.reason, 409);
+  }
 
   // ── enum 검증 ──
   if (

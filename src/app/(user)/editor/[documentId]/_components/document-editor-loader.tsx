@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import type { EditorDoc, CatalogOption } from "@/lib/editor-schema";
 import type { AiModelOption } from "@/lib/ai/models";
+import type { DocumentEditLock } from "@/lib/document-edit";
 
 // 무거운 클라이언트 에디터(react-rnd 포함)를 동적 로드한다 (REACT_BEST_PRACTICES: bundle-dynamic-imports).
 // 서버 컴포넌트(page.tsx)에서는 ssr:false 를 쓸 수 없어 이 클라이언트 경계에서 로드한다.
@@ -28,6 +29,8 @@ export function DocumentEditorLoader(props: {
   catalog: CatalogOption[];
   version: number;
   isConfirmed: boolean;
+  /** 본문 편집 잠금 (발송·계약완료·확정본·폐기) — 서버 PATCH 와 같은 판정 */
+  lock: DocumentEditLock;
   /** 선택 가능한 AI 모델 (AI 부분 재작성용) */
   models: AiModelOption[];
   defaultModel: string;

@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Trash2, Plus, BookmarkPlus } from "lucide-react";
+import { BLOCK_LABELS } from "@/lib/editor-schema";
 import { CatalogCombobox } from "./catalog-combobox";
 
 const MAX_IMAGE_BYTES = 1024 * 1024; // 1MB — 로고/직인 수준
@@ -48,6 +49,9 @@ const Z_ACTIONS: { action: ZOrderAction; label: string }[] = [
 
 type Props = {
   block: Block | null;
+  /** 문서 전체가 잠겼는지 (발송·확정본 등) — 블록별 `block.locked` 와는 별개다 (진단 3) */
+  readOnly?: boolean;
+  readOnlyReason?: string;
   catalog: CatalogOption[];
   onChange: (patch: Partial<Block>) => void;
   onChangeProps: (propsPatch: Record<string, unknown>) => void;
@@ -89,6 +93,8 @@ function ColorField({
 
 export function BlockInspector({
   block,
+  readOnly = false,
+  readOnlyReason = "",
   catalog,
   onChange,
   onChangeProps,
@@ -101,6 +107,23 @@ export function BlockInspector({
       <p className="text-sm text-muted-foreground">
         블록을 선택하면 여기에서 편집합니다.
       </p>
+    );
+  }
+
+  /*
+   * 잠긴 문서에서는 편집 컨트롤을 아예 그리지 않는다 — 비활성 입력만 늘어놓으면
+   * 왜 안 되는지 알 수 없다. 대신 이유를 그 자리에 적는다.
+   */
+  if (readOnly) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm font-medium">
+          블록 속성 · {BLOCK_LABELS[block.type]}
+        </p>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {readOnlyReason}
+        </p>
+      </div>
     );
   }
 

@@ -8,6 +8,8 @@ import type { AiModelOption } from "@/lib/ai/models";
 
 type Props = {
   documentId: string;
+  /** 본문이 잠긴 문서면 편집 도구를 감춘다 — 미리보기·발송은 남긴다 (진단 3) */
+  locked: boolean;
   /** 선택 가능한 AI 모델 (AI 부분 재작성용) */
   models: AiModelOption[];
   defaultModel: string;
@@ -32,6 +34,7 @@ type Props = {
 
 export function EditorToolbar({
   documentId,
+  locked,
   dirty,
   saving,
   onSave,
@@ -51,7 +54,8 @@ export function EditorToolbar({
 }: Props) {
   return (
     <div className="flex w-full items-center gap-2">
-      {/* 되돌리기·다시 실행 (진단 2) */}
+      {/* 되돌리기·다시 실행 (진단 2) — 편집이 막힌 문서에서는 쓸 일이 없다 */}
+      {locked ? null : (
       <div className="flex shrink-0 items-center gap-0.5 rounded-md border px-1">
         <Button
           variant="ghost"
@@ -76,8 +80,10 @@ export function EditorToolbar({
           <Redo2 className="size-4" />
         </Button>
       </div>
+      )}
 
       {/* 페이지 컨트롤 (#8) */}
+      {locked ? null : (
       <div className="flex shrink-0 items-center gap-0.5 rounded-md border px-1">
         <Button
           variant="ghost"
@@ -102,6 +108,7 @@ export function EditorToolbar({
           <Plus className="size-4" />
         </Button>
       </div>
+      )}
 
       <Button variant="outline" onClick={onPreview} className="shrink-0">
         <Eye className="size-4" />
@@ -109,6 +116,7 @@ export function EditorToolbar({
       </Button>
 
       {/* AI 부분 재작성 (F-215) — 결과는 새 버전으로 저장된다 */}
+      {locked ? null : (
       <AiReviseDialog
         documentId={documentId}
         getContentJson={getContentJson}
@@ -117,25 +125,27 @@ export function EditorToolbar({
         defaultModel={defaultModel}
         mockProvider={mockProvider}
       />
-
+      )}
 
       <div className="flex-1" />
 
-      {dirty ? (
+      {dirty && !locked ? (
         <span
           className="size-2 shrink-0 rounded-full bg-amber-500"
           title="저장되지 않은 변경사항"
           aria-label="저장되지 않은 변경사항"
         />
       ) : null}
-      <Button
-        onClick={onSave}
-        disabled={saving || !dirty}
-        className="shrink-0"
-      >
-        <Save className="size-4" />
-        {saving ? "저장 중…" : "저장"}
-      </Button>
+      {locked ? null : (
+        <Button
+          onClick={onSave}
+          disabled={saving || !dirty}
+          className="shrink-0"
+        >
+          <Save className="size-4" />
+          {saving ? "저장 중…" : "저장"}
+        </Button>
+      )}
       <Button asChild variant="outline" className="shrink-0">
         <Link href={`/sender/${documentId}`}>
           <Send className="size-4" />
