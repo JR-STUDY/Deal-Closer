@@ -84,6 +84,12 @@ function CanvasBlockImpl({
    * 이라 다시 그려지며 제자리로 돌아온다).
    */
   const suppressDragRef = useRef(false);
+  /*
+   * 이미 골라 둔 블록을 (수식키 없이) 누르면 **선택을 무너뜨리지 않는다** —
+   * 그래야 3개를 골라 두고 그중 하나를 끌어 그룹째 옮길 수 있다.
+   * 움직이지 않고 놓으면(=클릭) 그때 그 블록만 남긴다.
+   */
+  const collapseOnClickRef = useRef(false);
   // 내용이 상자를 넘쳤는지 — 상자 변화는 관측자가, 내용 변화는 block 이 잡는다
   const [overflowRef, overflow] = useOverflow(block);
 
@@ -114,7 +120,15 @@ function CanvasBlockImpl({
       onMouseDown={(e) => {
         const additive = e.shiftKey || e.metaKey || e.ctrlKey;
         suppressDragRef.current = additive && selected;
-        onSelect(block.id, additive);
+        collapseOnClickRef.current = false;
+        if (additive) {
+          onSelect(block.id, true);
+        } else if (selected) {
+          // 선택을 그대로 두고 드래그를 기다린다 (놓을 때 클릭이면 이 블록만 남긴다)
+          collapseOnClickRef.current = true;
+        } else {
+          onSelect(block.id, false);
+        }
       }}
       onDrag={(_e, d) => {
         if (suppressDragRef.current) return;
@@ -125,6 +139,12 @@ function CanvasBlockImpl({
           suppressDragRef.current = false;
           return;
         }
+        const moved =
+          Math.round(d.x) !== block.x || Math.round(d.y) !== block.y;
+        if (!moved && collapseOnClickRef.current) {
+          onSelect(block.id, false);
+        }
+        collapseOnClickRef.current = false;
         onDragEnd(block, d.x, d.y);
       }}
       onResize={(_e, _dir, ref, _delta, pos) =>

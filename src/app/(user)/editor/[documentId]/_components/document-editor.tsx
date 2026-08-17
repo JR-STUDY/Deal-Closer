@@ -416,6 +416,7 @@ export function DocumentEditor({
             selectedIds={selectedIds}
             onSelect={handleSelect}
             onGeometry={handleGeometry}
+            onTranslateSelected={handleTranslate}
             onAddBlock={handleAdd}
             onRemove={removeFrom}
             onZOrder={handleZOrder}
