@@ -14,6 +14,7 @@ import {
   calcItemTableTotal,
   evalSummaryRows,
   pageCount,
+  tableLayout,
   textFormat,
   FONT_FAMILIES,
   type Align,
@@ -295,16 +296,24 @@ function renderItemTable(props: BlockPropsMap["itemTable"]): string {
 }
 
 function renderTable(props: BlockPropsMap["table"]): string {
-  const cells = Array.isArray(props.cells) ? props.cells : [];
+  // 병합 계산은 화면 렌더러와 **같은 tableLayout** 을 쓴다 (진단 5)
+  const { cells, layout } = tableLayout(props);
   const rows = cells
     .map((row, ri) => {
       const tag = props.hasHeader && ri === 0 ? "th" : "td";
       const inner = (Array.isArray(row) ? row : [])
         .map((cell, ci) => {
+          const span = layout[ri]?.[ci];
+          // 덮인 자리는 내보내지 않는다 — 내보내면 colspan 합이 열 수를 넘어 표가 깨진다
+          if (span?.skip) return "";
           const style = styleAttr({
             "text-align": safeAlign(props.colAligns?.[ci]),
           });
-          return `<${tag}${style}>${escapeHtml(cell)}</${tag}>`;
+          const rowSpan =
+            span && span.rowSpan > 1 ? ` rowspan="${span.rowSpan}"` : "";
+          const colSpan =
+            span && span.colSpan > 1 ? ` colspan="${span.colSpan}"` : "";
+          return `<${tag}${style}${rowSpan}${colSpan}>${escapeHtml(cell)}</${tag}>`;
         })
         .join("");
       return `<tr>${inner}</tr>`;

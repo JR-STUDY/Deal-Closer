@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { toast } from "sonner";
 import type {
   Block,
@@ -11,6 +12,7 @@ import type {
   CatalogOption,
   Align,
   FontFamily,
+  TableMerge,
   ZOrderAction,
 } from "@/lib/editor-schema";
 import {
@@ -21,6 +23,10 @@ import {
   evalFormula,
   calcItemTableTotal,
   textFormat,
+  normalizeMerges,
+  shiftMergesOnColDelete,
+  shiftMergesOnRowDelete,
+  tableLayout,
 } from "@/lib/editor-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -839,12 +845,17 @@ function TableForm({
       cells: cells.map((row) => [...row, ""]),
       colAligns: [...aligns, "left"],
     });
+  // 행·열을 지우면 병합 좌표도 함께 옮긴다 — 안 그러면 병합이 격자 밖을 가리켜 표가 어긋난다
   const delRow = (ri: number) =>
-    onChangeProps({ cells: cells.filter((_, r) => r !== ri) });
+    onChangeProps({
+      cells: cells.filter((_, r) => r !== ri),
+      merges: shiftMergesOnRowDelete(p.merges, ri),
+    });
   const delCol = (ci: number) =>
     onChangeProps({
       cells: cells.map((row) => row.filter((_, c) => c !== ci)),
       colAligns: aligns.filter((_, c) => c !== ci),
+      merges: shiftMergesOnColDelete(p.merges, ci),
     });
   const setAlign = (ci: number, a: Align) => {
     const next = [...aligns];
@@ -931,6 +942,108 @@ function TableForm({
           <Plus className="size-4" /> 열 추가
         </Button>
       </div>
+
+      <MergeForm block={block} onChangeProps={onChangeProps} />
+    </div>
+  );
+}
+
+/**
+ * 표 셀 병합 (진단 5) — 계약서 표에는 병합 셀이 필수다.
+ *
+ * 시작 셀 + 크기로 받는다. 격자 밖이거나 이미 병합된 자리와 겹치면
+ * `normalizeMerges` 가 걸러내므로, 저장 전에 같은 함수로 미리 확인해 안내한다
+ * (조용히 무시하면 왜 병합이 안 되는지 알 수 없다).
+ */
+function MergeForm({
+  block,
+  onChangeProps,
+}: {
+  block: Block;
+  onChangeProps: (p: Record<string, unknown>) => void;
+}) {
+  const p = block.props as BlockPropsMap["table"];
+  const cells = Array.isArray(p.cells) ? p.cells : [];
+  const rows = cells.length;
+  const cols = cells.reduce((max, row) => Math.max(max, row?.length ?? 0), 0);
+  const merges = tableLayout(p).merges;
+
+  const [start, setStart] = useState({ r: 0, c: 0 });
+  const [size, setSize] = useState({ rs: 1, cs: 2 });
+
+  function add() {
+    const next: TableMerge = { r: start.r, c: start.c, rs: size.rs, cs: size.cs };
+    const accepted = normalizeMerges([...merges, next], rows, cols);
+    if (accepted.length === merges.length) {
+      toast.error(
+        "그 범위는 병합할 수 없습니다. 표 안쪽이고 다른 병합과 겹치지 않아야 하며 2칸 이상이어야 합니다.",
+      );
+      return;
+    }
+    onChangeProps({ merges: accepted });
+  }
+
+  return (
+    <div className="space-y-2 rounded border p-2">
+      <Label className="text-xs">셀 병합</Label>
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        시작 칸(행·열)과 합칠 칸 수를 정합니다. 값은 시작 칸의 내용을 씁니다.
+      </p>
+      <div className="grid grid-cols-4 gap-1">
+        {(
+          [
+            ["시작 행", start.r + 1, (v: number) => setStart((s) => ({ ...s, r: v - 1 })), 1, Math.max(1, rows)],
+            ["시작 열", start.c + 1, (v: number) => setStart((s) => ({ ...s, c: v - 1 })), 1, Math.max(1, cols)],
+            ["행 수", size.rs, (v: number) => setSize((s) => ({ ...s, rs: v })), 1, Math.max(1, rows)],
+            ["열 수", size.cs, (v: number) => setSize((s) => ({ ...s, cs: v })), 1, Math.max(1, cols)],
+          ] as const
+        ).map(([label, value, set, min, max]) => (
+          <div key={label}>
+            <Label className="text-[10px] text-muted-foreground">{label}</Label>
+            <Input
+              type="number"
+              min={min}
+              max={max}
+              value={value}
+              onChange={(e) => set(Math.max(min, Math.min(max, toInt(e.target.value))))}
+            />
+          </div>
+        ))}
+      </div>
+      <Button variant="outline" size="sm" onClick={add}>
+        <Plus className="size-4" /> 병합
+      </Button>
+
+      {merges.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground">병합된 칸이 없습니다.</p>
+      ) : (
+        <div className="space-y-1">
+          {merges.map((m) => (
+            <div
+              key={`${m.r}:${m.c}:${m.rs}:${m.cs}`}
+              className="flex items-center gap-1 text-[11px]"
+            >
+              <span className="flex-1 tabular-nums">
+                {m.r + 1}행 {m.c + 1}열 → {m.rs}×{m.cs}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="병합 해제"
+                onClick={() =>
+                  onChangeProps({
+                    merges: merges.filter(
+                      (x) => !(x.r === m.r && x.c === m.c && x.rs === m.rs && x.cs === m.cs),
+                    ),
+                  })
+                }
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

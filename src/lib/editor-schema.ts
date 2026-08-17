@@ -145,6 +145,12 @@ export type CatalogOption = {
 
 export type MetaField = { id: string; label: string; value: string };
 
+/**
+ * 표 병합 범위 — 시작 셀(r, c)에서 rs 행 × cs 열.
+ * 값은 시작 셀의 `cells[r][c]` 를 쓰고, 덮인 셀은 렌더에서 건너뛴다.
+ */
+export type TableMerge = { r: number; c: number; rs: number; cs: number };
+
 export type BlockPropsMap = {
   title: TextStyle;
   text: TextStyle;
@@ -156,7 +162,16 @@ export type BlockPropsMap = {
     extraColumns: TableColumn[];
     summaryRows: SummaryRow[];
   };
-  table: { hasHeader: boolean; cells: string[][]; colAligns: Align[] };
+  table: {
+    hasHeader: boolean;
+    cells: string[][];
+    colAligns: Align[];
+    /**
+     * 병합 범위 (진단 5) — 계약서 표에는 병합 셀이 필수다.
+     * `cells` 는 그대로 두고 병합만 얹는다 → 기존 문서와 호환된다(없으면 병합 없음).
+     */
+    merges?: TableMerge[];
+  };
   image: {
     dataUrl: string;
     alt: string;
@@ -470,6 +485,130 @@ export function deriveAmount(doc: EditorDoc): number | null {
 /** 화면 표시용 총액 — 근거가 없으면 0 으로 본다 (저장에는 `deriveAmount` 를 쓴다). */
 export function computeAmount(doc: EditorDoc): number {
   return deriveAmount(doc) ?? 0;
+}
+
+// ─────────────────────────── 표 셀 병합 (진단 5) ───────────────────────────
+
+/** 셀 하나를 어떻게 그릴지 — `skip` 이면 다른 셀에 덮였으므로 렌더하지 않는다 */
+export type TableCellLayout = {
+  skip: boolean;
+  rowSpan: number;
+  colSpan: number;
+};
+
+/**
+ * 병합 범위를 **유효한 것만** 남긴다.
+ *
+ * 셀 격자는 사용자가 행·열을 지우면서 계속 변하는데 병합 범위는 좌표로 저장된다.
+ * 그래서 그릴 때마다 걸러야 한다 — 범위 밖이거나 1×1 이거나 **이미 다른 병합에 덮인**
+ * 범위는 버린다. 겹친 병합을 그대로 렌더하면 colspan 합이 열 수를 넘어 표가 깨진다.
+ * 먼저 선언된 병합이 이긴다(사용자가 만든 순서를 존중한다).
+ */
+export function normalizeMerges(
+  merges: readonly TableMerge[] | undefined,
+  rows: number,
+  cols: number,
+): TableMerge[] {
+  if (!merges?.length || rows <= 0 || cols <= 0) return [];
+  const taken = new Set<string>();
+  const kept: TableMerge[] = [];
+
+  for (const raw of merges) {
+    const r = Math.trunc(Number(raw?.r));
+    const c = Math.trunc(Number(raw?.c));
+    const rs = Math.trunc(Number(raw?.rs));
+    const cs = Math.trunc(Number(raw?.cs));
+    if (!Number.isFinite(r) || !Number.isFinite(c)) continue;
+    if (r < 0 || c < 0 || rs < 1 || cs < 1) continue;
+    if (rs === 1 && cs === 1) continue; // 1×1 은 병합이 아니다
+    if (r + rs > rows || c + cs > cols) continue; // 격자 밖으로 삐져나간다
+
+    const covered: string[] = [];
+    let overlaps = false;
+    for (let i = r; i < r + rs && !overlaps; i++) {
+      for (let j = c; j < c + cs; j++) {
+        const key = `${i}:${j}`;
+        if (taken.has(key)) {
+          overlaps = true;
+          break;
+        }
+        covered.push(key);
+      }
+    }
+    if (overlaps) continue;
+
+    for (const key of covered) taken.add(key);
+    kept.push({ r, c, rs, cs });
+  }
+  return kept;
+}
+
+/**
+ * 표를 그릴 때 필요한 셀별 span/skip 정보를 만든다.
+ * 화면 렌더러와 인쇄 렌더러가 **이 함수 하나**를 공유해야 병합 표가 같게 나온다.
+ */
+export function tableLayout(props: BlockPropsMap["table"]): {
+  cells: string[][];
+  layout: TableCellLayout[][];
+  merges: TableMerge[];
+} {
+  const cells = Array.isArray(props.cells) ? props.cells : [];
+  const rows = cells.length;
+  const cols = cells.reduce((max, row) => Math.max(max, row?.length ?? 0), 0);
+  const merges = normalizeMerges(props.merges, rows, cols);
+
+  const layout: TableCellLayout[][] = cells.map((row) =>
+    (Array.isArray(row) ? row : []).map(() => ({
+      skip: false,
+      rowSpan: 1,
+      colSpan: 1,
+    })),
+  );
+
+  for (const m of merges) {
+    for (let i = m.r; i < m.r + m.rs; i++) {
+      for (let j = m.c; j < m.c + m.cs; j++) {
+        const cell = layout[i]?.[j];
+        if (!cell) continue;
+        if (i === m.r && j === m.c) {
+          cell.rowSpan = m.rs;
+          cell.colSpan = m.cs;
+        } else {
+          cell.skip = true;
+        }
+      }
+    }
+  }
+  return { cells, layout, merges };
+}
+
+/**
+ * 행을 지웠을 때 병합 범위를 옮긴다 (지운 행에 걸친 병합은 한 행 줄어든다).
+ * 여기서 손보지 않으면 지운 뒤 남은 병합이 격자 밖을 가리켜 표가 어긋난다.
+ */
+export function shiftMergesOnRowDelete(
+  merges: readonly TableMerge[] | undefined,
+  index: number,
+): TableMerge[] {
+  return (merges ?? []).flatMap((m) => {
+    if (index < m.r) return [{ ...m, r: m.r - 1 }]; // 위쪽이 지워지면 위로 당겨진다
+    if (index >= m.r + m.rs) return [m]; // 범위 아래 — 영향 없음
+    const rs = m.rs - 1; // 범위에 걸침 → 한 행 줄어든다
+    return rs > 1 || m.cs > 1 ? [{ ...m, rs }] : [];
+  });
+}
+
+/** 열을 지웠을 때 병합 범위를 옮긴다 (행 삭제와 같은 규칙) */
+export function shiftMergesOnColDelete(
+  merges: readonly TableMerge[] | undefined,
+  index: number,
+): TableMerge[] {
+  return (merges ?? []).flatMap((m) => {
+    if (index < m.c) return [{ ...m, c: m.c - 1 }];
+    if (index >= m.c + m.cs) return [m];
+    const cs = m.cs - 1;
+    return cs > 1 || m.rs > 1 ? [{ ...m, cs }] : [];
+  });
 }
 
 /** 금액 수식 예시 프리셋 (#9) — 인스펙터에서 불러오기 */
