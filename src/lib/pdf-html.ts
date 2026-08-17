@@ -14,6 +14,7 @@ import {
   calcItemTableTotal,
   evalSummaryRows,
   pageCount,
+  textFormat,
   FONT_FAMILIES,
   type Align,
   type Block,
@@ -157,6 +158,22 @@ const px = (n: number): string => `${Number.isFinite(n) ? n : 0}px`;
 
 // ============ 블록 렌더러 (editor/_components/blocks/* 와 1:1 대응) ============
 
+/**
+ * 굵기·기울임·줄 높이 (진단 5). 기본값은 화면 렌더러와 **같은 `textFormat`** 이 정한다 —
+ * 따로 적으면 예전 문서(이 속성이 없는 contentJson)가 화면과 인쇄에서 다르게 보인다.
+ */
+function textStyleAttrs(
+  props: BlockPropsMap["text"],
+  type: "title" | "text",
+): StyleMap {
+  const f = textFormat(props, type);
+  return {
+    "font-weight": f.bold ? "700" : "400",
+    "font-style": f.italic ? "italic" : "normal",
+    "line-height": String(clamp(f.lineHeight, 0.5, 5)),
+  };
+}
+
 function renderTitle(props: BlockPropsMap["title"]): string {
   const align = safeAlign(props.align);
   const justify =
@@ -170,6 +187,7 @@ function renderTitle(props: BlockPropsMap["title"]): string {
       ? `1px solid ${safeHexColor(props.borderColor, PRINT_COLORS.border)}`
       : undefined,
     "justify-content": justify,
+    ...textStyleAttrs(props, "title"),
   });
   return `<div class="blk-title"${style}>${escapeHtml(props.text)}</div>`;
 }
@@ -183,6 +201,7 @@ function renderText(props: BlockPropsMap["text"]): string {
     border: props.border
       ? `1px solid ${safeHexColor(props.borderColor, PRINT_COLORS.border)}`
       : undefined,
+    ...textStyleAttrs(props, "text"),
   });
   return `<div class="blk-text"${style}>${escapeHtml(props.text)}</div>`;
 }
@@ -393,8 +412,8 @@ body{color:${PRINT_COLORS.text};font-family:${FONT_FAMILIES.sans};-webkit-print-
 .page{position:relative;isolation:isolate;width:${width}px;height:${height}px;overflow:hidden;background:#fff;break-after:page}
 .page:last-child{break-after:auto}
 .blk{position:absolute;overflow:hidden}
-.blk-title{display:flex;align-items:center;width:100%;height:100%;padding:0 8px;font-weight:700;letter-spacing:.1em}
-.blk-text{width:100%;height:100%;padding:4px 8px;line-height:1.625;white-space:pre-wrap;word-break:break-word}
+.blk-title{display:flex;align-items:center;width:100%;height:100%;padding:0 8px;letter-spacing:.1em}
+.blk-text{width:100%;height:100%;padding:4px 8px;white-space:pre-wrap;word-break:break-word}
 .blk-table{width:100%;border-collapse:collapse;font-size:12px;line-height:${TEXT_XS_LEADING}}
 .blk-table th,.blk-table td{border:1px solid var(--border);padding:4px 8px;text-align:left;vertical-align:top}
 .blk-table th{background:var(--muted);font-weight:500}

@@ -235,6 +235,24 @@ export function DocumentEditor({
     toast.success(`잘린 블록 ${heights.size}개를 내용에 맞췄습니다.`);
   }, [clippedIds, editDoc]);
 
+  /*
+   * 캔버스 인라인 편집 (진단 5) — 더블클릭으로 들어가고 blur·⌘Enter 로 저장, Esc 로 되돌린다.
+   * 편집 세션 하나가 되돌리기 한 건이 되도록 coalesceKey 없이 커밋한다
+   * (편집 중에는 DOM 이 값을 들고 있고, 끝날 때 한 번만 문서에 반영한다).
+   */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const handleInlineCommit = useCallback(
+    (id: string, text: string) => {
+      editDoc((d) => ({
+        ...d,
+        blocks: d.blocks.map((b) =>
+          b.id === id ? { ...b, props: { ...b.props, text } } : b,
+        ),
+      }));
+    },
+    [editDoc],
+  );
+
   const selectedBlock = useMemo(
     () => doc.blocks.find((b) => b.id === selectedId) ?? null,
     [doc.blocks, selectedId],
@@ -601,6 +619,8 @@ export function DocumentEditor({
   // 단축키: ⌘Z/⌘⇧Z=되돌리기·다시 실행, 선택된 블록에 Backspace/Delete=삭제, Esc=선택해제, 방향키=이동
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // 인라인 편집 중에는 캔버스 단축키를 전부 양보한다 (Backspace 가 블록을 지우면 안 된다)
+      if (editingId) return;
       const t = e.target as HTMLElement | null;
       if (
         t &&
@@ -655,6 +675,7 @@ export function DocumentEditor({
     return () => window.removeEventListener("keydown", onKey);
   }, [
     selectedId,
+    editingId,
     doc.blocks,
     handleRemove,
     handleGeometry,
@@ -804,6 +825,9 @@ export function DocumentEditor({
           }}
           onFit={handleFit}
           onClippedChange={handleClippedChange}
+          editingId={editingId}
+          onEditingChange={setEditingId}
+          onInlineCommit={handleInlineCommit}
         />
       </div>
       <EditorSidebar

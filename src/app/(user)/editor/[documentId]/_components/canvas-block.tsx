@@ -12,7 +12,7 @@ import {
   ContextMenuSeparator,
 } from "@/components/ui/context-menu";
 import { Pencil, Trash2, AlertTriangle } from "lucide-react";
-import { RenderBlock } from "./blocks";
+import { RenderBlock, isInlineEditable } from "./blocks";
 import { useOverflow } from "./use-overflow";
 
 export type Geometry = { x: number; y: number; w: number; h: number };
@@ -33,6 +33,11 @@ type Props = {
   onFit: (id: string, contentHeight: number) => void;
   /** 잘림 여부를 부모에 보고한다 — 툴바가 "잘린 블록 N개" 를 세고 저장 시 알린다 */
   onClippedChange: (id: string, clipped: boolean) => void;
+  /** 캔버스에서 직접 편집 중인 블록 id (진단 5) */
+  editingId: string | null;
+  onEditingChange: (id: string | null) => void;
+  /** 인라인 편집 결과 저장 */
+  onInlineCommit: (id: string, text: string) => void;
 };
 
 function CanvasBlockImpl({
@@ -48,7 +53,12 @@ function CanvasBlockImpl({
   onDragEnd,
   onFit,
   onClippedChange,
+  editingId,
+  onEditingChange,
+  onInlineCommit,
 }: Props) {
+  const editing = editingId === block.id;
+  const canInlineEdit = !locked && isInlineEditable(block);
   // 내용이 상자를 넘쳤는지 — 상자 변화는 관측자가, 내용 변화는 block 이 잡는다
   const [overflowRef, overflow] = useOverflow(block);
 
@@ -68,7 +78,7 @@ function CanvasBlockImpl({
       size={{ width: block.w, height: block.h }}
       position={{ x: block.x, y: block.y }}
       bounds="parent"
-      disableDragging={locked}
+      disableDragging={locked || editing}
       enableResizing={!locked}
       dragHandleClassName="block-drag-handle"
       onMouseDown={() => onSelect(block.id)}
@@ -148,11 +158,22 @@ function CanvasBlockImpl({
               tabIndex={0}
               aria-label={`${BLOCK_LABELS[block.type]} 블록`}
               onFocus={() => onSelect(block.id)}
+              onDoubleClick={() => {
+                if (canInlineEdit) onEditingChange(block.id);
+              }}
               className={`block-drag-handle h-full w-full overflow-hidden bg-background outline-none ${
-                locked ? "cursor-default" : "cursor-move"
+                editing ? "cursor-text" : locked ? "cursor-default" : "cursor-move"
               }`}
             >
-              <RenderBlock block={block} />
+              <RenderBlock
+                block={block}
+                editing={editing}
+                onCommit={(text) => {
+                  onInlineCommit(block.id, text);
+                  onEditingChange(null);
+                }}
+                onCancel={() => onEditingChange(null)}
+              />
             </div>
           </ContextMenuTrigger>
         {/* 잠긴 문서에서는 편집 메뉴를 내놓지 않는다 — 눌러도 막히는 항목을 보여주지 않는다 */}

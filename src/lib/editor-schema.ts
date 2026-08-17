@@ -64,7 +64,13 @@ export const FONT_FAMILY_LABELS: Record<FontFamily, string> = {
   mono: "고정폭",
 };
 
-/** 텍스트 계열(title/text) 공통 스타일 */
+/**
+ * 텍스트 계열(title/text) 공통 스타일.
+ *
+ * 서식은 **블록 단위**다 — 한 블록 안에서 특정 단어만 굵게 하는 부분 서식(리치텍스트)은
+ * 문서 모델을 문자열에서 인라인 런(run) 배열로 바꿔야 해서 별도 과제로 둔다.
+ * 강조할 문구는 텍스트 블록을 나눠 표현한다.
+ */
 export type TextStyle = {
   text: string;
   align: Align;
@@ -73,7 +79,43 @@ export type TextStyle = {
   color: string;
   border: boolean;
   borderColor: string;
+  /**
+   * 아래 세 값은 나중에 추가됐다 — **기존 contentJson 에는 없다.**
+   * 그래서 옵셔널로 두고 읽는 쪽이 `textFormat()` 으로 기본값을 채운다.
+   * 필수로 만들면 예전 문서를 열 때마다 굵기·줄 높이가 통째로 초기화된다.
+   */
+  bold?: boolean;
+  italic?: boolean;
+  /** 줄 높이 배수 (1.625 = 기존 leading-relaxed) */
+  lineHeight?: number;
 };
+
+/** 제목 블록의 기본 굵기 — 제목은 굵게, 본문은 보통이 기존 모습이다 */
+const DEFAULT_BOLD: Record<"title" | "text", boolean> = {
+  title: true,
+  text: false,
+};
+
+/** 기존 문서에 없던 서식 값의 기본값 (화면·인쇄가 같은 기본값을 써야 한다) */
+export const DEFAULT_LINE_HEIGHT = 1.625;
+
+/**
+ * 텍스트 블록의 서식을 기본값까지 채워 돌려준다.
+ * 화면 렌더러·인쇄 렌더러·인스펙터가 **같은 기본값**을 써야 예전 문서가 서로 다르게 보이지 않는다.
+ */
+export function textFormat(
+  props: TextStyle,
+  type: "title" | "text",
+): { bold: boolean; italic: boolean; lineHeight: number } {
+  return {
+    bold: props.bold ?? DEFAULT_BOLD[type],
+    italic: props.italic ?? false,
+    lineHeight:
+      typeof props.lineHeight === "number" && props.lineHeight > 0
+        ? props.lineHeight
+        : DEFAULT_LINE_HEIGHT,
+  };
+}
 
 export type ItemRow = {
   id: string;

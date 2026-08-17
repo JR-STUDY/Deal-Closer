@@ -23,6 +23,10 @@ type Props = {
   onFit: (id: string, contentHeight: number) => void;
   /** 블록별 잘림 상태 보고 — 툴바가 개수를 세고 저장 시 안내한다 */
   onClippedChange: (id: string, clipped: boolean) => void;
+  /** 캔버스 인라인 편집 (진단 5) */
+  editingId: string | null;
+  onEditingChange: (id: string | null) => void;
+  onInlineCommit: (id: string, text: string) => void;
 };
 
 const SNAP_GAP = 6; // 정렬 가이드/스냅 허용 오차(px)
@@ -40,6 +44,9 @@ export function EditorCanvas({
   onViewTop,
   onFit,
   onClippedChange,
+  editingId,
+  onEditingChange,
+  onInlineCommit,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const autoHide = useAutoHideScroll();
@@ -133,6 +140,7 @@ export function EditorCanvas({
         onMouseDown={(e) => {
           if (!(e.target as HTMLElement).closest("[data-block-id]")) {
             onSelect(null);
+            onEditingChange(null);
           }
         }}
         // isolate: 음수 z 블록이 흰 배경 뒤로 숨지 않게 stacking context 를 만든다
@@ -186,6 +194,9 @@ export function EditorCanvas({
             onDragEnd={handleDragEnd}
             onFit={onFit}
             onClippedChange={onClippedChange}
+            editingId={editingId}
+            onEditingChange={onEditingChange}
+            onInlineCommit={onInlineCommit}
           />
         ))}
       </div>

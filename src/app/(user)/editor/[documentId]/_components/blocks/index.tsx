@@ -8,13 +8,45 @@ import { TableBlock } from "./table-block";
 import { ImageBlock } from "./image-block";
 import { DividerBlock } from "./divider-block";
 
+/** 캔버스에서 직접 편집할 수 있는 블록 종류 (진단 5) */
+export const INLINE_EDITABLE_TYPES: readonly Block["type"][] = ["title", "text"];
+
+export function isInlineEditable(block: Block): boolean {
+  return INLINE_EDITABLE_TYPES.includes(block.type);
+}
+
 /** 블록 타입별 렌더러 — 컴포넌트로 두어 React 가 경계를 추적하도록 한다 */
-export function RenderBlock({ block }: { block: Block }) {
+export function RenderBlock({
+  block,
+  editing = false,
+  onCommit,
+  onCancel,
+}: {
+  block: Block;
+  /** 캔버스 인라인 편집 중인지 (text·title 만 지원) */
+  editing?: boolean;
+  onCommit?: (text: string) => void;
+  onCancel?: () => void;
+}) {
   switch (block.type) {
     case "title":
-      return <TitleBlock block={block} />;
+      return (
+        <TitleBlock
+          block={block}
+          editing={editing}
+          onCommit={onCommit}
+          onCancel={onCancel}
+        />
+      );
     case "text":
-      return <TextBlock block={block} />;
+      return (
+        <TextBlock
+          block={block}
+          editing={editing}
+          onCommit={onCommit}
+          onCancel={onCancel}
+        />
+      );
     case "supplier":
       return <SupplierBlock block={block} />;
     case "clientMeta":

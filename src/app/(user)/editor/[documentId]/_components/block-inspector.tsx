@@ -17,8 +17,10 @@ import {
   uid,
   FONT_FAMILY_LABELS,
   FORMULA_PRESETS,
+  DEFAULT_LINE_HEIGHT,
   evalFormula,
   calcItemTableTotal,
+  textFormat,
 } from "@/lib/editor-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -373,6 +375,8 @@ function TextForm({
   onChangeProps: (p: Record<string, unknown>) => void;
 }) {
   const p = block.props as BlockPropsMap["text"];
+  // 기본값 판단은 textFormat 하나가 한다 — 예전 문서(속성 없음)도 화면·인쇄와 같게 보인다
+  const f = textFormat(p, block.type === "title" ? "title" : "text");
   return (
     <div className="space-y-3">
       <div className="space-y-2">
@@ -394,8 +398,49 @@ function TextForm({
       </div>
       <FontFamilyField
         value={p.fontFamily}
-        onChange={(f) => onChangeProps({ fontFamily: f })}
+        onChange={(next) => onChangeProps({ fontFamily: next })}
       />
+      {/* 서식은 블록 단위다 — 한 블록 안에서 단어별로 다르게 하려면 블록을 나눈다 */}
+      <div className="space-y-1">
+        <Label className="text-xs">서식</Label>
+        <div className="flex gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant={f.bold ? "default" : "outline"}
+            className="flex-1 font-bold"
+            aria-pressed={f.bold}
+            onClick={() => onChangeProps({ bold: !f.bold })}
+          >
+            굵게
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={f.italic ? "default" : "outline"}
+            className="flex-1 italic"
+            aria-pressed={f.italic}
+            onClick={() => onChangeProps({ italic: !f.italic })}
+          >
+            기울임
+          </Button>
+        </div>
+      </div>
+      <div>
+        <Label className="text-xs">줄 높이 (배수)</Label>
+        <Input
+          type="number"
+          step="0.05"
+          min="0.5"
+          max="5"
+          value={f.lineHeight}
+          onChange={(e) =>
+            onChangeProps({
+              lineHeight: Number(e.target.value) || DEFAULT_LINE_HEIGHT,
+            })
+          }
+        />
+      </div>
       <AlignField value={p.align} onChange={(a) => onChangeProps({ align: a })} />
       <ColorField
         label="글자 색상"
