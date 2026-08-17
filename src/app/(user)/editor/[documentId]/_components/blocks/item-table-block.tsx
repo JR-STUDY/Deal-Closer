@@ -9,24 +9,24 @@ export function ItemTableBlock({ block }: { block: Block }) {
   const summaries = evalSummaryRows(p);
   const labelSpan = 3 + extraCols.length;
   return (
-    <table className="h-full w-full border-collapse text-xs">
+    <table className="w-full border-collapse text-xs">
       <thead>
         <tr className="bg-muted">
-          <th className="border px-2 py-1 text-left">품목 / 설명</th>
+          <th className="border px-2 py-1 align-top text-left">품목 / 설명</th>
           {extraCols.map((c) => (
-            <th key={c.id} className="border px-2 py-1" style={{ textAlign: c.align }}>
+            <th key={c.id} className="border px-2 py-1 align-top" style={{ textAlign: c.align }}>
               {c.label}
             </th>
           ))}
-          <th className="border px-2 py-1 text-right">수량</th>
-          <th className="border px-2 py-1 text-right">단가</th>
-          <th className="border px-2 py-1 text-right">금액</th>
+          <th className="border px-2 py-1 align-top text-right">수량</th>
+          <th className="border px-2 py-1 align-top text-right">단가</th>
+          <th className="border px-2 py-1 align-top text-right">금액</th>
         </tr>
       </thead>
       <tbody>
         {p.rows.map((r) => (
           <tr key={r.id}>
-            <td className="border px-2 py-1">
+            <td className="border px-2 py-1 align-top">
               <div className="font-medium">{r.name}</div>
               {r.description ? (
                 <div className="text-[11px] text-muted-foreground">
@@ -37,19 +37,19 @@ export function ItemTableBlock({ block }: { block: Block }) {
             {extraCols.map((c) => (
               <td
                 key={c.id}
-                className="border px-2 py-1"
+                className="border px-2 py-1 align-top"
                 style={{ textAlign: c.align }}
               >
                 {r.extra?.[c.id] ?? ""}
               </td>
             ))}
-            <td className="border px-2 py-1 text-right tabular-nums">
+            <td className="border px-2 py-1 align-top text-right tabular-nums">
               {r.quantity}
             </td>
-            <td className="border px-2 py-1 text-right tabular-nums">
+            <td className="border px-2 py-1 align-top text-right tabular-nums">
               {formatKRW(r.unitPrice)}
             </td>
-            <td className="border px-2 py-1 text-right tabular-nums">
+            <td className="border px-2 py-1 align-top text-right tabular-nums">
               {formatKRW(r.quantity * r.unitPrice)}
             </td>
           </tr>
@@ -60,12 +60,12 @@ export function ItemTableBlock({ block }: { block: Block }) {
           {summaries.map(({ row, value }, i) => (
             <tr key={row.id} className={i === summaries.length - 1 ? "font-semibold" : ""}>
               <td
-                className="border px-2 py-1 text-right"
+                className="border px-2 py-1 align-top text-right"
                 colSpan={labelSpan}
               >
                 {row.label}
               </td>
-              <td className="border px-2 py-1 text-right tabular-nums">
+              <td className="border px-2 py-1 align-top text-right tabular-nums">
                 {formatKRW(value)}
               </td>
             </tr>
@@ -75,12 +75,12 @@ export function ItemTableBlock({ block }: { block: Block }) {
         <tfoot>
           <tr>
             <td
-              className="border px-2 py-1 text-right font-semibold"
+              className="border px-2 py-1 align-top text-right font-semibold"
               colSpan={labelSpan}
             >
               합계
             </td>
-            <td className="border px-2 py-1 text-right font-semibold tabular-nums">
+            <td className="border px-2 py-1 align-top text-right font-semibold tabular-nums">
               {formatKRW(total)}
             </td>
           </tr>

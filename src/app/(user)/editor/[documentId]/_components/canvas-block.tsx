@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect } from "react";
 import { Rnd } from "react-rnd";
 import type { Block, ZOrderAction } from "@/lib/editor-schema";
 import { BLOCK_LABELS } from "@/lib/editor-schema";
@@ -11,8 +11,9 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
 } from "@/components/ui/context-menu";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { RenderBlock } from "./blocks";
+import { useOverflow } from "./use-overflow";
 
 export type Geometry = { x: number; y: number; w: number; h: number };
 
@@ -28,6 +29,10 @@ type Props = {
   onEdit: (id: string) => void;
   onDragMove: (block: Block, x: number, y: number) => void;
   onDragEnd: (block: Block, x: number, y: number) => void;
+  /** 잘린 내용에 맞춰 블록 높이를 늘린다 (진단 4) */
+  onFit: (id: string, contentHeight: number) => void;
+  /** 잘림 여부를 부모에 보고한다 — 툴바가 "잘린 블록 N개" 를 세고 저장 시 알린다 */
+  onClippedChange: (id: string, clipped: boolean) => void;
 };
 
 function CanvasBlockImpl({
@@ -41,7 +46,23 @@ function CanvasBlockImpl({
   onEdit,
   onDragMove,
   onDragEnd,
+  onFit,
+  onClippedChange,
 }: Props) {
+  // 내용이 상자를 넘쳤는지 — 상자 변화는 관측자가, 내용 변화는 block 이 잡는다
+  const [overflowRef, overflow] = useOverflow(block);
+
+  // 잘림 상태가 바뀔 때만 부모에 알린다 (부모는 개수를 세고 저장 시 안내한다)
+  useEffect(() => {
+    onClippedChange(block.id, overflow.clipped);
+  }, [block.id, overflow.clipped, onClippedChange]);
+
+  // 블록이 사라질 때 집계에서도 빠져야 한다 — 안 그러면 유령 경고가 남는다
+  useEffect(
+    () => () => onClippedChange(block.id, false),
+    [block.id, onClippedChange],
+  );
+
   return (
     <Rnd
       size={{ width: block.w, height: block.h }}
@@ -63,12 +84,35 @@ function CanvasBlockImpl({
       }
       style={{ zIndex: block.z }}
       className={
-        selected
-          ? "outline outline-2 outline-primary"
-          : "outline outline-1 outline-transparent hover:outline-border"
+        overflow.clipped
+          ? "outline outline-2 outline-dashed outline-amber-500"
+          : selected
+            ? "outline outline-2 outline-primary"
+            : "outline outline-1 outline-transparent hover:outline-border"
       }
     >
       <div className="group relative h-full w-full">
+        {/* 내용이 잘렸다는 표시 + 한 번에 맞추기 (진단 4).
+            색만으로 구분하지 않는다 — 점선 외곽선·경고 아이콘·문구를 함께 쓴다 (ACC_*) */}
+        {overflow.clipped ? (
+          <div
+            className="absolute -bottom-3 left-0 z-20 flex items-center gap-1 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-medium text-amber-950 shadow"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <AlertTriangle className="size-3" aria-hidden />
+            <span>내용이 잘렸습니다</span>
+            {locked ? null : (
+              <button
+                type="button"
+                className="rounded bg-amber-950/15 px-1 underline-offset-2 hover:underline"
+                onClick={() => onFit(block.id, overflow.contentHeight)}
+              >
+                맞추기
+              </button>
+            )}
+          </div>
+        ) : null}
+
         {/* 블록 액션 아이콘 (선택/hover 시 노출) — 드래그와 겹치지 않게 mousedown 전파 차단 */}
         <div
           className={`absolute -top-3 right-0 z-20 gap-1 ${
@@ -98,6 +142,7 @@ function CanvasBlockImpl({
         <ContextMenu>
           <ContextMenuTrigger asChild>
             <div
+              ref={overflowRef}
               data-block-id={block.id}
               role="button"
               tabIndex={0}

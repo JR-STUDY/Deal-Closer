@@ -19,6 +19,10 @@ type Props = {
   onZOrder: (id: string, action: ZOrderAction) => void;
   onEdit: (id: string) => void;
   onViewTop: (y: number) => void;
+  /** 잘린 내용에 맞춰 블록 높이를 늘린다 (진단 4) */
+  onFit: (id: string, contentHeight: number) => void;
+  /** 블록별 잘림 상태 보고 — 툴바가 개수를 세고 저장 시 안내한다 */
+  onClippedChange: (id: string, clipped: boolean) => void;
 };
 
 const SNAP_GAP = 6; // 정렬 가이드/스냅 허용 오차(px)
@@ -34,6 +38,8 @@ export function EditorCanvas({
   onZOrder,
   onEdit,
   onViewTop,
+  onFit,
+  onClippedChange,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const autoHide = useAutoHideScroll();
@@ -129,7 +135,8 @@ export function EditorCanvas({
             onSelect(null);
           }
         }}
-        className="relative shrink-0 bg-white shadow-sm ring-1 ring-border"
+        // isolate: 음수 z 블록이 흰 배경 뒤로 숨지 않게 stacking context 를 만든다
+        className="relative isolate shrink-0 bg-white shadow-sm ring-1 ring-border"
         style={{ width: doc.canvas.w, height: totalH }}
       >
         {/* 페이지 구분선 + 페이지 번호 (#8) */}
@@ -177,6 +184,8 @@ export function EditorCanvas({
             onEdit={onEdit}
             onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
+            onFit={onFit}
+            onClippedChange={onClippedChange}
           />
         ))}
       </div>

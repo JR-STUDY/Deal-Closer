@@ -1,7 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Send, Save, Eye, Plus, Minus, Undo2, Redo2 } from "lucide-react";
+import {
+  Send,
+  Save,
+  Eye,
+  Plus,
+  Minus,
+  Undo2,
+  Redo2,
+  AlertTriangle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AiReviseDialog } from "./ai-revise-dialog";
 import type { AiModelOption } from "@/lib/ai/models";
@@ -22,6 +31,9 @@ type Props = {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  /** 내용이 잘린 블록 수 (진단 4) — 0 이면 표시하지 않는다 */
+  clippedCount: number;
+  onFitAll: () => void;
   pages: number;
   onAddPage: () => void;
   onRemovePage: () => void;
@@ -42,6 +54,8 @@ export function EditorToolbar({
   canRedo,
   onUndo,
   onRedo,
+  clippedCount,
+  onFitAll,
   pages,
   onAddPage,
   onRemovePage,
@@ -126,6 +140,18 @@ export function EditorToolbar({
         mockProvider={mockProvider}
       />
       )}
+
+      {/* 잘린 블록 안내 — 자동으로 늘리지 않고(겹침이 된다) 한 번에 맞출 길만 준다 */}
+      {clippedCount > 0 && !locked ? (
+        <Button
+          variant="outline"
+          onClick={onFitAll}
+          className="shrink-0 border-amber-500/60 text-amber-900 hover:bg-amber-50 dark:text-amber-100"
+        >
+          <AlertTriangle className="size-4" />
+          잘린 블록 {clippedCount}개 · 모두 맞추기
+        </Button>
+      ) : null}
 
       <div className="flex-1" />
 

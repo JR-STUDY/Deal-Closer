@@ -38,11 +38,24 @@ export type ZOrderAction = "front" | "back" | "forward" | "backward";
 
 export type FontFamily = "sans" | "serif" | "mono";
 
-/** fontFamily 키 → 실제 CSS font-family */
+/**
+ * fontFamily 키 → 실제 CSS font-family.
+ *
+ * **화면과 인쇄가 같은 스택을 쓴다.** 예전에는 화면용(여기)과 인쇄용(`pdf-html.ts`)이
+ * 따로 있었는데, 그러면 같은 글에서 줄바꿈 지점이 달라져 화면에서 딱 맞춘 블록이
+ * PDF 에서 넘치거나 남는다. 한글 글꼴을 명시하는 이유·순서는 아래 주석 참고.
+ *
+ * 순서가 중요하다. 글꼴 대체는 글자 단위로 왼쪽부터 찾으므로, 계열에 맞는 **한글**
+ * 글꼴을 라틴 글꼴 바로 뒤에 두어야 한다. 고딕 글꼴을 앞에 두면 명조를 골라도 한글만
+ * 고딕으로 나온다. 맨 끝의 고딕은 어느 한글 글꼴도 없을 때 두부(□)를 피하려는 최후
+ * 수단이다 — 헤드리스 브라우저는 한글 글꼴이 없는 리눅스 컨테이너에서도 돌 수 있다.
+ * 실제로 어떤 글꼴이 쓰였는지는 `pdf.ts` 의 `checkKoreanFonts()` 로 확인한다.
+ */
 export const FONT_FAMILIES: Record<FontFamily, string> = {
-  sans: "ui-sans-serif, system-ui, sans-serif",
-  serif: "ui-serif, Georgia, 'Nanum Myeongjo', serif",
-  mono: "ui-monospace, 'SFMono-Regular', monospace",
+  sans: 'ui-sans-serif, system-ui, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", sans-serif',
+  serif:
+    'ui-serif, Georgia, "Nanum Myeongjo", "Noto Serif KR", AppleMyungjo, Batang, "Apple SD Gothic Neo", serif',
+  mono: 'ui-monospace, SFMono-Regular, "D2Coding ligature", D2Coding, "Noto Sans Mono CJK KR", "Nanum Gothic Coding", "Apple SD Gothic Neo", monospace',
 };
 
 export const FONT_FAMILY_LABELS: Record<FontFamily, string> = {
@@ -142,6 +155,69 @@ export type EditorDoc = {
 /** 문서 페이지 수 (최소 1) */
 export function pageCount(doc: EditorDoc): number {
   return Math.max(1, doc.canvas.pages ?? 1);
+}
+
+/**
+ * 해당 페이지에 **걸치는** 블록만 골라 z 오름차순으로 준다.
+ *
+ * 캔버스는 여러 페이지를 한 장으로 이어 그리지만 미리보기와 PDF 는 한 장씩 그리므로
+ * 페이지 경계에 걸친 블록은 양쪽에 모두 나와야 한다(각 페이지에서 잘려 이어진다).
+ * 미리보기(`editor-preview`)와 인쇄(`pdf-html`)가 이 판정을 각자 구현하고 있었다 —
+ * 한쪽만 손보면 화면과 PDF 의 쪽 나눔이 조용히 어긋난다.
+ */
+export function blocksOnPage(doc: EditorDoc, pageIndex: number): Block[] {
+  const h = doc.canvas.h;
+  return doc.blocks
+    .filter((b) => b.y < (pageIndex + 1) * h && b.y + b.h > pageIndex * h)
+    .sort((a, b) => a.z - b.z);
+}
+
+/**
+ * 겹침 순서(z)를 바꾸고 **전체를 1..n 으로 정규화**한다.
+ *
+ * 정규화가 핵심이다. 예전에는 "맨 뒤로" 가 `min - 1` 을 주어 z 가 음수까지 내려갔는데,
+ * 캔버스·페이지 컨테이너가 흰 배경을 가진 **stacking context 가 아닌** 요소라서
+ * 음수 z 자식은 부모 배경 **뒤로** 들어가 화면과 PDF 에서 통째로 사라졌다.
+ * (컨테이너에 `isolation: isolate` 도 함께 걸어 이미 저장된 음수 z 도 살려낸다.)
+ *
+ * 규칙을 컴포넌트가 아니라 여기 두는 이유: 캔버스·인스펙터·컨텍스트 메뉴가 같은 판정을
+ * 공유해야 하고, 순수 함수여야 테스트로 경계를 지킬 수 있다.
+ */
+export function reorderZ(
+  blocks: Block[],
+  id: string,
+  action: ZOrderAction,
+): Block[] {
+  const target = blocks.find((b) => b.id === id);
+  if (!target) return blocks;
+
+  // 현재 순서(z 오름차순, 동순위는 기존 배열 순서)에서 목표 위치를 정한다
+  const ordered = blocks
+    .map((block, index) => ({ block, index }))
+    .sort((a, b) => a.block.z - b.block.z || a.index - b.index)
+    .map((entry) => entry.block);
+
+  const from = ordered.indexOf(target);
+  const last = ordered.length - 1;
+  const to =
+    action === "front"
+      ? last
+      : action === "back"
+        ? 0
+        : action === "forward"
+          ? Math.min(last, from + 1)
+          : Math.max(0, from - 1);
+  if (to === from) return blocks;
+
+  const moved = ordered.filter((b) => b.id !== id);
+  moved.splice(to, 0, target);
+
+  // 1..n 으로 다시 매긴다 — 음수·0 이 생기지 않고 값이 무한정 커지지도 않는다
+  const zById = new Map(moved.map((block, index) => [block.id, index + 1]));
+  return blocks.map((block) => {
+    const z = zById.get(block.id);
+    return z === undefined || z === block.z ? block : { ...block, z };
+  });
 }
 
 export function uid(): string {
@@ -412,7 +488,9 @@ export function parseContentJson(
     const doc = obj as EditorDoc;
     const blocks: Block[] = doc.blocks.filter(isValidBlock).map((b) => ({
       ...b,
-      z: typeof b.z === "number" ? b.z : 1,
+      // 음수 z 는 흰 배경 뒤로 숨어 블록이 사라진다 — 이미 저장된 손상 값을 여기서 치유한다
+      // (예전 "맨 뒤로" 가 min-1 로 내려 음수를 만들었다. 지금은 reorderZ 가 1..n 을 지킨다.)
+      z: typeof b.z === "number" ? Math.max(1, Math.trunc(b.z)) : 1,
       locked: typeof b.locked === "boolean" ? b.locked : false,
     }));
     return {

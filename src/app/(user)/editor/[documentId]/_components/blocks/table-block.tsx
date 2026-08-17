@@ -4,7 +4,7 @@ export function TableBlock({ block }: { block: Block }) {
   const p = block.props as BlockPropsMap["table"];
   const alignOf = (ci: number): Align => p.colAligns?.[ci] ?? "left";
   return (
-    <table className="h-full w-full border-collapse text-xs">
+    <table className="w-full border-collapse text-xs">
       <tbody>
         {p.cells.map((row, ri) => (
           <tr key={ri}>
@@ -14,13 +14,13 @@ export function TableBlock({ block }: { block: Block }) {
               return header ? (
                 <th
                   key={ci}
-                  className="border bg-muted px-2 py-1 font-medium"
+                  className="border bg-muted px-2 py-1 align-top font-medium"
                   style={style}
                 >
                   {cell}
                 </th>
               ) : (
-                <td key={ci} className="border px-2 py-1" style={style}>
+                <td key={ci} className="border px-2 py-1 align-top" style={style}>
                   {cell}
                 </td>
               );

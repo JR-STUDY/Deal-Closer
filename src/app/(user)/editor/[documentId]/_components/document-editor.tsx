@@ -16,6 +16,7 @@ import {
   uid,
   defaultProps,
   deriveAmount,
+  reorderZ,
   BLOCK_LABELS,
 } from "@/lib/editor-schema";
 import { formatKRW } from "@/lib/format";
@@ -172,6 +173,68 @@ export function DocumentEditor({
     [locked, lock.reason, setDoc],
   );
 
+  /*
+   * 잘린 블록 집계 (진단 4). 툴바가 "잘린 블록 N개" 를 띄우고, 저장할 때 남아 있으면
+   * 알린다(막지는 않는다 — 일부러 잘라 두는 경우도 있다).
+   * 측정은 각 CanvasBlock 이 하고 여기서는 id 만 모은다.
+   */
+  const [clippedIds, setClippedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const handleClippedChange = useCallback((id: string, clipped: boolean) => {
+    setClippedIds((current) => {
+      if (clipped === current.has(id)) return current;
+      const next = new Set(current);
+      if (clipped) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  /**
+   * 잘린 내용에 맞춰 블록 높이를 늘린다.
+   * 늘린 결과가 페이지 경계를 넘으면 알린다 — 넘긴 부분은 다음 장에서 잘려 이어진다.
+   */
+  const handleFit = useCallback(
+    (id: string, contentHeight: number) => {
+      editDoc((d) => ({
+        ...d,
+        blocks: d.blocks.map((b) =>
+          b.id === id && contentHeight > b.h ? { ...b, h: contentHeight } : b,
+        ),
+      }));
+      const block = doc.blocks.find((b) => b.id === id);
+      if (!block) return;
+      const pageH = doc.canvas.h;
+      const wasPage = Math.floor(block.y / pageH);
+      const nowPage = Math.floor((block.y + contentHeight - 1) / pageH);
+      if (nowPage > wasPage) {
+        toast.warning(
+          "블록을 늘리니 페이지 경계를 넘습니다. 위치를 옮기거나 페이지를 추가해 주세요.",
+        );
+      }
+    },
+    [editDoc, doc.blocks, doc.canvas.h],
+  );
+
+  /** 잘린 블록을 한 번에 맞춘다 — 하나씩 누르지 않게 (자동 확장 대신 주는 편의) */
+  const handleFitAll = useCallback(() => {
+    const heights = new Map<string, number>();
+    for (const id of clippedIds) {
+      const node = document.querySelector<HTMLElement>(`[data-block-id="${id}"]`);
+      if (node) heights.set(id, Math.ceil(node.scrollHeight));
+    }
+    if (heights.size === 0) return;
+    editDoc((d) => ({
+      ...d,
+      blocks: d.blocks.map((b) => {
+        const h = heights.get(b.id);
+        return h !== undefined && h > b.h ? { ...b, h } : b;
+      }),
+    }));
+    toast.success(`잘린 블록 ${heights.size}개를 내용에 맞췄습니다.`);
+  }, [clippedIds, editDoc]);
+
   const selectedBlock = useMemo(
     () => doc.blocks.find((b) => b.id === selectedId) ?? null,
     [doc.blocks, selectedId],
@@ -289,29 +352,14 @@ export function DocumentEditor({
     [editDoc, undo, locked, lock.reason],
   );
 
-  // 겹친 블록의 앞뒤 순서(z) 조작 (#4)
-  const handleZOrder = useCallback((id: string, action: ZOrderAction) => {
-    editDoc((d) => {
-      const zs = d.blocks.map((b) => b.z);
-      const maxZ = Math.max(1, ...zs);
-      const minZ = Math.min(1, ...zs);
-      return {
-        ...d,
-        blocks: d.blocks.map((b) => {
-          if (b.id !== id) return b;
-          const z =
-            action === "front"
-              ? maxZ + 1
-              : action === "back"
-                ? minZ - 1
-                : action === "forward"
-                  ? b.z + 1
-                  : b.z - 1;
-          return { ...b, z };
-        }),
-      };
-    });
-  }, [editDoc]);
+  // 겹친 블록의 앞뒤 순서(z) 조작 (#4) — 규칙은 editor-schema 의 reorderZ 가 단일 기준이다.
+  // 여기서 직접 계산하던 예전 코드는 z 를 음수까지 내려 블록이 흰 배경 뒤로 사라졌다.
+  const handleZOrder = useCallback(
+    (id: string, action: ZOrderAction) => {
+      editDoc((d) => ({ ...d, blocks: reorderZ(d.blocks, id, action) }));
+    },
+    [editDoc],
+  );
 
   const handleZOrderSelected = useCallback(
     (action: ZOrderAction) => {
@@ -469,6 +517,12 @@ export function DocumentEditor({
       const sync = (json?.data?.amountSync ?? null) as AmountSync | null;
       const message = sync ? amountChangeMessage(sync) : null;
       if (message) toast.info(message);
+      // 잘린 블록이 남아 있으면 알린다 — 그대로 발송하면 PDF 에서도 잘린다 (막지는 않는다)
+      if (clippedIds.size > 0) {
+        toast.warning(
+          `내용이 잘린 블록이 ${clippedIds.size}개 있습니다. 발송 전에 확인해 주세요.`,
+        );
+      }
       return true;
     } catch {
       toast.error("저장에 실패했습니다. 다시 시도해주세요.");
@@ -476,7 +530,7 @@ export function DocumentEditor({
     } finally {
       setSaving(false);
     }
-  }, [doc, docTitle, documentId]);
+  }, [doc, docTitle, documentId, clippedIds]);
 
   /**
    * 저장 전에 **금액이 사라지는지** 확인한다.
@@ -722,6 +776,8 @@ export function DocumentEditor({
             canRedo={canRedo}
             onUndo={handleUndo}
             onRedo={handleRedo}
+            clippedCount={clippedIds.size}
+            onFitAll={handleFitAll}
             pages={doc.canvas.pages ?? 1}
             onAddPage={handleAddPage}
             onRemovePage={handleRemovePage}
@@ -746,6 +802,8 @@ export function DocumentEditor({
           onViewTop={(y) => {
             addYRef.current = y;
           }}
+          onFit={handleFit}
+          onClippedChange={handleClippedChange}
         />
       </div>
       <EditorSidebar

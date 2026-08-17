@@ -10,9 +10,11 @@
  */
 
 import {
+  blocksOnPage,
   calcItemTableTotal,
   evalSummaryRows,
   pageCount,
+  FONT_FAMILIES,
   type Align,
   type Block,
   type BlockPropsMap,
@@ -47,21 +49,25 @@ const PRINT_COLORS = {
   divider: "#d1d5db",
 } as const;
 
-/**
- * 인쇄용 글꼴 스택 — 헤드리스 브라우저는 서버(리눅스 컨테이너 포함)에서 돌 수 있어
- * 화면용 스택(editor-schema)만으로는 한글이 깨질 수 있다. 한글 글꼴을 명시한다.
- *
- * 순서가 중요하다. 글꼴 대체는 글자 단위로 왼쪽부터 찾으므로, 계열에 맞는 **한글** 글꼴을
- * 라틴 글꼴 바로 뒤에 두어야 한다. 고딕 글꼴을 앞에 두면 명조를 골라도 한글만 고딕으로
- * 나온다. 맨 끝의 고딕은 어느 한글 글꼴도 없을 때 두부(□)를 피하려는 최후 수단이다.
- * 실제로 어떤 글꼴이 쓰였는지는 `pdf.ts` 의 `checkKoreanFonts()` 로 확인한다.
+/*
+ * 글꼴 스택은 `editor-schema` 의 FONT_FAMILIES 하나를 화면·인쇄가 함께 쓴다.
+ * 따로 두면 같은 글의 줄바꿈 지점이 달라져, 화면에서 딱 맞춘 블록이 PDF 에서 넘친다.
  */
-const PRINT_FONT_STACKS: Record<FontFamily, string> = {
-  sans: 'ui-sans-serif, system-ui, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", sans-serif',
-  serif:
-    'ui-serif, Georgia, "Nanum Myeongjo", "Noto Serif KR", AppleMyungjo, Batang, "Apple SD Gothic Neo", serif',
-  mono: 'ui-monospace, SFMono-Regular, "D2Coding ligature", D2Coding, "Noto Sans Mono CJK KR", "Nanum Gothic Coding", "Apple SD Gothic Neo", monospace',
-};
+
+/*
+ * **줄 높이는 화면 렌더러와 숫자까지 같아야 한다** (진단 4).
+ *
+ * 인쇄 CSS 는 줄 높이를 지정하지 않아 `normal`(≈1.2)로 렌더됐고, 화면은 Tailwind 값을
+ * 썼다. 그래서 같은 표가 화면 21.5px / 인쇄 19px 행으로 그려져, 화면에서 딱 맞춘 블록이
+ * 인쇄에서는 남고(반대로 넘치기도) 줄바꿈 지점도 어긋났다.
+ *
+ * 아래 값은 화면 블록 렌더러가 쓰는 Tailwind 클래스의 실측 비율이다.
+ * 화면 쪽 클래스를 바꾸면 이 값도 함께 바꿔야 한다.
+ */
+/** Tailwind `text-xs` 의 줄 높이 비율 (12px → 16px). 품목표·표·거래처 메타가 쓴다. */
+const TEXT_XS_LEADING = "1.33333";
+/** 앱 기본 줄 높이 1.5 — 공급자 블록은 `text-[11px]` 만 지정해 이 값을 물려받는다 (11px → 16.5px) */
+const BASE_LEADING = "1.5";
 
 const ALIGNS: readonly Align[] = ["left", "center", "right"];
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -95,7 +101,7 @@ function safeAlign(value: unknown, fallback: Align = "left"): Align {
 }
 
 function safeFontStack(value: unknown): string {
-  return PRINT_FONT_STACKS[value as FontFamily] ?? PRINT_FONT_STACKS.sans;
+  return FONT_FAMILIES[value as FontFamily] ?? FONT_FAMILIES.sans;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -357,14 +363,6 @@ function renderBlockContent(block: Block, branding: PdfBranding | null): string 
 
 // ============================ 페이지 조립 ============================
 
-/** 해당 페이지에 걸치는 블록만 고른다 (editor-preview 와 동일한 판정) */
-function blocksOnPage(doc: EditorDoc, pageIndex: number): Block[] {
-  const h = doc.canvas.h;
-  return doc.blocks
-    .filter((b) => b.y < (pageIndex + 1) * h && b.y + b.h > pageIndex * h)
-    .sort((a, b) => a.z - b.z);
-}
-
 function renderPage(
   doc: EditorDoc,
   pageIndex: number,
@@ -390,18 +388,18 @@ function buildStyles(width: number, height: number, brand: string): string {
 :root{--brand:${brand};--border:${PRINT_COLORS.border};--muted:${PRINT_COLORS.muted};--muted-fg:${PRINT_COLORS.mutedForeground}}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:#fff}
-body{color:${PRINT_COLORS.text};font-family:${PRINT_FONT_STACKS.sans};-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{color:${PRINT_COLORS.text};font-family:${FONT_FAMILIES.sans};-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @page{size:${width}px ${height}px;margin:0}
-.page{position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#fff;break-after:page}
+.page{position:relative;isolation:isolate;width:${width}px;height:${height}px;overflow:hidden;background:#fff;break-after:page}
 .page:last-child{break-after:auto}
 .blk{position:absolute;overflow:hidden}
 .blk-title{display:flex;align-items:center;width:100%;height:100%;padding:0 8px;font-weight:700;letter-spacing:.1em}
 .blk-text{width:100%;height:100%;padding:4px 8px;line-height:1.625;white-space:pre-wrap;word-break:break-word}
-.blk-table{width:100%;height:100%;border-collapse:collapse;font-size:12px}
+.blk-table{width:100%;border-collapse:collapse;font-size:12px;line-height:${TEXT_XS_LEADING}}
 .blk-table th,.blk-table td{border:1px solid var(--border);padding:4px 8px;text-align:left;vertical-align:top}
 .blk-table th{background:var(--muted);font-weight:500}
 .blk-table .num{text-align:right;font-variant-numeric:tabular-nums}
-.blk-supplier{font-size:11px}
+.blk-supplier{font-size:11px;line-height:${BASE_LEADING}}
 .blk-supplier th,.blk-supplier td{padding:2px 4px}
 .blk-supplier th,.blk-meta th{color:var(--muted-fg)}
 .blk-items thead th{border-bottom:2px solid var(--brand)}
