@@ -255,6 +255,55 @@ export function DocumentEditor({
     [editDoc],
   );
 
+  /*
+   * 복제·복사/붙여넣기 (진단 5). 예전에는 비슷한 블록을 매번 새로 추가해 좌표를 손으로
+   * 맞춰야 했다. 클립보드는 **앱 안에만** 둔다 — 시스템 클립보드를 쓰면 권한 프롬프트가
+   * 뜨고, 문서 본문을 복사하려던 사용자의 실제 클립보드를 덮어쓴다.
+   */
+  const clipboardRef = useRef<Block | null>(null);
+  /** 붙여넣기·복제 위치 오프셋 — 원본에 정확히 겹치면 복제된 줄 모른다 */
+  const PASTE_OFFSET = 12;
+
+  const insertCopy = useCallback(
+    (source: Block) => {
+      const copy: Block = {
+        ...structuredClone(source),
+        id: uid(),
+        x: source.x + PASTE_OFFSET,
+        y: source.y + PASTE_OFFSET,
+      };
+      editDoc((d) => ({ ...d, blocks: [...d.blocks, copy] }));
+      setSelectedId(copy.id);
+      setSidebarTab("inspector");
+    },
+    [editDoc],
+  );
+
+  const handleDuplicate = useCallback(
+    (id: string) => {
+      const source = doc.blocks.find((b) => b.id === id);
+      if (!source) return;
+      insertCopy(source);
+    },
+    [doc.blocks, insertCopy],
+  );
+
+  const handleCopy = useCallback(
+    (id: string) => {
+      const source = doc.blocks.find((b) => b.id === id);
+      if (!source) return;
+      clipboardRef.current = structuredClone(source);
+      toast.success(`${BLOCK_LABELS[source.type]} 블록을 복사했습니다.`);
+    },
+    [doc.blocks],
+  );
+
+  const handlePaste = useCallback(() => {
+    const source = clipboardRef.current;
+    if (!source) return;
+    insertCopy(source);
+  }, [insertCopy]);
+
   const selectedBlock = useMemo(
     () => doc.blocks.find((b) => b.id === selectedId) ?? null,
     [doc.blocks, selectedId],
@@ -647,6 +696,22 @@ export function DocumentEditor({
         handleRedo();
         return;
       }
+      // 붙여넣기는 선택된 블록이 없어도 된다 (복사해 둔 것이 있으면 어디서든)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        handlePaste();
+        return;
+      }
+      if (selectedId && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        handleDuplicate(selectedId);
+        return;
+      }
+      if (selectedId && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        handleCopy(selectedId);
+        return;
+      }
 
       if (!selectedId) return;
       if (e.key === "Backspace" || e.key === "Delete") {
@@ -683,6 +748,9 @@ export function DocumentEditor({
     handleGeometry,
     handleUndo,
     handleRedo,
+    handlePaste,
+    handleDuplicate,
+    handleCopy,
   ]);
 
   // 미저장 상태에서 앱 내 링크 이동 시 가로채기 (#7) — 사이드바/발송 링크 포함
@@ -833,6 +901,8 @@ export function DocumentEditor({
           onEditingChange={setEditingId}
           onInlineCommit={handleInlineCommit}
           zoom={zoom}
+          onDuplicate={handleDuplicate}
+          onCopy={handleCopy}
         />
       </div>
       <EditorSidebar

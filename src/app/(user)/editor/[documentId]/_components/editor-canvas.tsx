@@ -29,6 +29,9 @@ type Props = {
   onInlineCommit: (id: string, text: string) => void;
   /** 확대 배율. "fit" 이면 보이는 폭에 맞춘다 (진단 5) */
   zoom: number | "fit";
+  /** 블록 복제·복사 (진단 5) */
+  onDuplicate: (id: string) => void;
+  onCopy: (id: string) => void;
 };
 
 const SNAP_GAP = 6; // 정렬 가이드/스냅 허용 오차(px)
@@ -50,6 +53,8 @@ export function EditorCanvas({
   onEditingChange,
   onInlineCommit,
   zoom,
+  onDuplicate,
+  onCopy,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -144,6 +149,63 @@ export function EditorCanvas({
     onGeometry(block.id, { x: nx, y: ny, w: block.w, h: block.h });
   }
 
+  /** 리사이즈 중 정렬 가이드 — 드래그와 같은 기준선을 쓴다 (지금까지는 드래그에만 있었다) */
+  function handleResizeMove(block: Block, geo: Geometry) {
+    const { xs, ys } = targets(block.id);
+    const xEdges = [geo.x, geo.x + geo.w / 2, geo.x + geo.w];
+    const yEdges = [geo.y, geo.y + geo.h / 2, geo.y + geo.h];
+    const gx = xs.filter((t) => xEdges.some((e) => Math.abs(e - t) <= SNAP_GAP));
+    const gy = ys.filter((t) => yEdges.some((e) => Math.abs(e - t) <= SNAP_GAP));
+    setGuides({ x: [...new Set(gx)], y: [...new Set(gy)] });
+  }
+
+  /**
+   * 리사이즈를 놓을 때 **끌던 모서리만** 기준선에 붙인다.
+   * 위치까지 스냅하면 반대쪽 모서리가 따라 움직여 크기가 엉뚱하게 바뀐다.
+   */
+  function handleResizeEnd(block: Block, geo: Geometry) {
+    setGuides({ x: [], y: [] });
+    const { xs, ys } = targets(block.id);
+    const nearest = (value: number, ts: number[]) => {
+      let best = value;
+      let bestDistance = SNAP_GAP + 1;
+      for (const t of ts) {
+        const d = Math.abs(t - value);
+        if (d < bestDistance) {
+          bestDistance = d;
+          best = t;
+        }
+      }
+      return bestDistance <= SNAP_GAP ? best : value;
+    };
+    // 좌·상단이 그대로면 우·하단을 끈 것이다 → 그 모서리를 붙인다 (반대도 같은 원리)
+    const movedLeft = Math.round(geo.x) !== block.x;
+    const movedTop = Math.round(geo.y) !== block.y;
+
+    let { x, y, w, h } = geo;
+    if (movedLeft) {
+      const right = x + w;
+      x = nearest(x, xs);
+      w = right - x;
+    } else {
+      w = nearest(x + w, xs) - x;
+    }
+    if (movedTop) {
+      const bottom = y + h;
+      y = nearest(y, ys);
+      h = bottom - y;
+    } else {
+      h = nearest(y + h, ys) - y;
+    }
+
+    onGeometry(block.id, {
+      x: Math.max(0, Math.round(x)),
+      y: Math.max(0, Math.round(y)),
+      w: Math.max(8, Math.round(w)),
+      h: Math.max(8, Math.round(h)),
+    });
+  }
+
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     if (locked) return;
@@ -229,12 +291,13 @@ export function EditorCanvas({
             locked={locked}
             selected={b.id === selectedId}
             onSelect={onSelect}
-            onGeometry={onGeometry}
             onRemove={onRemove}
             onZOrder={onZOrder}
             onEdit={onEdit}
             onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
+            onResizeMove={handleResizeMove}
+            onResizeEnd={handleResizeEnd}
             canvas={{ w: doc.canvas.w, h: totalH }}
             onFit={onFit}
             onClippedChange={onClippedChange}
@@ -242,6 +305,8 @@ export function EditorCanvas({
             onEditingChange={onEditingChange}
             onInlineCommit={onInlineCommit}
             scale={scale}
+            onDuplicate={onDuplicate}
+            onCopy={onCopy}
           />
         ))}
       </div>

@@ -23,7 +23,6 @@ type Props = {
   locked: boolean;
   selected: boolean;
   onSelect: (id: string) => void;
-  onGeometry: (id: string, geo: Geometry) => void;
   onRemove: (id: string) => void;
   onZOrder: (id: string, action: ZOrderAction) => void;
   onEdit: (id: string) => void;
@@ -45,6 +44,12 @@ type Props = {
   scale: number;
   /** 캔버스 크기(문서 좌표) — 리사이즈가 캔버스를 넘지 않게 가둔다 */
   canvas: { w: number; h: number };
+  /** 리사이즈 중 정렬 가이드 · 놓을 때 스냅 (진단 5) */
+  onResizeMove: (block: Block, geo: Geometry) => void;
+  onResizeEnd: (block: Block, geo: Geometry) => void;
+  /** 블록 복제·복사 (진단 5) */
+  onDuplicate: (id: string) => void;
+  onCopy: (id: string) => void;
 };
 
 function CanvasBlockImpl({
@@ -52,7 +57,6 @@ function CanvasBlockImpl({
   locked,
   selected,
   onSelect,
-  onGeometry,
   onRemove,
   onZOrder,
   onEdit,
@@ -65,6 +69,10 @@ function CanvasBlockImpl({
   onInlineCommit,
   scale,
   canvas,
+  onResizeMove,
+  onResizeEnd,
+  onDuplicate,
+  onCopy,
 }: Props) {
   const editing = editingId === block.id;
   const canInlineEdit = !locked && isInlineEditable(block);
@@ -98,11 +106,19 @@ function CanvasBlockImpl({
       onMouseDown={() => onSelect(block.id)}
       onDrag={(_e, d) => onDragMove(block, d.x, d.y)}
       onDragStop={(_e, d) => onDragEnd(block, d.x, d.y)}
+      onResize={(_e, _dir, ref, _delta, pos) =>
+        onResizeMove(block, {
+          x: pos.x,
+          y: pos.y,
+          w: ref.offsetWidth,
+          h: ref.offsetHeight,
+        })
+      }
       onResizeStop={(_e, _dir, ref, _delta, pos) => {
         // bounds 를 쓰지 않으므로(배율 충돌) 캔버스 안으로 가두는 일을 여기서 한다
         const x = Math.max(0, Math.round(pos.x));
         const y = Math.max(0, Math.round(pos.y));
-        onGeometry(block.id, {
+        onResizeEnd(block, {
           x,
           y,
           w: Math.max(8, Math.min(ref.offsetWidth, canvas.w - x)),
@@ -198,6 +214,12 @@ function CanvasBlockImpl({
         <ContextMenuContent>
           <ContextMenuItem onSelect={() => onEdit(block.id)}>
             수정
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => onDuplicate(block.id)}>
+            복제 <span className="ml-auto text-xs text-muted-foreground">⌘D</span>
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => onCopy(block.id)}>
+            복사 <span className="ml-auto text-xs text-muted-foreground">⌘C</span>
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onSelect={() => onZOrder(block.id, "front")}>
