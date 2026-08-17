@@ -215,6 +215,16 @@ export function DocumentEditor({
     setSidebarTab("inspector");
   }, []);
 
+  /** 마퀴로 여러 개를 한 번에 — ⇧ 를 누른 채면 골라 둔 것에 더한다 */
+  const handleSelectMany = useCallback((ids: string[], additive: boolean) => {
+    setSelectedIds((previous) =>
+      additive
+        ? [...previous, ...ids.filter((id) => !previous.includes(id))]
+        : ids,
+    );
+    if (ids.length > 0) setSidebarTab("inspector");
+  }, []);
+
   const handleSelectAll = useCallback(() => {
     setSelectedIds(doc.blocks.map((b) => b.id));
     setSidebarTab("inspector");
@@ -415,6 +425,7 @@ export function DocumentEditor({
             locked={locked}
             selectedIds={selectedIds}
             onSelect={handleSelect}
+            onSelectMany={handleSelectMany}
             onGeometry={handleGeometry}
             onTranslateSelected={handleTranslate}
             onAddBlock={handleAdd}

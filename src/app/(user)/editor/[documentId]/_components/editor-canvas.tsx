@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { EditorDoc, BlockType, ZOrderAction, Block } from "@/lib/editor-schema";
 import { BLOCK_TYPES, pageCount } from "@/lib/editor-schema";
+import { blocksInRect, type Rect } from "@/lib/block-align";
 import { CanvasBlock, type Geometry } from "./canvas-block";
 import { useAutoHideScroll } from "./use-auto-hide-scroll";
 
@@ -15,6 +16,8 @@ type Props = {
   selectedIds: string[];
   /** 블록 클릭 — `additive` 면 선택에 더하거나 뺀다. null 은 선택 해제 */
   onSelect: (id: string | null, additive: boolean) => void;
+  /** 마퀴로 여러 개를 한 번에 고른다 — `additive` 면 기존 선택에 더한다 */
+  onSelectMany: (ids: string[], additive: boolean) => void;
   onGeometry: (id: string, geo: Geometry) => void;
   /** 선택 전체를 같은 만큼 옮긴다 (그룹 드래그 확정) — 한 번의 편집 = 되돌리기 1건 */
   onTranslateSelected: (dx: number, dy: number) => void;
@@ -39,12 +42,15 @@ type Props = {
 };
 
 const SNAP_GAP = 6; // 정렬 가이드/스냅 허용 오차(px)
+/** 이만큼(화면 px) 움직이지 않으면 마퀴가 아니라 클릭으로 본다 */
+const MARQUEE_MIN = 5;
 
 export function EditorCanvas({
   doc,
   locked,
   selectedIds,
   onSelect,
+  onSelectMany,
   onGeometry,
   onTranslateSelected,
   onAddBlock,
@@ -108,6 +114,9 @@ export function EditorCanvas({
    * mousemove 마다 문서를 고치면 되돌리기 스택이 수백 건 쌓여 ⌘Z 가 쓸모없어진다.
    * 확정은 놓을 때 한 번뿐이다.
    */
+  /** 끌고 있는 마퀴 사각형 (문서 좌표). 문서를 바꾸지 않는 순수 화면 상태다 */
+  const [marquee, setMarquee] = useState<Rect | null>(null);
+
   const [groupDrag, setGroupDrag] = useState<{
     /** 끌리는 블록 — 이 블록은 react-rnd 가 직접 움직이므로 미리보기에서 뺀다 */
     id: string;
@@ -268,6 +277,61 @@ export function EditorCanvas({
     });
   }
 
+  /**
+   * 빈 캔버스에서 끌어 여러 블록을 고른다 (마퀴).
+   *
+   * ① 좌표는 **`/ scale`** 로 문서 좌표로 되돌린다 — `getBoundingClientRect` 는 배율이
+   *    적용된 크기를 준다(드롭 처리와 같은 규칙). 이걸 빠뜨리면 150% 에서 고른 영역과
+   *    실제 선택이 어긋난다.
+   * ② `MARQUEE_MIN` 미만으로 움직였으면 마퀴가 아니라 **빈 곳 클릭(선택 해제)** 이다.
+   *    안 가르면 선택하려고 누르는 순간마다 선택이 초기화된다.
+   * ③ 창 전체에 리스너를 걸어 캔버스 밖에서 놓아도 끝난다.
+   */
+  function beginMarquee(e: React.MouseEvent<HTMLDivElement>) {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    const startX = (e.clientX - rect.left) / scale;
+    const startY = (e.clientY - rect.top) / scale;
+    const origin = { clientX: e.clientX, clientY: e.clientY };
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+
+    /** 이 지점까지 끌었을 때의 문서 좌표 사각형 */
+    const rectTo = (clientX: number, clientY: number) => {
+      const now = ref.current?.getBoundingClientRect();
+      if (!now) return null;
+      return {
+        x: startX,
+        y: startY,
+        w: (clientX - now.left) / scale - startX,
+        h: (clientY - now.top) / scale - startY,
+      };
+    };
+    const passedThreshold = (clientX: number, clientY: number) =>
+      Math.abs(clientX - origin.clientX) >= MARQUEE_MIN ||
+      Math.abs(clientY - origin.clientY) >= MARQUEE_MIN;
+
+    function onMove(ev: MouseEvent) {
+      if (!passedThreshold(ev.clientX, ev.clientY)) return;
+      setMarquee(rectTo(ev.clientX, ev.clientY));
+    }
+    function onUp(ev: MouseEvent) {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setMarquee(null);
+      if (!passedThreshold(ev.clientX, ev.clientY)) {
+        // 빈 곳 클릭 — ⇧ 를 누른 채였다면 골라 둔 것을 지우지 않는다
+        if (!additive) onSelect(null, false);
+        return;
+      }
+      const area = rectTo(ev.clientX, ev.clientY);
+      if (area) onSelectMany(blocksInRect(doc.blocks, area), additive);
+      // 끄는 동안 본문 글자가 딸려 선택됐을 수 있다 — 파란 하이라이트를 걷어낸다
+      window.getSelection()?.removeAllRanges();
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     if (locked) return;
@@ -309,9 +373,10 @@ export function EditorCanvas({
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
         onMouseDown={(e) => {
+          // 블록 위가 아니면 마퀴를 시작한다 (선택 해제는 놓을 때 판단한다)
           if (!(e.target as HTMLElement).closest("[data-block-id]")) {
-            onSelect(null, false);
             onEditingChange(null);
+            beginMarquee(e);
           }
         }}
         // isolate: 음수 z 블록이 흰 배경 뒤로 숨지 않게 stacking context 를 만든다
@@ -348,6 +413,19 @@ export function EditorCanvas({
             style={{ top: gy, width: doc.canvas.w }}
           />
         ))}
+
+        {/* 마퀴 사각형 — 어느 방향으로 끌어도 그려지도록 좌표를 정규화한다 */}
+        {marquee ? (
+          <div
+            className="pointer-events-none absolute z-50 border border-dashed border-sky-500 bg-sky-500/10"
+            style={{
+              left: Math.min(marquee.x, marquee.x + marquee.w),
+              top: Math.min(marquee.y, marquee.y + marquee.h),
+              width: Math.abs(marquee.w),
+              height: Math.abs(marquee.h),
+            }}
+          />
+        ) : null}
 
         {renderBlocks.map((b) => (
           <CanvasBlock
