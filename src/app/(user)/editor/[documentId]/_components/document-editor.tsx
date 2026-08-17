@@ -65,6 +65,8 @@ import { EditorPreview } from "./editor-preview";
 import { BlockInspector, ContentForm } from "./block-inspector";
 import { useDocHistory } from "./use-doc-history";
 import { useCreateVersion } from "./use-create-version";
+import { useClippedBlocks } from "./use-clipped-blocks";
+import { useBlockClipboard } from "./use-block-clipboard";
 import type { DocumentEditLock } from "@/lib/document-edit";
 import { Lock } from "lucide-react";
 import { DocumentStatusControl } from "./document-status-control";
@@ -175,67 +177,9 @@ export function DocumentEditor({
     [locked, lock.reason, setDoc],
   );
 
-  /*
-   * 잘린 블록 집계 (진단 4). 툴바가 "잘린 블록 N개" 를 띄우고, 저장할 때 남아 있으면
-   * 알린다(막지는 않는다 — 일부러 잘라 두는 경우도 있다).
-   * 측정은 각 CanvasBlock 이 하고 여기서는 id 만 모은다.
-   */
-  const [clippedIds, setClippedIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
-  const handleClippedChange = useCallback((id: string, clipped: boolean) => {
-    setClippedIds((current) => {
-      if (clipped === current.has(id)) return current;
-      const next = new Set(current);
-      if (clipped) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }, []);
-
-  /**
-   * 잘린 내용에 맞춰 블록 높이를 늘린다.
-   * 늘린 결과가 페이지 경계를 넘으면 알린다 — 넘긴 부분은 다음 장에서 잘려 이어진다.
-   */
-  const handleFit = useCallback(
-    (id: string, contentHeight: number) => {
-      editDoc((d) => ({
-        ...d,
-        blocks: d.blocks.map((b) =>
-          b.id === id && contentHeight > b.h ? { ...b, h: contentHeight } : b,
-        ),
-      }));
-      const block = doc.blocks.find((b) => b.id === id);
-      if (!block) return;
-      const pageH = doc.canvas.h;
-      const wasPage = Math.floor(block.y / pageH);
-      const nowPage = Math.floor((block.y + contentHeight - 1) / pageH);
-      if (nowPage > wasPage) {
-        toast.warning(
-          "블록을 늘리니 페이지 경계를 넘습니다. 위치를 옮기거나 페이지를 추가해 주세요.",
-        );
-      }
-    },
-    [editDoc, doc.blocks, doc.canvas.h],
-  );
-
-  /** 잘린 블록을 한 번에 맞춘다 — 하나씩 누르지 않게 (자동 확장 대신 주는 편의) */
-  const handleFitAll = useCallback(() => {
-    const heights = new Map<string, number>();
-    for (const id of clippedIds) {
-      const node = document.querySelector<HTMLElement>(`[data-block-id="${id}"]`);
-      if (node) heights.set(id, Math.ceil(node.scrollHeight));
-    }
-    if (heights.size === 0) return;
-    editDoc((d) => ({
-      ...d,
-      blocks: d.blocks.map((b) => {
-        const h = heights.get(b.id);
-        return h !== undefined && h > b.h ? { ...b, h } : b;
-      }),
-    }));
-    toast.success(`잘린 블록 ${heights.size}개를 내용에 맞췄습니다.`);
-  }, [clippedIds, editDoc]);
+  // 잘린 블록 집계 · 맞추기 (진단 4)
+  const { clippedCount, handleClippedChange, handleFit, handleFitAll } =
+    useClippedBlocks({ doc, editDoc });
 
   /*
    * 캔버스 인라인 편집 (진단 5) — 더블클릭으로 들어가고 blur·⌘Enter 로 저장, Esc 로 되돌린다.
@@ -255,54 +199,16 @@ export function DocumentEditor({
     [editDoc],
   );
 
-  /*
-   * 복제·복사/붙여넣기 (진단 5). 예전에는 비슷한 블록을 매번 새로 추가해 좌표를 손으로
-   * 맞춰야 했다. 클립보드는 **앱 안에만** 둔다 — 시스템 클립보드를 쓰면 권한 프롬프트가
-   * 뜨고, 문서 본문을 복사하려던 사용자의 실제 클립보드를 덮어쓴다.
-   */
-  const clipboardRef = useRef<Block | null>(null);
-  /** 붙여넣기·복제 위치 오프셋 — 원본에 정확히 겹치면 복제된 줄 모른다 */
-  const PASTE_OFFSET = 12;
-
-  const insertCopy = useCallback(
-    (source: Block) => {
-      const copy: Block = {
-        ...structuredClone(source),
-        id: uid(),
-        x: source.x + PASTE_OFFSET,
-        y: source.y + PASTE_OFFSET,
-      };
-      editDoc((d) => ({ ...d, blocks: [...d.blocks, copy] }));
-      setSelectedId(copy.id);
-      setSidebarTab("inspector");
-    },
-    [editDoc],
-  );
-
-  const handleDuplicate = useCallback(
-    (id: string) => {
-      const source = doc.blocks.find((b) => b.id === id);
-      if (!source) return;
-      insertCopy(source);
-    },
-    [doc.blocks, insertCopy],
-  );
-
-  const handleCopy = useCallback(
-    (id: string) => {
-      const source = doc.blocks.find((b) => b.id === id);
-      if (!source) return;
-      clipboardRef.current = structuredClone(source);
-      toast.success(`${BLOCK_LABELS[source.type]} 블록을 복사했습니다.`);
-    },
-    [doc.blocks],
-  );
-
-  const handlePaste = useCallback(() => {
-    const source = clipboardRef.current;
-    if (!source) return;
-    insertCopy(source);
-  }, [insertCopy]);
+  // 복제 · 복사/붙여넣기 (진단 5)
+  const handleInserted = useCallback((id: string) => {
+    setSelectedId(id);
+    setSidebarTab("inspector");
+  }, []);
+  const {
+    duplicate: handleDuplicate,
+    copy: handleCopy,
+    paste: handlePaste,
+  } = useBlockClipboard({ doc, editDoc, onInserted: handleInserted });
 
   const selectedBlock = useMemo(
     () => doc.blocks.find((b) => b.id === selectedId) ?? null,
@@ -587,9 +493,9 @@ export function DocumentEditor({
       const message = sync ? amountChangeMessage(sync) : null;
       if (message) toast.info(message);
       // 잘린 블록이 남아 있으면 알린다 — 그대로 발송하면 PDF 에서도 잘린다 (막지는 않는다)
-      if (clippedIds.size > 0) {
+      if (clippedCount > 0) {
         toast.warning(
-          `내용이 잘린 블록이 ${clippedIds.size}개 있습니다. 발송 전에 확인해 주세요.`,
+          `내용이 잘린 블록이 ${clippedCount}개 있습니다. 발송 전에 확인해 주세요.`,
         );
       }
       return true;
@@ -599,7 +505,7 @@ export function DocumentEditor({
     } finally {
       setSaving(false);
     }
-  }, [doc, docTitle, documentId, clippedIds]);
+  }, [doc, docTitle, documentId, clippedCount]);
 
   /**
    * 저장 전에 **금액이 사라지는지** 확인한다.
@@ -867,7 +773,7 @@ export function DocumentEditor({
             canRedo={canRedo}
             onUndo={handleUndo}
             onRedo={handleRedo}
-            clippedCount={clippedIds.size}
+            clippedCount={clippedCount}
             onFitAll={handleFitAll}
             zoom={zoom}
             onZoomChange={setZoom}

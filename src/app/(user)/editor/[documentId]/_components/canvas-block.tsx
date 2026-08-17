@@ -168,7 +168,9 @@ function CanvasBlockImpl({
             aria-label="블록 수정"
             title="수정"
             onClick={() => onEdit(block.id)}
-            className="flex size-6 items-center justify-center rounded bg-primary text-primary-foreground shadow hover:opacity-90"
+            /* 정책 ACC_*: 터치 타깃 44px. 아이콘은 작게 두고 히트 영역만 넓힌다 —
+               버튼 자체를 44px 로 키우면 작은 블록을 덮어 내용이 안 보인다. */
+            className="relative flex size-6 items-center justify-center rounded bg-primary text-primary-foreground shadow before:absolute before:-inset-[10px] before:content-[''] hover:opacity-90"
           >
             <Pencil className="size-3.5" />
           </button>
@@ -177,7 +179,7 @@ function CanvasBlockImpl({
             aria-label="블록 삭제"
             title="삭제"
             onClick={() => onRemove(block.id)}
-            className="flex size-6 items-center justify-center rounded bg-destructive text-white shadow hover:opacity-90"
+            className="relative flex size-6 items-center justify-center rounded bg-destructive text-white shadow before:absolute before:-inset-[10px] before:content-[''] hover:opacity-90"
           >
             <Trash2 className="size-3.5" />
           </button>
@@ -187,7 +189,14 @@ function CanvasBlockImpl({
             <div
               ref={overflowRef}
               data-block-id={block.id}
-              role="button"
+              /*
+               * 캔버스는 블록을 고르는 목록이고 각 블록은 그 항목이다 (role=listbox/option).
+               * 예전에는 role="button" 이었는데 ① 누르는 것이 아니라 **고르는** 것이라
+               * 의미가 맞지 않고 ② 실제 <button> 으로 바꿀 수도 없다 — 블록 안에 표·이미지가
+               * 들어가 대화형 요소 중첩이 된다. option 은 선택 상태(aria-selected)까지 전한다.
+               */
+              role="option"
+              aria-selected={selected}
               tabIndex={0}
               aria-label={`${BLOCK_LABELS[block.type]} 블록`}
               onFocus={() => onSelect(block.id)}

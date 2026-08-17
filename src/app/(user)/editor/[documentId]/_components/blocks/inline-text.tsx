@@ -91,6 +91,9 @@ export function InlineText({
       contentEditable
       suppressContentEditableWarning
       role="textbox"
+      // contentEditable 은 이미 포커스를 받지만, 역할을 직접 준 요소는 포커스 가능함을
+      // 명시해 둔다 (ACC_*: 키보드로 닿을 수 있어야 한다)
+      tabIndex={0}
       aria-multiline="true"
       aria-label="블록 내용 편집"
       onBlur={commit}

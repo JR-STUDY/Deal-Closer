@@ -239,7 +239,8 @@ export function EditorCanvas({
           transform: `scale(${scale})`,
           transformOrigin: "top left",
         }}
-        role="group"
+        // 블록을 고르는 목록 — 각 블록이 role="option" 이다 (canvas-block 주석 참고)
+        role="listbox"
         aria-label="문서 캔버스"
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
