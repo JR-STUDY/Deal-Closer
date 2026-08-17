@@ -45,6 +45,9 @@ export default async function EditorPage({
       supplierName: branding?.companyName ?? org.name,
       logoUrl: branding?.logoUrl ?? null,
       items: document.items,
+      // 품목 없이 금액만 있는 문서(수동 생성·구버전)도 캔버스 합계가 저장된 금액과
+      // 맞아야 한다 — 어긋난 채로 열면 저장 한 번에 실제 금액이 0 으로 덮인다.
+      amount: document.amount,
     });
 
   // AI 부분 재작성(F-215)에 쓸 모델 선택 목록 (환경변수만 읽으므로 동기)
@@ -56,6 +59,7 @@ export default async function EditorPage({
       initialTitle={document.title}
       initialStatus={document.status}
       initialDoc={initialDoc}
+      initialAmount={document.amount}
       catalog={catalog}
       version={document.version}
       isConfirmed={document.isConfirmed}

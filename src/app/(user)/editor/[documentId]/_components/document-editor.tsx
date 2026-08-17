@@ -15,8 +15,14 @@ import {
   createBlock,
   uid,
   defaultProps,
+  deriveAmount,
   BLOCK_LABELS,
 } from "@/lib/editor-schema";
+import { formatKRW } from "@/lib/format";
+import {
+  amountChangeMessage,
+  type AmountSync,
+} from "@/components/opportunity/confirmed-document-actions";
 import {
   getCustomBlocks,
   saveCustomBlock,
@@ -40,6 +46,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { EditorCanvas } from "./editor-canvas";
 import type { Geometry } from "./canvas-block";
 import { EditorSidebar } from "./editor-sidebar";
@@ -55,6 +71,8 @@ type Props = {
   initialTitle: string;
   initialStatus: string;
   initialDoc: EditorDoc;
+  /** 저장된 Document.amount — 저장으로 금액이 0 이 되는지 판단하는 기준 */
+  initialAmount: number;
   catalog: CatalogOption[];
   /** 현재 문서의 버전 번호 (F-214) */
   version: number;
@@ -71,6 +89,7 @@ export function DocumentEditor({
   initialTitle,
   initialStatus,
   initialDoc,
+  initialAmount,
   catalog,
   version,
   isConfirmed,
@@ -87,6 +106,13 @@ export function DocumentEditor({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [navTarget, setNavTarget] = useState<string | null>(null);
+  // 저장된 금액 — 저장으로 금액이 사라지는지 판단하는 기준. 저장 성공 시 서버 값으로 갱신한다.
+  const [savedAmount, setSavedAmount] = useState(initialAmount);
+  // 금액이 0 으로 떨어지는 저장을 확인받는다. `then` 은 확인 후 이동할 곳(이탈 흐름).
+  const [zeroWarning, setZeroWarning] = useState<{
+    from: number;
+    then: string | null;
+  } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [namePrompt, setNamePrompt] = useState<{
@@ -350,7 +376,8 @@ export function DocumentEditor({
     setDirty(true);
   }, []);
 
-  const handleSave = useCallback(async () => {
+  /** 실제 저장. 성공 여부를 돌려준다 (이탈 시 저장→이동 판단에 쓴다). */
+  const performSave = useCallback(async (): Promise<boolean> => {
     setSaving(true);
     try {
       const res = await fetch(`/api/documents/${documentId}`, {
@@ -361,15 +388,42 @@ export function DocumentEditor({
           title: docTitle,
         }),
       });
-      if (!res.ok) throw new Error("save failed");
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error ?? "save failed");
       setDirty(false);
+      // 금액 기준은 **서버가 재계산한 값**으로 갱신한다 (정책 VAL: 클라이언트 총액을 신뢰하지 않는다)
+      if (typeof json?.data?.amount === "number") setSavedAmount(json.data.amount);
       toast.success("저장되었습니다.");
+      /*
+       * 본문 금액이 바뀌면 연결된 기회의 예상 금액도 따라 바뀐다 (기회-6 ①).
+       * 그 사실을 알리지 않으면 금액이 소리 없이 달라진다 — 기회 화면과 같은 문구를 쓴다.
+       */
+      const sync = (json?.data?.amountSync ?? null) as AmountSync | null;
+      const message = sync ? amountChangeMessage(sync) : null;
+      if (message) toast.info(message);
+      return true;
     } catch {
       toast.error("저장에 실패했습니다. 다시 시도해주세요.");
+      return false;
     } finally {
       setSaving(false);
     }
   }, [doc, docTitle, documentId]);
+
+  /**
+   * 저장 전에 **금액이 사라지는지** 확인한다.
+   *
+   * 품목표를 다 지운 채 저장하면 문서 금액이 0 이 되고, 이 문서가 확정 문서라면
+   * 기회 예상 금액까지 0 으로 내려간다 — 되돌릴 수 없는 조작이므로 결과를 미리 말한다.
+   * (품목표 블록이 아예 없으면 서버가 저장된 금액을 보존하므로 물어볼 것이 없다.)
+   */
+  const handleSave = useCallback(async () => {
+    if (deriveAmount(doc) === 0 && savedAmount > 0) {
+      setZeroWarning({ from: savedAmount, then: null });
+      return;
+    }
+    await performSave();
+  }, [doc, savedAmount, performSave]);
 
   /** AI 재작성·새 버전 저장 입력으로 쓰는 현재 본문 스냅샷 */
   const getContentJson = useCallback(() => JSON.stringify(doc), [doc]);
@@ -472,10 +526,24 @@ export function DocumentEditor({
   }, [dirty]);
 
   async function saveAndGo() {
-    await handleSave();
     const target = navTarget;
     setNavTarget(null);
-    if (target) router.push(target);
+    // 금액이 사라지는 저장이면 확인창으로 넘긴다 — 확인 후 원래 가려던 곳으로 보낸다.
+    if (deriveAmount(doc) === 0 && savedAmount > 0) {
+      setZeroWarning({ from: savedAmount, then: target });
+      return;
+    }
+    if (await performSave()) {
+      if (target) router.push(target);
+    }
+  }
+
+  async function confirmZeroSave() {
+    const target = zeroWarning?.then ?? null;
+    setZeroWarning(null);
+    if (await performSave()) {
+      if (target) router.push(target);
+    }
   }
 
   function discardAndGo() {
@@ -586,6 +654,32 @@ export function DocumentEditor({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 금액이 사라지는 저장 — 되돌릴 수 없으므로 결과를 미리 말한다 (기회-6) */}
+      <AlertDialog
+        open={zeroWarning !== null}
+        onOpenChange={(o) => {
+          if (!o) setZeroWarning(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>금액이 ₩0 으로 저장됩니다</AlertDialogTitle>
+            <AlertDialogDescription>
+              품목표가 비어 있어 이 문서의 금액이{" "}
+              {formatKRW(zeroWarning?.from ?? 0)} 에서 ₩0 으로 바뀝니다. 이 문서가
+              연결된 기회의 확정 문서라면 예상 금액도 ₩0 이 됩니다. 그대로
+              저장하시겠습니까?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmZeroSave}>
+              ₩0 으로 저장
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <EditorPreview
         open={previewOpen}

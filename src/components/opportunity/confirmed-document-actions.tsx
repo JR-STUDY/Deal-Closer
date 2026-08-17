@@ -30,8 +30,13 @@ export type AmountSync = {
   previousAmount: number;
 };
 
-/** 확정 문서가 바뀌었을 때의 안내 문구 (없으면 알릴 것이 없다) */
-function changeMessage(sync: AmountSync): string | null {
+/**
+ * 확정 문서가 바뀌었을 때의 안내 문구 (없으면 알릴 것이 없다).
+ *
+ * 문서 에디터의 저장도 같은 일을 일으키므로(본문 금액이 바뀌면 기회 금액이 따라 바뀐다)
+ * 이 문구를 함께 쓴다 — 같은 일이 화면마다 다르게 읽히지 않게.
+ */
+export function amountChangeMessage(sync: AmountSync): string | null {
   if (sync.status !== "synced") return null;
   if (!sync.documentChanged && !sync.amountChanged) return null;
 
@@ -91,7 +96,7 @@ export function useConfirmedDocument(opportunityId: string) {
     options: { allowUndo?: boolean; onDone?: () => void } = {},
   ) => {
     if (!sync) return;
-    const message = changeMessage(sync);
+    const message = amountChangeMessage(sync);
     if (!message) return;
 
     const undoTarget = sync.previousDocumentId;

@@ -331,13 +331,27 @@ export function itemTableGrandTotal(props: BlockPropsMap["itemTable"]): number {
   );
 }
 
+/**
+ * 문서 본문에서 금액을 도출한다. **품목표 블록이 하나도 없으면 `null`** 이다.
+ *
+ * "합계 0원"과 "이 문서는 금액을 품목표로 표현하지 않는다"는 **다른 사실**이다.
+ * 계약서·NDA 처럼 품목표 없이 금액만 가진 문서를 저장할 때 이 둘을 같게 취급하면,
+ * 본문을 한 글자도 고치지 않은 저장 한 번으로 `Document.amount` 가 0 이 되고
+ * 확정 문서를 통해 기회 예상 금액까지 0 으로 끌어내린다 (기회-6).
+ * `null` 은 "쓸 근거가 없으니 저장된 값을 그대로 두라"는 뜻이다.
+ */
+export function deriveAmount(doc: EditorDoc): number | null {
+  const tables = doc.blocks.filter((b) => b.type === "itemTable");
+  if (tables.length === 0) return null;
+  return tables.reduce(
+    (sum, b) => sum + itemTableGrandTotal(b.props as BlockPropsMap["itemTable"]),
+    0,
+  );
+}
+
+/** 화면 표시용 총액 — 근거가 없으면 0 으로 본다 (저장에는 `deriveAmount` 를 쓴다). */
 export function computeAmount(doc: EditorDoc): number {
-  return doc.blocks
-    .filter((b) => b.type === "itemTable")
-    .reduce(
-      (sum, b) => sum + itemTableGrandTotal(b.props as BlockPropsMap["itemTable"]),
-      0,
-    );
+  return deriveAmount(doc) ?? 0;
 }
 
 /** 금액 수식 예시 프리셋 (#9) — 인스펙터에서 불러오기 */
@@ -438,6 +452,11 @@ export function seedTemplate(input: {
     quantity: number;
     unitPrice: number;
   }[];
+  /**
+   * 저장된 `Document.amount`. 품목(`items`)이 없을 때 품목표에 근거 1행을 만드는 데 쓴다.
+   * 넘기지 않으면 품목 없는 문서는 합계 ₩0 으로 열린다.
+   */
+  amount?: number;
   /** 하단 약관/안내 섹션 (기타사항·기술지원 안내·특이사항 등) */
   notes?: { heading: string; lines: string[] }[];
 }): EditorDoc {
@@ -472,15 +491,31 @@ export function seedTemplate(input: {
   ];
 
   const itemTable = createBlock("itemTable", { x: 40, y: 320 });
-  (itemTable.props as BlockPropsMap["itemTable"]).rows = input.items.map(
-    (it) => ({
-      id: uid(),
-      name: it.name,
-      description: it.description ?? "",
-      quantity: it.quantity,
-      unitPrice: it.unitPrice,
-    }),
-  );
+  const itemRows: ItemRow[] = input.items.map((it) => ({
+    id: uid(),
+    name: it.name,
+    description: it.description ?? "",
+    quantity: it.quantity,
+    unitPrice: it.unitPrice,
+  }));
+  /*
+   * 품목은 없는데 금액만 있는 문서(수동 생성·구버전 데이터)에는 **근거 1행**을 만든다.
+   * 이 행이 없으면 문서를 열자마자 합계 ₩0 이 보이고, 그 화면을 저장하는 순간
+   * 실제 금액이 0 으로 덮여 기회 예상 금액까지 따라 내려간다.
+   * 캔버스가 곧 금액의 출처이므로, 출처를 비워 둔 채 열지 않는다.
+   */
+  (itemTable.props as BlockPropsMap["itemTable"]).rows =
+    itemRows.length > 0 || !input.amount || input.amount <= 0
+      ? itemRows
+      : [
+          {
+            id: uid(),
+            name: `${typeLabel} 금액`,
+            description: "품목 내역이 없어 총액으로 표시했습니다. 필요하면 항목을 나눠 주세요.",
+            quantity: 1,
+            unitPrice: input.amount,
+          },
+        ];
 
   const notice = createBlock("text", { x: 40, y: 636 });
   notice.w = 714;

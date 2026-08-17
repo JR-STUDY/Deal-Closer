@@ -23,6 +23,8 @@ export function DocumentEditorLoader(props: {
   initialTitle: string;
   initialStatus: string;
   initialDoc: EditorDoc;
+  /** 저장된 Document.amount — 저장 시 금액이 0 으로 떨어지는지 판단하는 기준 */
+  initialAmount: number;
   catalog: CatalogOption[];
   version: number;
   isConfirmed: boolean;

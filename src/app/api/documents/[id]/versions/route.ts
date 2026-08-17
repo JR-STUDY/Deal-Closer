@@ -5,7 +5,7 @@ import { ok, fail } from "@/lib/api";
 import { rootIdOf, versionGroupWhere } from "@/lib/document-version";
 import { extractItemRows } from "@/lib/ai/doc-spec";
 import {
-  computeAmount,
+  deriveAmount,
   extractClientName,
   parseContentJson,
 } from "@/lib/editor-schema";
@@ -97,7 +97,10 @@ export async function POST(req: NextRequest, { params }: Params) {
         // 새 버전은 다시 초안부터 시작한다 (발송 상태를 물려받지 않는다)
         status: "DRAFT",
         clientName: parsed ? extractClientName(parsed) : source.clientName,
-        amount: parsed ? computeAmount(parsed) : source.amount,
+        // 본문에 금액 근거(품목표)가 없으면 원본 금액을 물려받는다 — `deriveAmount` 가
+        // null 을 주는 경우다. 0 으로 떨어뜨리면 계약서·NDA 를 새 버전으로 저장할 때마다
+        // 금액이 사라진다.
+        amount: (parsed ? deriveAmount(parsed) : null) ?? source.amount,
         contentJson,
         folderId: source.folderId,
         isCommon: source.isCommon,

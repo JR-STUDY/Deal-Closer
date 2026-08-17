@@ -4,7 +4,7 @@ import { ok, fail } from "@/lib/api";
 import { DOCUMENT_STATUSES, DOCUMENT_TYPES } from "@/lib/constants";
 import {
   parseContentJson,
-  computeAmount,
+  deriveAmount,
   extractClientName,
 } from "@/lib/editor-schema";
 import { syncOpportunityAmount } from "@/lib/opportunity-amount";
@@ -103,13 +103,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const contentJson =
     typeof body.contentJson === "string" ? body.contentJson : undefined;
   const parsed = contentJson ? parseContentJson(contentJson) : null;
-  const recomputedAmount = parsed ? computeAmount(parsed) : undefined;
+  /*
+   * `deriveAmount` 는 품목표 블록이 없으면 `null` 을 준다 — "합계 0원"이 아니라
+   * "본문에 금액 근거가 없다"는 뜻이다. 그 경우 `undefined` 를 넘겨 Prisma 가
+   * amount 를 건드리지 않게 해 **저장된 금액을 보존**한다. 예전 코드는 0 을 그대로
+   * 써서, 계약서를 열어 저장만 눌러도 금액이 0 이 되고 확정 문서를 통해 기회
+   * 예상 금액까지 0 으로 내려갔다.
+   */
+  const derived = parsed ? deriveAmount(parsed) : null;
+  const recomputedAmount = derived ?? undefined;
   const derivedClientName = parsed ? extractClientName(parsed) : null;
 
   const bodyClientName =
     typeof body.clientName === "string" ? body.clientName.trim() || null : undefined;
 
-  const doc = await prisma.$transaction(async (tx) => {
+  const { document: doc, amountSync } = await prisma.$transaction(async (tx) => {
     if (hasItems) {
       await tx.documentItem.deleteMany({ where: { documentId: id } });
       if (normalizedItems.length > 0) {
@@ -157,17 +165,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
      * 총액이 items·contentJson·body.amount 세 경로에서 재계산되기 때문이다 —
      * 실제로 달라진 값이 없으면 `syncOpportunityAmount` 가 쓰기를 건너뛴다.
      */
-    if (existing.opportunityId) {
-      await syncOpportunityAmount(
-        { opportunityId: existing.opportunityId, orgId: existing.orgId },
-        tx,
-      );
-    }
+    const sync = existing.opportunityId
+      ? await syncOpportunityAmount(
+          { opportunityId: existing.opportunityId, orgId: existing.orgId },
+          tx,
+        )
+      : null;
 
-    return updated;
+    return { document: updated, amountSync: sync };
   });
 
-  return ok(doc);
+  /*
+   * 재판정 결과를 응답에 실어 보낸다 — 에디터가 저장 직후 "예상 금액이 얼마로,
+   * 어느 문서 기준으로 바뀌었는지" 를 알려야 한다 (기회-6 ②: 금액이 소리 없이
+   * 달라지면 안 된다). 문서 본문은 기존 그대로 두어 응답 모양이 깨지지 않게 한다.
+   */
+  return ok({ ...doc, amountSync });
 }
 
 /**
