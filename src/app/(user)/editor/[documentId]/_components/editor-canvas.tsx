@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { EditorDoc, BlockType, ZOrderAction, Block } from "@/lib/editor-schema";
 import { BLOCK_TYPES, pageCount } from "@/lib/editor-schema";
@@ -27,6 +27,8 @@ type Props = {
   editingId: string | null;
   onEditingChange: (id: string | null) => void;
   onInlineCommit: (id: string, text: string) => void;
+  /** 확대 배율. "fit" 이면 보이는 폭에 맞춘다 (진단 5) */
+  zoom: number | "fit";
 };
 
 const SNAP_GAP = 6; // 정렬 가이드/스냅 허용 오차(px)
@@ -47,9 +49,33 @@ export function EditorCanvas({
   editingId,
   onEditingChange,
   onInlineCommit,
+  zoom,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const autoHide = useAutoHideScroll();
+
+  /*
+   * "폭 맞춤" 배율. 794px 캔버스는 1280 폭 화면에서 가로 스크롤이 걸린다
+   * (뷰포트 736 < 캔버스 794) — 노트북에서 문서 한 장이 화면에 안 들어갔다.
+   * 컨테이너 폭이 바뀔 때마다 다시 잰다.
+   */
+  const [fitScale, setFitScale] = useState(1);
+  useEffect(() => {
+    const node = viewportRef.current;
+    if (!node) return;
+    const measure = () => {
+      // p-8(32px) 좌우 여백을 뺀 실제로 쓸 수 있는 폭
+      const usable = node.clientWidth - 64;
+      setFitScale(Math.min(1, Math.max(0.2, usable / doc.canvas.w)));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [doc.canvas.w]);
+
+  const scale = zoom === "fit" ? fitScale : zoom;
 
   function handleScroll(e: React.UIEvent<HTMLDivElement>) {
     autoHide(e);
@@ -107,8 +133,11 @@ export function EditorCanvas({
         }
       return Math.abs(best) <= SNAP_GAP ? pos + best : pos;
     };
-    const nx = Math.max(0, Math.round(snap(x, [0, block.w / 2, block.w], xs)));
-    const ny = Math.max(0, Math.round(snap(y, [0, block.h / 2, block.h], ys)));
+    // 캔버스 안으로 가둔다 — Rnd 의 bounds 대신 여기서 처리한다(배율과 충돌하지 않게)
+    const clamp = (v: number, max: number) =>
+      Math.max(0, Math.min(Math.round(v), Math.max(0, Math.round(max))));
+    const nx = clamp(snap(x, [0, block.w / 2, block.w], xs), doc.canvas.w - block.w);
+    const ny = clamp(snap(y, [0, block.h / 2, block.h], ys), totalH - block.h);
     setGuides({ x: [], y: [] });
     // 위치 변화가 없으면(단순 클릭) 갱신하지 않아 불필요한 dirty 를 막는다
     if (nx === block.x && ny === block.y) return;
@@ -121,18 +150,33 @@ export function EditorCanvas({
     const type = e.dataTransfer.getData("application/x-block-type") as BlockType;
     if (!BLOCK_TYPES.includes(type)) return;
     const rect = ref.current?.getBoundingClientRect();
-    const x = rect ? Math.max(0, e.clientX - rect.left) : 40;
-    const y = rect ? Math.max(0, e.clientY - rect.top) : 40;
-    onAddBlock(type, { x, y });
+    // getBoundingClientRect 는 배율이 적용된 크기를 주므로 문서 좌표로 되돌린다
+    const x = rect ? Math.max(0, (e.clientX - rect.left) / scale) : 40;
+    const y = rect ? Math.max(0, (e.clientY - rect.top) / scale) : 40;
+    onAddBlock(type, { x: Math.round(x), y: Math.round(y) });
   }
 
   return (
     <div
+      ref={viewportRef}
       className="overlay-scroll flex min-h-0 flex-1 justify-center overflow-auto bg-muted/40 p-8"
       onScroll={handleScroll}
     >
+      {/* 바깥 상자는 배율이 적용된 크기를 차지하고(스크롤 길이가 맞아야 한다),
+          안쪽은 문서 좌표 그대로 그린 뒤 transform 으로 줄인다.
+          Rnd 에도 같은 scale 을 넘겨야 드래그 좌표가 어긋나지 않는다. */}
+      <div
+        className="shrink-0"
+        style={{ width: doc.canvas.w * scale, height: totalH * scale }}
+      >
       <div
         ref={ref}
+        style={{
+          width: doc.canvas.w,
+          height: totalH,
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+        }}
         role="group"
         aria-label="문서 캔버스"
         onDragOver={(e) => e.preventDefault()}
@@ -144,8 +188,7 @@ export function EditorCanvas({
           }
         }}
         // isolate: 음수 z 블록이 흰 배경 뒤로 숨지 않게 stacking context 를 만든다
-        className="relative isolate shrink-0 bg-white shadow-sm ring-1 ring-border"
-        style={{ width: doc.canvas.w, height: totalH }}
+        className="relative isolate bg-white shadow-sm ring-1 ring-border"
       >
         {/* 페이지 구분선 + 페이지 번호 (#8) */}
         {Array.from({ length: pages }).map((_, i) => (
@@ -192,13 +235,16 @@ export function EditorCanvas({
             onEdit={onEdit}
             onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
+            canvas={{ w: doc.canvas.w, h: totalH }}
             onFit={onFit}
             onClippedChange={onClippedChange}
             editingId={editingId}
             onEditingChange={onEditingChange}
             onInlineCommit={onInlineCommit}
+            scale={scale}
           />
         ))}
+      </div>
       </div>
     </div>
   );

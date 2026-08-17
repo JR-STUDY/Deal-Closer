@@ -38,6 +38,13 @@ type Props = {
   onEditingChange: (id: string | null) => void;
   /** 인라인 편집 결과 저장 */
   onInlineCommit: (id: string, text: string) => void;
+  /**
+   * 캔버스 확대 배율. Rnd 에 넘기지 않으면 확대 상태에서 마우스 이동량과 블록 이동량이
+   * 어긋나 블록이 커서를 따라오지 않는다.
+   */
+  scale: number;
+  /** 캔버스 크기(문서 좌표) — 리사이즈가 캔버스를 넘지 않게 가둔다 */
+  canvas: { w: number; h: number };
 };
 
 function CanvasBlockImpl({
@@ -56,6 +63,8 @@ function CanvasBlockImpl({
   editingId,
   onEditingChange,
   onInlineCommit,
+  scale,
+  canvas,
 }: Props) {
   const editing = editingId === block.id;
   const canInlineEdit = !locked && isInlineEditable(block);
@@ -77,21 +86,29 @@ function CanvasBlockImpl({
     <Rnd
       size={{ width: block.w, height: block.h }}
       position={{ x: block.x, y: block.y }}
-      bounds="parent"
+      /*
+       * bounds="parent" 는 쓰지 않는다 — 확대 배율이 걸리면 react-rnd 가 경계를
+       * 배율 적용 크기로 재고 위치는 문서 좌표로 비교해, 150% 에서 블록이 아예
+       * 움직이지 않았다. 경계는 놓는 순간 editor-canvas 가 문서 좌표로 클램프한다.
+       */
+      scale={scale}
       disableDragging={locked || editing}
       enableResizing={!locked}
       dragHandleClassName="block-drag-handle"
       onMouseDown={() => onSelect(block.id)}
       onDrag={(_e, d) => onDragMove(block, d.x, d.y)}
       onDragStop={(_e, d) => onDragEnd(block, d.x, d.y)}
-      onResizeStop={(_e, _dir, ref, _delta, pos) =>
+      onResizeStop={(_e, _dir, ref, _delta, pos) => {
+        // bounds 를 쓰지 않으므로(배율 충돌) 캔버스 안으로 가두는 일을 여기서 한다
+        const x = Math.max(0, Math.round(pos.x));
+        const y = Math.max(0, Math.round(pos.y));
         onGeometry(block.id, {
-          x: pos.x,
-          y: pos.y,
-          w: ref.offsetWidth,
-          h: ref.offsetHeight,
-        })
-      }
+          x,
+          y,
+          w: Math.max(8, Math.min(ref.offsetWidth, canvas.w - x)),
+          h: Math.max(8, Math.min(ref.offsetHeight, canvas.h - y)),
+        });
+      }}
       style={{ zIndex: block.z }}
       className={
         overflow.clipped

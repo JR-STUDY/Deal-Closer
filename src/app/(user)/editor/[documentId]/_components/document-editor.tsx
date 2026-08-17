@@ -125,6 +125,8 @@ export function DocumentEditor({
     from: number;
     then: string | null;
   } | null>(null);
+  // 확대 배율 (진단 5) — "fit" 은 보이는 폭에 맞춘다. 794px 캔버스는 1280 폭에서 넘친다.
+  const [zoom, setZoom] = useState<number | "fit">("fit");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [namePrompt, setNamePrompt] = useState<{
@@ -799,6 +801,8 @@ export function DocumentEditor({
             onRedo={handleRedo}
             clippedCount={clippedIds.size}
             onFitAll={handleFitAll}
+            zoom={zoom}
+            onZoomChange={setZoom}
             pages={doc.canvas.pages ?? 1}
             onAddPage={handleAddPage}
             onRemovePage={handleRemovePage}
@@ -828,6 +832,7 @@ export function DocumentEditor({
           editingId={editingId}
           onEditingChange={setEditingId}
           onInlineCommit={handleInlineCommit}
+          zoom={zoom}
         />
       </div>
       <EditorSidebar

@@ -34,6 +34,9 @@ type Props = {
   /** 내용이 잘린 블록 수 (진단 4) — 0 이면 표시하지 않는다 */
   clippedCount: number;
   onFitAll: () => void;
+  /** 확대 배율 (진단 5) */
+  zoom: number | "fit";
+  onZoomChange: (zoom: number | "fit") => void;
   pages: number;
   onAddPage: () => void;
   onRemovePage: () => void;
@@ -56,6 +59,8 @@ export function EditorToolbar({
   onRedo,
   clippedCount,
   onFitAll,
+  zoom,
+  onZoomChange,
   pages,
   onAddPage,
   onRemovePage,
@@ -67,7 +72,9 @@ export function EditorToolbar({
   mockProvider,
 }: Props) {
   return (
-    <div className="flex w-full items-center gap-2">
+    // 버튼이 늘어나 1280 폭에서 저장·발송이 잘렸다 — 넘치면 다음 줄로 내린다.
+    // 오른쪽 묶음(저장·발송)이 항상 보여야 하므로 flex-1 스페이서 앞뒤로 나눠 감싼다.
+    <div className="flex w-full flex-wrap items-center gap-x-2 gap-y-2">
       {/* 되돌리기·다시 실행 (진단 2) — 편집이 막힌 문서에서는 쓸 일이 없다 */}
       {locked ? null : (
       <div className="flex shrink-0 items-center gap-0.5 rounded-md border px-1">
@@ -123,6 +130,22 @@ export function EditorToolbar({
         </Button>
       </div>
       )}
+
+      {/* 확대/축소 — 794px 캔버스가 노트북 폭에 안 들어가 가로 스크롤이 걸렸다 */}
+      <select
+        aria-label="확대 배율"
+        className="h-9 shrink-0 rounded-md border bg-background px-2 text-sm"
+        value={zoom === "fit" ? "fit" : String(zoom)}
+        onChange={(e) =>
+          onZoomChange(e.target.value === "fit" ? "fit" : Number(e.target.value))
+        }
+      >
+        <option value="fit">폭 맞춤</option>
+        <option value="0.5">50%</option>
+        <option value="0.75">75%</option>
+        <option value="1">100%</option>
+        <option value="1.5">150%</option>
+      </select>
 
       <Button variant="outline" onClick={onPreview} className="shrink-0">
         <Eye className="size-4" />
