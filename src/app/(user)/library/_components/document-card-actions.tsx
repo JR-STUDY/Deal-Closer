@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreVertical, FolderInput, Users, User, Trash2 } from "lucide-react";
+import { MoreVertical, FolderInput, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -33,9 +33,8 @@ type FolderOption = { id: string; name: string };
 type Props = {
   documentId: string;
   documentTitle: string;
-  isCommon: boolean;
   currentFolderId: string | null;
-  /** 현재 문서함(내/공용)의 폴더 목록 */
+  /** 문서함의 폴더 목록 */
   folders: FolderOption[];
 };
 
@@ -44,7 +43,6 @@ const UNFILED = "__none__";
 export function DocumentCardActions({
   documentId,
   documentTitle,
-  isCommon,
   currentFolderId,
   folders,
 }: Props) {
@@ -92,25 +90,6 @@ export function DocumentCardActions({
     }
   }
 
-  async function toggleCommon() {
-    try {
-      const res = await fetch(`/api/documents/${documentId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        // 문서함을 옮기면 기존 폴더 소속은 해제한다(폴더는 문서함에 종속).
-        body: JSON.stringify({ isCommon: !isCommon, folderId: null }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "요청에 실패했습니다.");
-      toast.success(
-        isCommon ? "내 문서함으로 옮겼습니다." : "공용문서함으로 옮겼습니다.",
-      );
-      router.refresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "요청에 실패했습니다.");
-    }
-  }
-
   return (
     <>
       <DropdownMenu>
@@ -133,19 +112,6 @@ export function DocumentCardActions({
           >
             <FolderInput className="size-4" />
             폴더 이동
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={toggleCommon}>
-            {isCommon ? (
-              <>
-                <User className="size-4" />
-                내 문서함으로 이동
-              </>
-            ) : (
-              <>
-                <Users className="size-4" />
-                공용문서함으로 이동
-              </>
-            )}
           </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"

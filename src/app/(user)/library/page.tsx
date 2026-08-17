@@ -51,8 +51,9 @@ export default async function LibraryPage({
       }
     : {};
 
-  // 이 화면은 "내 문서함"(공통 아님)만 다룬다. 공용 문서는 /library/common 에서 관리.
-  const baseWhere = { orgId: org.id, isCommon: false };
+  // 문서함은 하나뿐이다 — 팀 공용/개인 파티션(Document.isCommon)은 화면에서 걷어냈다.
+  // 컬럼은 스키마에 남아 있지만 조회 조건으로 쓰지 않는다 (AGENTS.md "문서함은 하나다").
+  const baseWhere = { orgId: org.id };
 
   const [allDocuments, folders] = await Promise.all([
     prisma.document.findMany({
@@ -65,9 +66,9 @@ export default async function LibraryPage({
       },
       orderBy: { createdAt: "desc" },
     }),
-    // 내 문서함 폴더 (카드 '폴더 이동' 선택지 · 경로 표시)
+    // 문서함 폴더 (카드 '폴더 이동' 선택지 · 경로 표시)
     prisma.folder.findMany({
-      where: { orgId: org.id, isCommon: false },
+      where: { orgId: org.id },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true, parentId: true },
     }),

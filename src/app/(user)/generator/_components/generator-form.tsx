@@ -16,7 +16,6 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -148,7 +147,6 @@ export function GeneratorForm({
     fileNames: string[];
   } | null>(null);
   const [refIds, setRefIds] = useState<string[]>([]);
-  const [saveAsCommon, setSaveAsCommon] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -280,7 +278,6 @@ export function GeneratorForm({
         JSON.stringify({
           folderName: folderName || "가져온 양식",
           fileNames,
-          saveAsCommon,
         }),
       );
     } catch {
@@ -307,9 +304,6 @@ export function GeneratorForm({
     }
     for (const id of refIds) {
       formData.append("referenceIds", id);
-    }
-    if (saveAsCommon) {
-      formData.append("saveAsCommon", "true");
     }
     // 표준 양식 불러오기 (F-211)
     if (templateId !== NO_TEMPLATE) {
@@ -733,30 +727,6 @@ export function GeneratorForm({
               ))}
             </ul>
           )}
-
-          {/* 저장 위치 토글 — on/off 에 따라 내 문서함 ↔ 공용문서함 실시간 전환 */}
-          <div className="flex items-center gap-2.5 rounded-md border bg-muted/20 px-3 py-2.5">
-            <Switch
-              id="save-as-common"
-              checked={saveAsCommon}
-              onCheckedChange={setSaveAsCommon}
-              disabled={isSubmitting}
-            />
-            <Label
-              htmlFor="save-as-common"
-              className="cursor-pointer text-sm font-normal leading-snug"
-            >
-              <span className="font-medium">
-                {(saveAsCommon ? "공용문서함" : "내 문서함") + "에 저장"}
-              </span>{" "}
-              <span className="text-muted-foreground">
-                —{" "}
-                {saveAsCommon
-                  ? "팀이 함께 쓰는 공용문서함에 보관합니다"
-                  : "내 문서함에 보관합니다"}
-              </span>
-            </Label>
-          </div>
 
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs tabular-nums text-muted-foreground">
