@@ -53,6 +53,10 @@ pnpm test:opportunity-sort      # 기회 목록 정렬 순수 함수 검증 (DB 
 pnpm test:pagination # 목록 페이지네이션 순수 함수 검증 (DB 없이 실행)
 pnpm test:contact   # 거래처 담당자 대표 규칙 순수 함수 검증 (DB 없이 실행)
 pnpm test:confirmed-document # 확정 문서 판정 순수 함수 검증 (DB 없이 실행)
+pnpm test:editor-amount      # 에디터 문서 금액 도출 순수 함수 검증 (DB 없이 실행)
+pnpm test:document-edit      # 문서 편집 잠금 판정 순수 함수 검증 (DB 없이 실행)
+pnpm test:editor-render      # 캔버스·미리보기·PDF 렌더 정합 검증 (DB 없이 실행)
+pnpm test:table-merge        # 표 셀 병합 순수 함수 검증 (DB 없이 실행)
 
 pnpm db:migrate     # 스키마 변경 → 마이그레이션 생성·적용
 pnpm db:seed        # 데모 데이터 시드
@@ -109,7 +113,12 @@ src/
     nav.ts               # 사이드바 네비게이션 정의 (user/admin)
     pagination.ts        # 목록 페이지네이션 순수 함수 — page 파싱·구간·번호 목록·href·필터 변경 시 리셋
     validation.ts        # 이메일 수신자 형식 검증·다중 파싱 (VAL_*)
-    editor-schema.ts     # 블록 캔버스 문서 모델(contentJson) 파싱·총액/거래처 재도출·시드
+    editor-schema.ts     # 블록 캔버스 문서 모델(contentJson) 파싱·시드 + **공용 순수 함수**:
+                         #   deriveAmount(금액 근거 없으면 null) · blocksOnPage(쪽 나눔) ·
+                         #   reorderZ(겹침 순서 1..n 정규화) · tableLayout/normalizeMerges(셀 병합) ·
+                         #   textFormat(서식 기본값) · FONT_FAMILIES(화면·인쇄 공용 글꼴)
+    document-edit.ts     # 문서 편집 잠금 **규칙** 순수 함수 — 발송·계약완료·폐기·확정본은
+                         #   읽기 전용, 고치려면 새 버전. 화면(에디터)과 서버(PATCH)가 같은 판정
     attachments.ts       # 업로드 파일 검증 + 엑셀/CSV 텍스트 추출 (AI 생성 첨부 포함)
     template.ts          # 표준 양식 공용 select·DTO
     document-version.ts  # 문서 버전 묶음(rootId) 유틸·최신본 필터
@@ -195,6 +204,59 @@ src/
   기회에 붙은 문서와 폐기 문서를 뺀다 — 한 문서가 두 기회의 금액을 동시에 좌우할 수 없다.
   기회 등록 팝업(기회-17)과 기회 상세의 "기존 문서 연결"(기회-5)은 `@/lib/document-link` 의
   같은 후보 규칙을 쓴다. 연결은 **복제가 아니다** — 복제하면 어느 쪽을 고쳐야 금액이 바뀌는지 알 수 없다.
+- **문서 금액은 `deriveAmount()` 로 도출한다 — `computeAmount()` 를 저장에 쓰지 않는다.**
+  `deriveAmount` 는 품목표 블록이 **하나도 없으면 `null`** 을 준다. "합계 0원"과 "이 문서는
+  금액을 품목표로 표현하지 않는다(계약서·NDA)"는 다른 사실이고, 이 둘을 같게 취급하면
+  문서를 열어 **저장만 눌러도** amount 가 0 이 되고 확정 문서를 통해 기회 예상 금액까지
+  0 으로 내려간다(실측 12,000,000 → 0). `null` 이면 `undefined` 를 넘겨 저장된 금액을
+  보존한다. `0 ?? fallback` 은 0 이 nullish 가 아니라 폴백이 걸리지 않는다는 것도 기억한다.
+  에디터를 열 때는 `seedTemplate({ amount })` 로 근거 1행을 시드해 **캔버스 합계와 저장된
+  금액을 처음부터 일치**시킨다. 금액이 0 으로 떨어지는 저장은 확인창이 바뀔 금액을 미리 말하고,
+  저장 응답의 `amountSync` 로 결과를 알린다(문구는 `amountChangeMessage` 하나를 쓴다).
+- **발송완료·계약완료·폐기·확정본 문서는 본문이 읽기 전용이다.** 판정은
+  `@/lib/document-edit` 의 `documentEditLock()` 순수 함수가 단일 기준이고 **화면과 서버가
+  같은 함수를 쓴다** — 화면에서만 막으면 API 로 그대로 통한다. 서버는 본문 변경(`contentJson`
+  ·`title`·`items`·`amount`·`type`·`clientName`)을 409 로 거절하고 `status`·`isConfirmed`
+  ·`folderId` 는 통과시킨다(발송 라우트가 상태를 올리고, 확정본 해제가 잠금을 푸는 유일한 길이다).
+  고치는 길은 **[이 내용으로 새 버전 만들어 편집]** 하나이며 `use-create-version` 훅을
+  버전 이력 다이얼로그와 공유한다. 에디터 안의 모든 편집은 `editDoc` 래퍼 한 곳을 지난다 —
+  핸들러마다 검사를 흩어 두면 하나를 빠뜨렸을 때 그 경로로만 조용히 편집된다.
+- **넘친 내용은 알리고 한 번에 맞춰 준다 — 자동으로 늘리지 않는다.** 블록은 절대 좌표라서
+  높이를 늘려도 아래 블록이 밀려나지 않고 **덮는다**. 자동 확장은 잘림을 겹침으로 바꾸는데,
+  겹침은 z 순서가 승자를 정하고 덮인 내용이 PDF 에서도 사라져 더 안 보이는 손상이다.
+  게다가 늘어난 블록이 페이지 경계를 넘고, `h` 의 주인이 사용자와 렌더러로 둘이 된다.
+  대신 `use-overflow` 로 감지해 점선 외곽선·경고 배지·"내용에 맞추기"·"잘린 블록 N개 ·
+  모두 맞추기"를 주고 저장 시 남은 잘림을 알린다(막지는 않는다).
+- **화면 렌더러와 인쇄 렌더러는 같은 값을 쓴다.** 글꼴 스택은 `FONT_FAMILIES` 하나이고
+  줄 높이는 인쇄 CSS 가 화면 Tailwind 비율을 명시한다(`TEXT_XS_LEADING`·`BASE_LEADING`).
+  예전에는 인쇄가 `line-height: normal` 이라 같은 표가 화면 21.5px / 인쇄 19px 행으로
+  그려져 화면에서 맞춘 블록이 인쇄에서 어긋났다. 표에 `height:100%` 를 주지 않는다 —
+  행이 블록 높이에 맞춰 억지로 벌어진다. 쪽 나눔(`blocksOnPage`)과 셀 병합(`tableLayout`)도
+  두 렌더러가 같은 순수 함수를 쓴다. **화면 쪽 Tailwind 클래스를 바꾸면 인쇄 CSS 도 함께 본다.**
+- **겹침 순서는 `reorderZ()` 로만 바꾼다.** z 를 항상 `1..n` 으로 정규화한다 — 예전 "맨 뒤로"
+  는 `min-1` 로 내려 음수를 만들었고, 음수 z 자식은 흰 배경을 가진 부모 뒤로 들어가 블록이
+  화면·PDF 에서 통째로 사라졌다. 캔버스와 `.page` 에 `isolation: isolate` 를 걸고
+  `parseContentJson` 이 저장된 음수 z 도 치유한다.
+- **되돌리기는 `use-doc-history` 를 지난다.** 문서·과거·미래를 한 state 로 묶어 전이를 순수
+  함수로 만든다(updater 안에서 다른 setState 를 부르면 StrictMode 이중 호출 때 스택이 두 번
+  쌓인다). 잦은 변경은 `coalesceKey` 로 600ms 안에서 한 건으로 묶는다 — 타이핑이 글자 단위로
+  되돌아가면 되돌리기가 쓸모없어진다. **무이동 드래그(=클릭)에는 스냅을 적용하지 않는다** —
+  선택만 했는데 블록이 최대 6px 밀리고 스택이 클릭마다 쌓인다.
+- **캔버스 인라인 편집은 기회 상세와 같은 규칙이다** — 더블클릭 진입, blur 저장, Esc 되돌리기,
+  여러 줄이므로 ⌘/Ctrl+Enter 저장. 편집 중에는 React 가 `contentEditable` 내용을 다시 쓰지
+  않고(입력마다 커서가 튄다) 캔버스 단축키와 Rnd 드래그를 모두 양보한다. 편집 세션 하나가
+  되돌리기 한 건이다.
+- **텍스트 서식은 블록 단위다** (굵게·기울임·줄 높이). 새 속성은 **옵셔널**로 두고
+  `textFormat()` 이 기본값을 채운다 — 필수로 만들면 예전 contentJson 을 열 때마다 서식이
+  초기화된다. 화면·인쇄·인스펙터가 이 함수 하나를 쓴다. 부분 서식(리치텍스트)은 범위 밖이다.
+- **확대 배율은 `Rnd scale` 로 함께 넘기고 `bounds="parent"` 는 쓰지 않는다.** 배율이 걸리면
+  react-rnd 가 경계를 배율 적용 크기로 재고 위치는 문서 좌표로 비교해 150% 에서 블록이 아예
+  움직이지 않는다. 경계는 놓는 순간 문서 좌표로 클램프한다(드래그·리사이즈 모두). 드롭 좌표도
+  배율로 나눈다. 기본값은 **폭 맞춤** — 794px 캔버스는 1280 폭 화면에 들어가지 않는다.
+- **표 셀 병합은 `merges` 를 `cells` 위에 얹는다** (기존 문서 호환 — 없으면 병합 없음).
+  `normalizeMerges` 가 격자 밖·1×1·겹친 범위를 걸러내고 겹치면 먼저 선언된 것이 이긴다 —
+  걸러내지 않으면 colspan 합이 열 수를 넘어 표가 통째로 깨진다. 행·열을 지울 때
+  `shiftMergesOn{Row,Col}Delete` 로 좌표를 옮긴다.
 - **문서 미리보기는 `@/lib/pdf-html` 을 재사용한다** (기회-19). 서버가 만든 인쇄용 HTML 을
   `GET /api/documents/:id/preview` 로 내려 `sandbox` iframe 에 띄운다 — 미리보기용 렌더러를 따로 만들면
   실제 PDF 와 다르게 보이기 시작한다.
