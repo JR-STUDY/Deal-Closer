@@ -53,6 +53,7 @@ pnpm test:opportunity-sort      # 기회 목록 정렬 순수 함수 검증 (DB 
 pnpm test:pagination # 목록 페이지네이션 순수 함수 검증 (DB 없이 실행)
 pnpm test:contact   # 거래처 담당자 대표 규칙 순수 함수 검증 (DB 없이 실행)
 pnpm test:confirmed-document # 확정 문서 판정 순수 함수 검증 (DB 없이 실행)
+pnpm test:editor-schema      # 블록 캔버스 문서 모델 파싱·직렬화 검증 (DB 없이 실행)
 pnpm test:editor-amount      # 에디터 문서 금액 도출 순수 함수 검증 (DB 없이 실행)
 pnpm test:document-edit      # 문서 편집 잠금 판정 순수 함수 검증 (DB 없이 실행)
 pnpm test:editor-render      # 캔버스·미리보기·PDF 렌더 정합 검증 (DB 없이 실행)

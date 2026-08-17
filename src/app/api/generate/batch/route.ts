@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentOrg, getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 import {
-  computeAmount,
+  deriveAmount,
   parseContentJson,
   type EditorDoc,
   type BlockPropsMap,
@@ -160,7 +160,9 @@ export async function POST(req: NextRequest) {
       randomizeAmounts(doc);
     }
     const contentJson = doc ? JSON.stringify(doc) : BATCH_BASE_CONTENT_JSON;
-    const amount = doc ? computeAmount(doc) : 0;
+    // 기준본에는 품목표가 있으므로 null 이 나오지 않지만, 저장 경로는 항상 deriveAmount 를
+    // 쓴다 — 품목표 없는 기준본으로 바뀌는 날 computeAmount 는 소리 없이 0 을 저장한다
+    const amount = (doc ? deriveAmount(doc) : null) ?? 0;
 
     const created = await prisma.document.create({
       data: {
