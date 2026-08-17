@@ -71,6 +71,16 @@ export function EditorCanvas({
   }
 
   function handleDragEnd(block: Block, x: number, y: number) {
+    /*
+     * 움직이지 않은 드래그는 **클릭**이다 — 여기서 스냅을 적용하면 선택만 했는데
+     * 블록이 최대 SNAP_GAP(6px) 밀린다. 아래의 "위치 변화가 없으면 갱신하지 않는다"
+     * 검사는 스냅 **이후** 값을 보기 때문에 이 경우를 잡지 못했다(스냅이 값을 바꿨으므로).
+     * 되돌리기 스택도 클릭마다 쌓여 ⌘Z 가 아무 일도 안 하는 것처럼 보였다.
+     */
+    if (x === block.x && y === block.y) {
+      setGuides({ x: [], y: [] });
+      return;
+    }
     const { xs, ys } = targets(block.id);
     const snap = (pos: number, offsets: number[], ts: number[]) => {
       let best = SNAP_GAP + 1;

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Send, Save, Eye, Plus, Minus } from "lucide-react";
+import { Send, Save, Eye, Plus, Minus, Undo2, Redo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AiReviseDialog } from "./ai-revise-dialog";
 import type { AiModelOption } from "@/lib/ai/models";
@@ -15,6 +15,11 @@ type Props = {
   dirty: boolean;
   saving: boolean;
   onSave: () => void;
+  /** 되돌리기·다시 실행 — 키보드만 쓰는 사용자를 위해 버튼도 반드시 둔다 (ACC_*) */
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
   pages: number;
   onAddPage: () => void;
   onRemovePage: () => void;
@@ -30,6 +35,10 @@ export function EditorToolbar({
   dirty,
   saving,
   onSave,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
   pages,
   onAddPage,
   onRemovePage,
@@ -42,6 +51,32 @@ export function EditorToolbar({
 }: Props) {
   return (
     <div className="flex w-full items-center gap-2">
+      {/* 되돌리기·다시 실행 (진단 2) */}
+      <div className="flex shrink-0 items-center gap-0.5 rounded-md border px-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          aria-label="되돌리기"
+          title="되돌리기 (⌘Z)"
+          onClick={onUndo}
+          disabled={!canUndo}
+        >
+          <Undo2 className="size-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          aria-label="다시 실행"
+          title="다시 실행 (⌘⇧Z)"
+          onClick={onRedo}
+          disabled={!canRedo}
+        >
+          <Redo2 className="size-4" />
+        </Button>
+      </div>
+
       {/* 페이지 컨트롤 (#8) */}
       <div className="flex shrink-0 items-center gap-0.5 rounded-md border px-1">
         <Button
