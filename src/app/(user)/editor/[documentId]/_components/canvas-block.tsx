@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect } from "react";
+import { memo, useEffect, useRef } from "react";
 import { Rnd } from "react-rnd";
 import type { Block, ZOrderAction } from "@/lib/editor-schema";
 import { BLOCK_LABELS } from "@/lib/editor-schema";
@@ -22,7 +22,8 @@ type Props = {
   /** 본문이 잠긴 문서 — 선택·미리보기는 되지만 옮기고 고칠 수는 없다 (진단 3) */
   locked: boolean;
   selected: boolean;
-  onSelect: (id: string) => void;
+  /** `additive` 면 선택에 더하거나 뺀다 (⇧·⌘ 클릭) */
+  onSelect: (id: string, additive: boolean) => void;
   onRemove: (id: string) => void;
   onZOrder: (id: string, action: ZOrderAction) => void;
   onEdit: (id: string) => void;
@@ -76,6 +77,13 @@ function CanvasBlockImpl({
 }: Props) {
   const editing = editingId === block.id;
   const canInlineEdit = !locked && isInlineEditable(block);
+  /*
+   * ⇧클릭으로 선택에서 **뺄 때** 이 드래그를 무시한다.
+   * Rnd 는 mousedown 에 이미 드래그를 시작하므로, 선택에서 빼려던 클릭이 조금만 흔들려도
+   * 블록이 함께 움직인다. 놓을 때까지 이 제스처의 이동을 버린다(위치는 controlled prop
+   * 이라 다시 그려지며 제자리로 돌아온다).
+   */
+  const suppressDragRef = useRef(false);
   // 내용이 상자를 넘쳤는지 — 상자 변화는 관측자가, 내용 변화는 block 이 잡는다
   const [overflowRef, overflow] = useOverflow(block);
 
@@ -103,9 +111,22 @@ function CanvasBlockImpl({
       disableDragging={locked || editing}
       enableResizing={!locked}
       dragHandleClassName="block-drag-handle"
-      onMouseDown={() => onSelect(block.id)}
-      onDrag={(_e, d) => onDragMove(block, d.x, d.y)}
-      onDragStop={(_e, d) => onDragEnd(block, d.x, d.y)}
+      onMouseDown={(e) => {
+        const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+        suppressDragRef.current = additive && selected;
+        onSelect(block.id, additive);
+      }}
+      onDrag={(_e, d) => {
+        if (suppressDragRef.current) return;
+        onDragMove(block, d.x, d.y);
+      }}
+      onDragStop={(_e, d) => {
+        if (suppressDragRef.current) {
+          suppressDragRef.current = false;
+          return;
+        }
+        onDragEnd(block, d.x, d.y);
+      }}
       onResize={(_e, _dir, ref, _delta, pos) =>
         onResizeMove(block, {
           x: pos.x,
@@ -199,7 +220,17 @@ function CanvasBlockImpl({
               aria-selected={selected}
               tabIndex={0}
               aria-label={`${BLOCK_LABELS[block.type]} 블록`}
-              onFocus={() => onSelect(block.id)}
+              /*
+               * Tab 으로 옮겨 온 포커스는 하나씩 보는 동작이므로 **단일 선택**으로 바꾼다.
+               * 다만 마우스 클릭도 포커스를 만드는데, 그때는 바로 위 `onMouseDown` 이 이미
+               * (⇧ 여부까지 반영해) 선택을 정했다 — 여기서 다시 단일 선택으로 덮으면
+               * ⇧클릭이 **더하지 않고 교체**된다. `:focus-visible` 은 키보드 포커스에만
+               * 붙으므로(마우스 클릭에는 붙지 않는다) 그 차이를 이 조건으로 가른다.
+               */
+              onFocus={(e) => {
+                if (!e.currentTarget.matches(":focus-visible")) return;
+                onSelect(block.id, false);
+              }}
               onDoubleClick={() => {
                 if (canInlineEdit) onEditingChange(block.id);
               }}

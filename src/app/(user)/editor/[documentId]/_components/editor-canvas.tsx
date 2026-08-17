@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { EditorDoc, BlockType, ZOrderAction, Block } from "@/lib/editor-schema";
 import { BLOCK_TYPES, pageCount } from "@/lib/editor-schema";
@@ -11,8 +11,10 @@ type Props = {
   doc: EditorDoc;
   /** 본문이 잠긴 문서 — 드래그·리사이즈·드롭·블록 액션을 모두 막는다 (진단 3) */
   locked: boolean;
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  /** 선택된 블록들 (다중선택) */
+  selectedIds: string[];
+  /** 블록 클릭 — `additive` 면 선택에 더하거나 뺀다. null 은 선택 해제 */
+  onSelect: (id: string | null, additive: boolean) => void;
   onGeometry: (id: string, geo: Geometry) => void;
   onAddBlock: (type: BlockType, pos: { x: number; y: number }) => void;
   onRemove: (id: string) => void;
@@ -39,7 +41,7 @@ const SNAP_GAP = 6; // 정렬 가이드/스냅 허용 오차(px)
 export function EditorCanvas({
   doc,
   locked,
-  selectedId,
+  selectedIds,
   onSelect,
   onGeometry,
   onAddBlock,
@@ -81,6 +83,9 @@ export function EditorCanvas({
   }, [doc.canvas.w]);
 
   const scale = zoom === "fit" ? fitScale : zoom;
+
+  // 블록마다 배열을 훑지 않도록 한 번만 Set 으로 만든다
+  const selection = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   function handleScroll(e: React.UIEvent<HTMLDivElement>) {
     autoHide(e);
@@ -241,12 +246,14 @@ export function EditorCanvas({
         }}
         // 블록을 고르는 목록 — 각 블록이 role="option" 이다 (canvas-block 주석 참고)
         role="listbox"
+        // 여러 블록을 함께 고를 수 있다는 사실을 보조기기에도 알린다 (ACC_*)
+        aria-multiselectable
         aria-label="문서 캔버스"
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
         onMouseDown={(e) => {
           if (!(e.target as HTMLElement).closest("[data-block-id]")) {
-            onSelect(null);
+            onSelect(null, false);
             onEditingChange(null);
           }
         }}
@@ -290,7 +297,7 @@ export function EditorCanvas({
             key={b.id}
             block={b}
             locked={locked}
-            selected={b.id === selectedId}
+            selected={selection.has(b.id)}
             onSelect={onSelect}
             onRemove={onRemove}
             onZOrder={onZOrder}

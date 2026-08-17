@@ -6,9 +6,11 @@ import type {
   ZOrderAction,
   CatalogOption,
 } from "@/lib/editor-schema";
+import type { AlignMode, DistributeAxis } from "@/lib/block-align";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BlockPalette } from "./block-palette";
 import { BlockInspector } from "./block-inspector";
+import { BlockAlignPanel } from "./block-align-panel";
 import { useAutoHideScroll } from "./use-auto-hide-scroll";
 import type { CustomBlock, DocTemplate } from "./template-store";
 
@@ -21,11 +23,18 @@ type Props = {
   onAdd: (type: BlockType) => void;
   onEditBase: (type: BlockType) => void;
   catalog: CatalogOption[];
+  /** 정확히 1개를 골랐을 때의 그 블록 (여러 개면 null — 정렬 패널이 나온다) */
   block: Block | null;
+  /** 고른 블록 수 — 2 이상이면 속성 대신 정렬 패널을 보여준다 */
+  selectedCount: number;
   onChange: (patch: Partial<Block>) => void;
   onChangeProps: (propsPatch: Record<string, unknown>) => void;
   onRemove: (id: string) => void;
   onZOrder: (action: ZOrderAction) => void;
+  // 다중선택 정렬 (2개 이상)
+  onAlign: (mode: AlignMode) => void;
+  onDistribute: (axis: DistributeAxis) => void;
+  onRemoveSelected: () => void;
   // 사용자 지정 블록/템플릿 (#3)
   customBlocks: CustomBlock[];
   onAddCustom: (cb: CustomBlock) => void;
@@ -47,10 +56,14 @@ export function EditorSidebar({
   onEditBase,
   catalog,
   block,
+  selectedCount,
   onChange,
   onChangeProps,
   onRemove,
   onZOrder,
+  onAlign,
+  onDistribute,
+  onRemoveSelected,
   customBlocks,
   onAddCustom,
   onDeleteCustom,
@@ -100,17 +113,29 @@ export function EditorSidebar({
             )}
           </TabsContent>
           <TabsContent value="inspector" className="mt-0">
-            <BlockInspector
-              readOnly={locked}
-              readOnlyReason={lockReason}
-              block={block}
-              catalog={catalog}
-              onChange={onChange}
-              onChangeProps={onChangeProps}
-              onRemove={onRemove}
-              onZOrder={onZOrder}
-              onSaveAsCustom={onSaveAsCustom}
-            />
+            {/* 2개 이상이면 "이 블록의 속성" 이 없다 — 서로 맞추는 도구를 준다.
+                잠긴 문서에서는 정렬도 막히므로 패널을 내놓지 않는다(기존 관례) */}
+            {selectedCount >= 2 && !locked ? (
+              <BlockAlignPanel
+                count={selectedCount}
+                onAlign={onAlign}
+                onDistribute={onDistribute}
+                onZOrder={onZOrder}
+                onRemove={onRemoveSelected}
+              />
+            ) : (
+              <BlockInspector
+                readOnly={locked}
+                readOnlyReason={lockReason}
+                block={block}
+                catalog={catalog}
+                onChange={onChange}
+                onChangeProps={onChangeProps}
+                onRemove={onRemove}
+                onZOrder={onZOrder}
+                onSaveAsCustom={onSaveAsCustom}
+              />
+            )}
           </TabsContent>
         </div>
       </Tabs>
