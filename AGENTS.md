@@ -58,6 +58,7 @@ pnpm test:editor-amount      # 에디터 문서 금액 도출 순수 함수 검�
 pnpm test:document-edit      # 문서 편집 잠금 판정 순수 함수 검증 (DB 없이 실행)
 pnpm test:editor-render      # 캔버스·미리보기·PDF 렌더 정합 검증 (DB 없이 실행)
 pnpm test:table-merge        # 표 셀 병합 순수 함수 검증 (DB 없이 실행)
+pnpm test:block-align        # 다중선택 정렬·분할·이동 순수 함수 검증 (DB 없이 실행)
 
 pnpm db:migrate     # 스키마 변경 → 마이그레이션 생성·적용
 pnpm db:seed        # 데모 데이터 시드
@@ -116,8 +117,12 @@ src/
     validation.ts        # 이메일 수신자 형식 검증·다중 파싱 (VAL_*)
     editor-schema.ts     # 블록 캔버스 문서 모델(contentJson) 파싱·시드 + **공용 순수 함수**:
                          #   deriveAmount(금액 근거 없으면 null) · blocksOnPage(쪽 나눔) ·
-                         #   reorderZ(겹침 순서 1..n 정규화) · tableLayout/normalizeMerges(셀 병합) ·
+                         #   reorderZ/reorderZMany(겹침 순서 1..n 정규화 · 묶음째) ·
+                         #   tableLayout/normalizeMerges(셀 병합) ·
                          #   textFormat(서식 기본값) · FONT_FAMILIES(화면·인쇄 공용 글꼴)
+    block-align.ts       # 다중선택 정렬·분할·이동 **규칙** 순수 함수 — selectionBounds ·
+                         #   alignBlocks(바운딩 박스 기준) · distributeBlocks(양 끝 고정) ·
+                         #   translateBlocks(묶음째 클램프) · blocksInRect(마퀴 교차 판정)
     document-edit.ts     # 문서 편집 잠금 **규칙** 순수 함수 — 발송·계약완료·폐기·확정본은
                          #   읽기 전용, 고치려면 새 버전. 화면(에디터)과 서버(PATCH)가 같은 판정
     attachments.ts       # 업로드 파일 검증 + 엑셀/CSV 텍스트 추출 (AI 생성 첨부 포함)
