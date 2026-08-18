@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { Lock } from "lucide-react";
 import type { EditorDoc, CatalogOption } from "@/lib/editor-schema";
@@ -22,6 +22,7 @@ import { useBlockLibrary } from "./use-block-library";
 import { useDocumentSave } from "./use-document-save";
 import { useEditorShortcuts } from "./use-editor-shortcuts";
 import { useBlockEditing } from "./use-block-editing";
+import { useBlockSelection } from "./use-block-selection";
 import {
   BaseBlockDialog,
   BlockEditDialog,
@@ -81,11 +82,6 @@ export function DocumentEditor({
   const { doc, setDoc, replaceDoc, undo, redo, canUndo, canRedo } =
     useDocHistory(initialDoc);
   const [docTitle, setDocTitle] = useState(initialTitle);
-  /*
-   * 선택은 **여러 개**다. 속성 편집은 정확히 1개일 때만 대상이 정해지므로
-   * `selectedBlock` 을 아래에서 그렇게 파생시킨다 — 1개일 때의 동작은 예전과 같다.
-   */
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [sidebarTab, setSidebarTab] = useState<"palette" | "inspector">(
     "palette",
   );
@@ -104,14 +100,18 @@ export function DocumentEditor({
 
   const locked = lock.locked;
 
-  /** 인스펙터·수정 모달·내 블록 저장이 보는 값 — 여러 개를 고르면 대상이 없다 */
-  const selectedBlock = useMemo(
-    () =>
-      selectedIds.length === 1
-        ? doc.blocks.find((b) => b.id === selectedIds[0]) ?? null
-        : null,
-    [doc.blocks, selectedIds],
-  );
+  // 선택 상태 (다중선택) — 무엇을 골랐는지만 안다, 문서는 바꾸지 않는다
+  const showInspector = useCallback(() => setSidebarTab("inspector"), []);
+  const {
+    selectedIds,
+    setSelectedIds,
+    selectedBlock,
+    select: handleSelect,
+    selectMany: handleSelectMany,
+    selectAll: handleSelectAll,
+    clear: deselect,
+    targetsFrom,
+  } = useBlockSelection({ blocks: doc.blocks, onShowInspector: showInspector });
 
   /*
    * 문서를 바꾸는 **유일한 통로**.
@@ -184,10 +184,13 @@ export function DocumentEditor({
   } = useBlockLibrary({ doc, docTitle, selectedBlock });
 
   /** 새로 만든 블록을 선택해 바로 고칠 수 있게 한다 (복제·붙여넣기는 여러 개다) */
-  const handleInserted = useCallback((ids: string[]) => {
-    setSelectedIds(ids);
-    setSidebarTab("inspector");
-  }, []);
+  const handleInserted = useCallback(
+    (ids: string[]) => {
+      setSelectedIds(ids);
+      showInspector();
+    },
+    [setSelectedIds, showInspector],
+  );
 
   // 복제 · 복사/붙여넣기 (진단 5)
   const {
@@ -195,40 +198,6 @@ export function DocumentEditor({
     copy: handleCopy,
     paste: handlePaste,
   } = useBlockClipboard({ doc, editDoc, onInserted: handleInserted });
-
-  /**
-   * 블록 선택. `additive`(⇧·⌘ 클릭)면 이미 골라 둔 것에 더하거나 뺀다.
-   * 선택하면 속성 탭으로 자동 전환한다 — 2개 이상이면 그 탭이 정렬 패널을 보여준다.
-   */
-  const handleSelect = useCallback((id: string | null, additive: boolean) => {
-    if (!id) {
-      setSelectedIds([]);
-      return;
-    }
-    setSelectedIds((previous) =>
-      additive
-        ? previous.includes(id)
-          ? previous.filter((k) => k !== id)
-          : [...previous, id]
-        : [id],
-    );
-    setSidebarTab("inspector");
-  }, []);
-
-  /** 마퀴로 여러 개를 한 번에 — ⇧ 를 누른 채면 골라 둔 것에 더한다 */
-  const handleSelectMany = useCallback((ids: string[], additive: boolean) => {
-    setSelectedIds((previous) =>
-      additive
-        ? [...previous, ...ids.filter((id) => !previous.includes(id))]
-        : ids,
-    );
-    if (ids.length > 0) setSidebarTab("inspector");
-  }, []);
-
-  const handleSelectAll = useCallback(() => {
-    setSelectedIds(doc.blocks.map((b) => b.id));
-    setSidebarTab("inspector");
-  }, [doc.blocks]);
 
   // 블록 편집 동작 (추가·이동·속성·삭제·겹침 순서·페이지·템플릿)
   const {
@@ -263,10 +232,13 @@ export function DocumentEditor({
   });
 
   /** 연필 아이콘·컨텍스트 메뉴의 "수정" — 그 블록만 대상으로 삼는다 */
-  const handleEditBlock = useCallback((id: string) => {
-    setSelectedIds([id]);
-    setEditModalOpen(true);
-  }, []);
+  const handleEditBlock = useCallback(
+    (id: string) => {
+      setSelectedIds([id]);
+      setEditModalOpen(true);
+    },
+    [setSelectedIds],
+  );
 
   const handleTitleChange = useCallback(
     (v: string) => {
@@ -277,7 +249,7 @@ export function DocumentEditor({
     [locked],
   );
 
-  /** 단축키는 선택 전체를 대상으로 한다 — 대상 목록을 아는 곳이 여기다 */
+  /* 단축키·아이콘·메뉴가 쓰는 얇은 래퍼 — 대상 목록(선택 or 누른 블록)만 정해 넘긴다 */
   const duplicateSelected = useCallback(
     () => handleDuplicate(selectedIds),
     [handleDuplicate, selectedIds],
@@ -289,18 +261,6 @@ export function DocumentEditor({
   const removeSelected = useCallback(
     () => handleRemoveMany(selectedIds),
     [handleRemoveMany, selectedIds],
-  );
-  const deselect = useCallback(() => setSelectedIds([]), []);
-
-  /*
-   * 캔버스 블록의 아이콘·우클릭 메뉴 대상.
-   * 누른 블록이 **선택에 포함되면 선택 전체**를, 아니면 그 블록만 대상으로 한다 —
-   * 5개를 골라 두고 그중 하나를 우클릭해 삭제할 때 하나만 사라지면 헷갈린다.
-   * 몇 개가 처리됐는지는 toast 가 말한다.
-   */
-  const targetsFrom = useCallback(
-    (id: string) => (selectedIds.includes(id) ? selectedIds : [id]),
-    [selectedIds],
   );
   const removeFrom = useCallback(
     (id: string) => handleRemoveMany(targetsFrom(id)),
