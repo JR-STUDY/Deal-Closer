@@ -215,6 +215,7 @@ export function DocumentEditor({
     handleChangeProps,
     handleInlineCommit,
     handleCellCommit,
+    handleItemCommit,
     handleResizeColumn,
     handleRemove,
     handleRemoveMany,
@@ -411,6 +412,7 @@ export function DocumentEditor({
             onEditingChange={setEditTarget}
             onInlineCommit={handleInlineCommit}
             onCellCommit={handleCellCommit}
+            onItemCommit={handleItemCommit}
             onResizeColumn={handleResizeColumn}
             zoom={zoom}
             onDuplicate={duplicateFrom}

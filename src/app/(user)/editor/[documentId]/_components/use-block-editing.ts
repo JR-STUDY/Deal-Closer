@@ -196,6 +196,43 @@ export function useBlockEditing(options: {
   );
 
   /**
+   * 품목표 한 칸. 필드마다 저장 형태가 다르다 —
+   * 수량·단가는 **숫자**이므로 통화기호·쉼표를 걷어내고 정수로 만든다(정책 FORM_CURRENCY_KRW).
+   * 금액은 수량×단가 결과라 애초에 편집 대상이 아니다.
+   */
+  const handleItemCommit = useCallback(
+    (id: string, rowIndex: number, field: string, text: string) => {
+      /** 숫자 칸 — 사용자가 "1,200,000 원" 처럼 넣어도 받아 준다 */
+      const toInt = (value: string) => {
+        const digits = value.replace(/[^\d-]/g, "");
+        const parsed = Number.parseInt(digits, 10);
+        return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+      };
+      editDoc((d) => ({
+        ...d,
+        blocks: d.blocks.map((b) => {
+          if (b.id !== id || b.type !== "itemTable") return b;
+          const props = b.props as BlockPropsMap["itemTable"];
+          const rows = props.rows.map((row, ri) => {
+            if (ri !== rowIndex) return row;
+            if (field === "name") return { ...row, name: text };
+            if (field === "description") return { ...row, description: text };
+            if (field === "quantity") return { ...row, quantity: toInt(text) };
+            if (field === "unitPrice") return { ...row, unitPrice: toInt(text) };
+            if (field.startsWith("extra:")) {
+              const colId = field.slice("extra:".length);
+              return { ...row, extra: { ...(row.extra ?? {}), [colId]: text } };
+            }
+            return row;
+          });
+          return { ...b, props: { ...props, rows } };
+        }),
+      }));
+    },
+    [editDoc],
+  );
+
+  /**
    * 표 열 경계 이동. 드래그 중 mousemove 마다 불리므로 **한 건으로 묶는다** —
    * 안 묶으면 한 번 끌 때마다 되돌리기 스택이 수십 건 쌓인다.
    */
@@ -355,6 +392,7 @@ export function useBlockEditing(options: {
     handleChangeProps,
     handleInlineCommit,
     handleCellCommit,
+    handleItemCommit,
     handleResizeColumn,
     handleRemove,
     handleRemoveMany,

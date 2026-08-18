@@ -158,6 +158,8 @@ export function TableBlock({
                   <InlineText
                     text={cell}
                     editing={editing}
+                    // 표 칸은 값을 바꾸는 자리라 진입 시 전체 선택한다 (본문 블록과 다르다)
+                    selectAll
                     onCommit={(text) => onCellCommit?.(ri, ci, text)}
                     onCancel={onCancel}
                   />

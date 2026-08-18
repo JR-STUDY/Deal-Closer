@@ -36,6 +36,7 @@ type Props = {
   onEditingChange: (target: EditTarget | null) => void;
   onInlineCommit: (id: string, text: string) => void;
   onCellCommit: (id: string, r: number, c: number, text: string) => void;
+  onItemCommit: (id: string, row: number, field: string, text: string) => void;
   onResizeColumn: (
     id: string,
     index: number,
@@ -70,6 +71,7 @@ export function EditorCanvas({
   onEditingChange,
   onInlineCommit,
   onCellCommit,
+  onItemCommit,
   onResizeColumn,
   zoom,
   onDuplicate,
@@ -408,6 +410,7 @@ export function EditorCanvas({
             onEditingChange={onEditingChange}
             onInlineCommit={onInlineCommit}
             onCellCommit={onCellCommit}
+            onItemCommit={onItemCommit}
             onResizeColumn={onResizeColumn}
             scale={scale}
             onDuplicate={onDuplicate}

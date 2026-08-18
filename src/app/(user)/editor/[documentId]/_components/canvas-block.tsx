@@ -40,6 +40,8 @@ type Props = {
   onInlineCommit: (id: string, text: string) => void;
   /** 표 칸 편집 결과 저장 */
   onCellCommit: (id: string, r: number, c: number, text: string) => void;
+  /** 품목표 칸 편집 결과 저장 (필드 단위) */
+  onItemCommit: (id: string, row: number, field: string, text: string) => void;
   /** 표 열 경계 이동 (전체 폭 대비 %) — baseline 은 저장된 폭이 없을 때의 시작 비율 */
   onResizeColumn: (
     id: string,
@@ -78,6 +80,7 @@ function CanvasBlockImpl({
   onEditingChange,
   onInlineCommit,
   onCellCommit,
+  onItemCommit,
   onResizeColumn,
   scale,
   canvas,
@@ -90,6 +93,7 @@ function CanvasBlockImpl({
   /** 블록 전체 편집 중인지 (표는 칸 단위라 cell 이 있으면 여기서는 false) */
   const editing = mine && editTarget?.cell === undefined;
   const editingCell = mine ? editTarget?.cell : undefined;
+  const editingItem = mine ? editTarget?.item : undefined;
   const canInlineEdit = !locked && isInlineEditable(block);
   const canEditCells = !locked && hasEditableCells(block);
   /*
@@ -277,6 +281,7 @@ function CanvasBlockImpl({
                 block={block}
                 editing={editing}
                 editingCell={editingCell}
+                editingItem={editingItem}
                 onCommit={(text) => {
                   onInlineCommit(block.id, text);
                   onEditingChange(null);
@@ -288,6 +293,16 @@ function CanvasBlockImpl({
                 onStartCellEdit={
                   canEditCells
                     ? (r, c) => onEditingChange({ blockId: block.id, cell: { r, c } })
+                    : undefined
+                }
+                onItemCommit={(row, field, text) => {
+                  onItemCommit(block.id, row, field, text);
+                  onEditingChange(null);
+                }}
+                onStartItemEdit={
+                  canEditCells
+                    ? (row, field) =>
+                        onEditingChange({ blockId: block.id, item: { row, field } })
                     : undefined
                 }
                 onCancel={() => onEditingChange(null)}

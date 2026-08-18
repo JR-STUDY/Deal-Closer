@@ -20,14 +20,30 @@ export function InlineText({
   className,
   style,
   text,
+  editText,
   editing,
+  selectAll = false,
   onCommit,
   onCancel,
 }: {
   className?: string;
   style?: CSSProperties;
   text: string;
+  /**
+   * 편집할 때 넣을 값 — 표시값과 다를 때만 쓴다.
+   * 금액은 화면에 `₩1,200,000` 으로 보이지만 고칠 때는 `1200000` 이어야 한다
+   * (통화기호·쉼표와 싸우게 하지 않는다).
+   */
+  editText?: string;
   editing: boolean;
+  /**
+   * 진입할 때 내용을 **전체 선택**한다 (표 칸처럼 값을 바꾸는 자리).
+   *
+   * 기본은 커서를 끝에 두는 것이다 — 여러 줄 본문에서 전체 선택으로 시작하면 한 글자만
+   * 눌러도 문단이 사라진다. 반대로 표의 수량·단가는 **덧붙이면 60000000 + 1500000 이
+   * 600000001500000 이 되는** 자리라 전체 선택이 맞다(실측으로 겪은 문제다).
+   */
+  selectAll?: boolean;
   onCommit?: (text: string) => void;
   onCancel?: () => void;
 }) {
@@ -42,20 +58,35 @@ export function InlineText({
     const node = ref.current;
     if (!node) return;
 
-    startedWith.current = text;
+    const source = editText ?? text;
+    startedWith.current = source;
     settled.current = false;
-    node.textContent = text;
+    node.textContent = source;
     node.focus();
-    // 커서를 맨 끝에 둔다 — 편집 진입 직후 전체 선택되면 실수로 다 지운다
-    const selection = window.getSelection();
-    if (selection) {
+    /*
+     * 커서·선택을 잡는 일은 **다음 프레임**에 한다.
+     * 더블클릭의 기본 동작(단어 선택)이 핸들러보다 늦게 적용되는데, 그 사이 우리가 방금
+     * `textContent` 로 텍스트 노드를 갈아치웠기 때문에 브라우저가 잡으려던 범위가 무효가
+     * 되어 **선택이 통째로 사라졌다**(표 칸에서 rangeCount 0 · 커서가 맨 앞).
+     */
+    const place = () => {
+      const selection = window.getSelection();
+      if (!selection || !ref.current) return;
+      // 표 칸은 값을 바꾸는 자리라 전체 선택, 본문은 커서를 끝에 둔다(실수로 다 지우지 않게)
+      if (selectAll) {
+        selection.selectAllChildren(ref.current);
+        return;
+      }
       const range = document.createRange();
-      range.selectNodeContents(node);
+      range.selectNodeContents(ref.current);
       range.collapse(false);
       selection.removeAllRanges();
       selection.addRange(range);
-    }
-    // text 를 의존성에 넣지 않는다 — 편집 중 부모 상태가 갱신될 때마다 커서가 튄다
+    };
+    place();
+    const frame = requestAnimationFrame(place);
+    return () => cancelAnimationFrame(frame);
+    // text·editText 를 의존성에 넣지 않는다 — 편집 중 부모 상태가 갱신되면 커서가 튄다
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);
 
