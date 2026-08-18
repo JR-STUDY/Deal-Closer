@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { EditorDoc, BlockType, ZOrderAction, Block } from "@/lib/editor-schema";
 import { BLOCK_TYPES, pageCount } from "@/lib/editor-schema";
+import { useMarquee } from "./use-marquee";
 import { CanvasBlock, type Geometry } from "./canvas-block";
 import { useAutoHideScroll } from "./use-auto-hide-scroll";
 
@@ -11,9 +12,15 @@ type Props = {
   doc: EditorDoc;
   /** 본문이 잠긴 문서 — 드래그·리사이즈·드롭·블록 액션을 모두 막는다 (진단 3) */
   locked: boolean;
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  /** 선택된 블록들 (다중선택) */
+  selectedIds: string[];
+  /** 블록 클릭 — `additive` 면 선택에 더하거나 뺀다. null 은 선택 해제 */
+  onSelect: (id: string | null, additive: boolean) => void;
+  /** 마퀴로 여러 개를 한 번에 고른다 — `additive` 면 기존 선택에 더한다 */
+  onSelectMany: (ids: string[], additive: boolean) => void;
   onGeometry: (id: string, geo: Geometry) => void;
+  /** 선택 전체를 같은 만큼 옮긴다 (그룹 드래그 확정) — 한 번의 편집 = 되돌리기 1건 */
+  onTranslateSelected: (dx: number, dy: number) => void;
   onAddBlock: (type: BlockType, pos: { x: number; y: number }) => void;
   onRemove: (id: string) => void;
   onZOrder: (id: string, action: ZOrderAction) => void;
@@ -39,9 +46,11 @@ const SNAP_GAP = 6; // 정렬 가이드/스냅 허용 오차(px)
 export function EditorCanvas({
   doc,
   locked,
-  selectedId,
+  selectedIds,
   onSelect,
+  onSelectMany,
   onGeometry,
+  onTranslateSelected,
   onAddBlock,
   onRemove,
   onZOrder,
@@ -82,6 +91,19 @@ export function EditorCanvas({
 
   const scale = zoom === "fit" ? fitScale : zoom;
 
+  // 블록마다 배열을 훑지 않도록 한 번만 Set 으로 만든다
+  const selection = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  // 빈 캔버스에서 끌어 여러 개 고르기 — 판정·좌표 환산은 use-marquee 가 한다
+  const clearSelection = useCallback(() => onSelect(null, false), [onSelect]);
+  const { marquee, beginMarquee } = useMarquee({
+    canvasRef: ref,
+    scale,
+    blocks: doc.blocks,
+    onClear: clearSelection,
+    onSelectMany,
+  });
+
   function handleScroll(e: React.UIEvent<HTMLDivElement>) {
     autoHide(e);
     // p-8(32px) 만큼 캔버스가 안쪽에 있으므로 보정해 현재 뷰 상단 + 여백 위치를 보고
@@ -95,21 +117,64 @@ export function EditorCanvas({
     y: [],
   });
 
-  // 특정 블록을 제외한 정렬 기준선(다른 블록의 좌/중앙/우·상/중앙/하 + 캔버스·페이지 경계)
-  function targets(excludeId: string) {
+  /*
+   * 여러 블록을 함께 끌 때의 이동량. 문서 상태는 건드리지 않고 **미리보기만** 한다 —
+   * mousemove 마다 문서를 고치면 되돌리기 스택이 수백 건 쌓여 ⌘Z 가 쓸모없어진다.
+   * 확정은 놓을 때 한 번뿐이다.
+   */
+  const [groupDrag, setGroupDrag] = useState<{
+    /** 끌리는 블록 — 이 블록은 react-rnd 가 직접 움직이므로 미리보기에서 뺀다 */
+    id: string;
+    dx: number;
+    dy: number;
+  } | null>(null);
+
+  /** 이 블록을 끌면 선택 전체가 함께 움직이는가 */
+  const isGroupDrag = (id: string) => selection.size > 1 && selection.has(id);
+
+  /*
+   * 그룹을 끄는 동안 **다른 선택 블록도 함께 보이게** 좌표를 옮겨 그린다.
+   * 끌리는 블록 자체는 react-rnd 가 이미 움직이고 있으므로 건드리지 않는다
+   * (여기서 또 옮기면 이동량이 두 번 더해진다).
+   * `CanvasBlock` 은 memo 라 좌표가 바뀐 선택 블록만 다시 그려진다.
+   */
+  const renderBlocks = useMemo(() => {
+    if (!groupDrag) return doc.blocks;
+    return doc.blocks.map((b) =>
+      selection.has(b.id) && b.id !== groupDrag.id
+        ? { ...b, x: b.x + groupDrag.dx, y: b.y + groupDrag.dy }
+        : b,
+    );
+  }, [doc.blocks, groupDrag, selection]);
+
+  /**
+   * 정렬 기준선(다른 블록의 좌/중앙/우·상/중앙/하 + 캔버스·페이지 경계).
+   * 함께 움직이는 블록은 **기준에서 뺀다** — 같이 따라오므로 영원히 붙지 않는다.
+   */
+  function targets(exclude: (block: Block) => boolean) {
     const xs = [0, doc.canvas.w / 2, doc.canvas.w];
     const ys: number[] = [];
     for (let i = 0; i <= pages; i++) ys.push(i * pageH);
     for (const b of doc.blocks) {
-      if (b.id === excludeId) continue;
+      if (exclude(b)) continue;
       xs.push(b.x, b.x + b.w / 2, b.x + b.w);
       ys.push(b.y, b.y + b.h / 2, b.y + b.h);
     }
     return { xs, ys };
   }
 
+  /** 끌고 있는 블록(그룹이면 그 그룹 전체)을 기준선에서 제외하는 판별식 */
+  function movingWith(id: string) {
+    return isGroupDrag(id)
+      ? (b: Block) => selection.has(b.id)
+      : (b: Block) => b.id === id;
+  }
+
   function handleDragMove(block: Block, x: number, y: number) {
-    const { xs, ys } = targets(block.id);
+    if (isGroupDrag(block.id)) {
+      setGroupDrag({ id: block.id, dx: x - block.x, dy: y - block.y });
+    }
+    const { xs, ys } = targets(movingWith(block.id));
     const xEdges = [x, x + block.w / 2, x + block.w];
     const yEdges = [y, y + block.h / 2, y + block.h];
     const gx = xs.filter((t) => xEdges.some((e) => Math.abs(e - t) <= SNAP_GAP));
@@ -126,9 +191,10 @@ export function EditorCanvas({
      */
     if (x === block.x && y === block.y) {
       setGuides({ x: [], y: [] });
+      setGroupDrag(null);
       return;
     }
-    const { xs, ys } = targets(block.id);
+    const { xs, ys } = targets(movingWith(block.id));
     const snap = (pos: number, offsets: number[], ts: number[]) => {
       let best = SNAP_GAP + 1;
       for (const off of offsets)
@@ -144,14 +210,24 @@ export function EditorCanvas({
     const nx = clamp(snap(x, [0, block.w / 2, block.w], xs), doc.canvas.w - block.w);
     const ny = clamp(snap(y, [0, block.h / 2, block.h], ys), totalH - block.h);
     setGuides({ x: [], y: [] });
+    setGroupDrag(null);
     // 위치 변화가 없으면(단순 클릭) 갱신하지 않아 불필요한 dirty 를 막는다
     if (nx === block.x && ny === block.y) return;
+    /*
+     * 그룹이면 **끌린 블록의 스냅 결과로 정해진 이동량**을 선택 전체에 한 번에 적용한다.
+     * 스냅을 각 블록에 따로 걸면 서로 다른 기준선에 붙어 상대 배치가 무너진다.
+     * 캔버스 경계도 `translateBlocks` 가 묶음째 가둔다(개별 클램프는 배치를 찌그러뜨린다).
+     */
+    if (isGroupDrag(block.id)) {
+      onTranslateSelected(nx - block.x, ny - block.y);
+      return;
+    }
     onGeometry(block.id, { x: nx, y: ny, w: block.w, h: block.h });
   }
 
   /** 리사이즈 중 정렬 가이드 — 드래그와 같은 기준선을 쓴다 (지금까지는 드래그에만 있었다) */
   function handleResizeMove(block: Block, geo: Geometry) {
-    const { xs, ys } = targets(block.id);
+    const { xs, ys } = targets((b) => b.id === block.id);
     const xEdges = [geo.x, geo.x + geo.w / 2, geo.x + geo.w];
     const yEdges = [geo.y, geo.y + geo.h / 2, geo.y + geo.h];
     const gx = xs.filter((t) => xEdges.some((e) => Math.abs(e - t) <= SNAP_GAP));
@@ -165,7 +241,7 @@ export function EditorCanvas({
    */
   function handleResizeEnd(block: Block, geo: Geometry) {
     setGuides({ x: [], y: [] });
-    const { xs, ys } = targets(block.id);
+    const { xs, ys } = targets((b) => b.id === block.id);
     const nearest = (value: number, ts: number[]) => {
       let best = value;
       let bestDistance = SNAP_GAP + 1;
@@ -241,13 +317,16 @@ export function EditorCanvas({
         }}
         // 블록을 고르는 목록 — 각 블록이 role="option" 이다 (canvas-block 주석 참고)
         role="listbox"
+        // 여러 블록을 함께 고를 수 있다는 사실을 보조기기에도 알린다 (ACC_*)
+        aria-multiselectable
         aria-label="문서 캔버스"
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
         onMouseDown={(e) => {
+          // 블록 위가 아니면 마퀴를 시작한다 (선택 해제는 놓을 때 판단한다)
           if (!(e.target as HTMLElement).closest("[data-block-id]")) {
-            onSelect(null);
             onEditingChange(null);
+            beginMarquee(e);
           }
         }}
         // isolate: 음수 z 블록이 흰 배경 뒤로 숨지 않게 stacking context 를 만든다
@@ -285,12 +364,25 @@ export function EditorCanvas({
           />
         ))}
 
-        {doc.blocks.map((b) => (
+        {/* 마퀴 사각형 — 어느 방향으로 끌어도 그려지도록 좌표를 정규화한다 */}
+        {marquee ? (
+          <div
+            className="pointer-events-none absolute z-50 border border-dashed border-sky-500 bg-sky-500/10"
+            style={{
+              left: Math.min(marquee.x, marquee.x + marquee.w),
+              top: Math.min(marquee.y, marquee.y + marquee.h),
+              width: Math.abs(marquee.w),
+              height: Math.abs(marquee.h),
+            }}
+          />
+        ) : null}
+
+        {renderBlocks.map((b) => (
           <CanvasBlock
             key={b.id}
             block={b}
             locked={locked}
-            selected={b.id === selectedId}
+            selected={selection.has(b.id)}
             onSelect={onSelect}
             onRemove={onRemove}
             onZOrder={onZOrder}

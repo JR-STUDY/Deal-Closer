@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { Lock } from "lucide-react";
 import type { EditorDoc, CatalogOption } from "@/lib/editor-schema";
@@ -22,6 +22,7 @@ import { useBlockLibrary } from "./use-block-library";
 import { useDocumentSave } from "./use-document-save";
 import { useEditorShortcuts } from "./use-editor-shortcuts";
 import { useBlockEditing } from "./use-block-editing";
+import { useBlockSelection } from "./use-block-selection";
 import {
   BaseBlockDialog,
   BlockEditDialog,
@@ -81,7 +82,6 @@ export function DocumentEditor({
   const { doc, setDoc, replaceDoc, undo, redo, canUndo, canRedo } =
     useDocHistory(initialDoc);
   const [docTitle, setDocTitle] = useState(initialTitle);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"palette" | "inspector">(
     "palette",
   );
@@ -100,10 +100,18 @@ export function DocumentEditor({
 
   const locked = lock.locked;
 
-  const selectedBlock = useMemo(
-    () => doc.blocks.find((b) => b.id === selectedId) ?? null,
-    [doc.blocks, selectedId],
-  );
+  // 선택 상태 (다중선택) — 무엇을 골랐는지만 안다, 문서는 바꾸지 않는다
+  const showInspector = useCallback(() => setSidebarTab("inspector"), []);
+  const {
+    selectedIds,
+    setSelectedIds,
+    selectedBlock,
+    select: handleSelect,
+    selectMany: handleSelectMany,
+    selectAll: handleSelectAll,
+    clear: deselect,
+    targetsFrom,
+  } = useBlockSelection({ blocks: doc.blocks, onShowInspector: showInspector });
 
   /*
    * 문서를 바꾸는 **유일한 통로**.
@@ -175,11 +183,14 @@ export function DocumentEditor({
     closeNamePrompt,
   } = useBlockLibrary({ doc, docTitle, selectedBlock });
 
-  /** 새로 만든 블록을 선택해 바로 고칠 수 있게 한다 */
-  const handleInserted = useCallback((id: string) => {
-    setSelectedId(id);
-    setSidebarTab("inspector");
-  }, []);
+  /** 새로 만든 블록을 선택해 바로 고칠 수 있게 한다 (복제·붙여넣기는 여러 개다) */
+  const handleInserted = useCallback(
+    (ids: string[]) => {
+      setSelectedIds(ids);
+      showInspector();
+    },
+    [setSelectedIds, showInspector],
+  );
 
   // 복제 · 복사/붙여넣기 (진단 5)
   const {
@@ -187,12 +198,6 @@ export function DocumentEditor({
     copy: handleCopy,
     paste: handlePaste,
   } = useBlockClipboard({ doc, editDoc, onInserted: handleInserted });
-
-  // 블록을 선택하면 속성 탭으로 자동 전환
-  const handleSelect = useCallback((id: string | null) => {
-    setSelectedId(id);
-    if (id) setSidebarTab("inspector");
-  }, []);
 
   // 블록 편집 동작 (추가·이동·속성·삭제·겹침 순서·페이지·템플릿)
   const {
@@ -204,6 +209,10 @@ export function DocumentEditor({
     handleChangeProps,
     handleInlineCommit,
     handleRemove,
+    handleRemoveMany,
+    handleAlign,
+    handleDistribute,
+    handleTranslate,
     handleZOrder,
     handleZOrderSelected,
     handleAddPage,
@@ -214,18 +223,22 @@ export function DocumentEditor({
     replaceDoc,
     locked,
     lockReason: lock.reason,
-    selectedId,
-    setSelectedId,
+    selectedIds,
+    setSelectedIds,
     setDirty,
     onInserted: handleInserted,
     baseDefaultsFor,
     onUndo: handleUndo,
   });
 
-  const handleEditBlock = useCallback((id: string) => {
-    setSelectedId(id);
-    setEditModalOpen(true);
-  }, []);
+  /** 연필 아이콘·컨텍스트 메뉴의 "수정" — 그 블록만 대상으로 삼는다 */
+  const handleEditBlock = useCallback(
+    (id: string) => {
+      setSelectedIds([id]);
+      setEditModalOpen(true);
+    },
+    [setSelectedIds],
+  );
 
   const handleTitleChange = useCallback(
     (v: string) => {
@@ -236,18 +249,50 @@ export function DocumentEditor({
     [locked],
   );
 
+  /* 단축키·아이콘·메뉴가 쓰는 얇은 래퍼 — 대상 목록(선택 or 누른 블록)만 정해 넘긴다 */
+  const duplicateSelected = useCallback(
+    () => handleDuplicate(selectedIds),
+    [handleDuplicate, selectedIds],
+  );
+  const copySelected = useCallback(
+    () => handleCopy(selectedIds),
+    [handleCopy, selectedIds],
+  );
+  const removeSelected = useCallback(
+    () => handleRemoveMany(selectedIds),
+    [handleRemoveMany, selectedIds],
+  );
+  const removeFrom = useCallback(
+    (id: string) => handleRemoveMany(targetsFrom(id)),
+    [handleRemoveMany, targetsFrom],
+  );
+  const duplicateFrom = useCallback(
+    (id: string) => handleDuplicate(targetsFrom(id)),
+    [handleDuplicate, targetsFrom],
+  );
+  const copyFrom = useCallback(
+    (id: string) => handleCopy(targetsFrom(id)),
+    [handleCopy, targetsFrom],
+  );
+  /** 방향키 연속 이동은 한 건으로 묶는다 — 글자마다 되돌아가면 되돌리기가 쓸모없다 */
+  const translateSelected = useCallback(
+    (dx: number, dy: number) => handleTranslate(dx, dy, "move:selection"),
+    [handleTranslate],
+  );
+
   useEditorShortcuts({
     editingId,
-    selectedId,
+    selectedIds,
     blocks: doc.blocks,
     onUndo: handleUndo,
     onRedo: handleRedo,
     onPaste: handlePaste,
-    onDuplicate: handleDuplicate,
-    onCopy: handleCopy,
-    onRemove: handleRemove,
-    onDeselect: () => setSelectedId(null),
-    onGeometry: handleGeometry,
+    onSelectAll: handleSelectAll,
+    onDuplicate: duplicateSelected,
+    onCopy: copySelected,
+    onRemove: removeSelected,
+    onDeselect: deselect,
+    onTranslate: translateSelected,
   });
 
   /** AI 재작성·새 버전 저장 입력으로 쓰는 현재 본문 스냅샷 */
@@ -338,11 +383,13 @@ export function DocumentEditor({
           <EditorCanvas
             doc={doc}
             locked={locked}
-            selectedId={selectedId}
+            selectedIds={selectedIds}
             onSelect={handleSelect}
+            onSelectMany={handleSelectMany}
             onGeometry={handleGeometry}
+            onTranslateSelected={handleTranslate}
             onAddBlock={handleAdd}
-            onRemove={handleRemove}
+            onRemove={removeFrom}
             onZOrder={handleZOrder}
             onEdit={handleEditBlock}
             onViewTop={setViewTop}
@@ -352,8 +399,8 @@ export function DocumentEditor({
             onEditingChange={setEditingId}
             onInlineCommit={handleInlineCommit}
             zoom={zoom}
-            onDuplicate={handleDuplicate}
-            onCopy={handleCopy}
+            onDuplicate={duplicateFrom}
+            onCopy={copyFrom}
           />
         </div>
 
@@ -366,10 +413,14 @@ export function DocumentEditor({
           onEditBase={handleEditBase}
           catalog={catalog}
           block={selectedBlock}
+          selectedCount={selectedIds.length}
           onChange={handleChangeBlock}
           onChangeProps={handleChangeProps}
           onRemove={handleRemove}
           onZOrder={handleZOrderSelected}
+          onAlign={handleAlign}
+          onDistribute={handleDistribute}
+          onRemoveSelected={removeSelected}
           customBlocks={customBlocks}
           onAddCustom={handleAddCustomBlock}
           onDeleteCustom={handleDeleteCustomBlock}

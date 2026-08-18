@@ -26,6 +26,7 @@
     "test:document-edit": "tsx --tsconfig tsconfig.scripts.json scripts/document-edit.test.ts",
     "test:editor-render": "tsx --tsconfig tsconfig.scripts.json scripts/editor-render.test.ts",
     "test:table-merge": "tsx --tsconfig tsconfig.scripts.json scripts/table-merge.test.ts",
+    "test:block-align": "tsx --tsconfig tsconfig.scripts.json scripts/block-align.test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",

@@ -245,32 +245,68 @@ export function reorderZ(
   id: string,
   action: ZOrderAction,
 ): Block[] {
-  const target = blocks.find((b) => b.id === id);
-  if (!target) return blocks;
+  return reorderZMany(blocks, [id], action);
+}
 
-  // 현재 순서(z 오름차순, 동순위는 기존 배열 순서)에서 목표 위치를 정한다
+/**
+ * 여러 블록의 겹침 순서를 **묶음째** 바꾼다 (다중선택).
+ *
+ * `reorderZ` 를 id 마다 차례로 부르면 안 된다 — 선택 내부의 상대 순서가 뒤집힌다.
+ * 예: A(1) B(2) C(3) 에서 B·C 를 "앞으로" 보내려고 높은 것부터 부르면 C 는 이미 맨 앞이라
+ * 제자리, 그다음 B 가 C 를 넘어가 **B 가 C 위**로 올라간다(원래 순서와 반대).
+ * 그래서 선택을 하나의 묶음으로 떼어 낸 뒤 통째로 끼워 넣는다.
+ *
+ * "앞으로"·"뒤로" 는 묶음 **바로 위/아래의 비선택 블록 하나**를 뛰어넘는 것으로 정의한다.
+ */
+export function reorderZMany(
+  blocks: Block[],
+  ids: readonly string[],
+  action: ZOrderAction,
+): Block[] {
+  const set = new Set(ids);
+
+  // 현재 순서(z 오름차순, 동순위는 기존 배열 순서)
   const ordered = blocks
     .map((block, index) => ({ block, index }))
     .sort((a, b) => a.block.z - b.block.z || a.index - b.index)
     .map((entry) => entry.block);
 
-  const from = ordered.indexOf(target);
-  const last = ordered.length - 1;
-  const to =
-    action === "front"
-      ? last
-      : action === "back"
-        ? 0
-        : action === "forward"
-          ? Math.min(last, from + 1)
-          : Math.max(0, from - 1);
-  if (to === from) return blocks;
+  const selected = ordered.filter((b) => set.has(b.id));
+  const rest = ordered.filter((b) => !set.has(b.id));
+  // 아무것도 안 골랐거나 전부 골랐으면 상대 순서가 바뀔 수 없다
+  if (selected.length === 0 || rest.length === 0) return blocks;
 
-  const moved = ordered.filter((b) => b.id !== id);
-  moved.splice(to, 0, target);
+  /** 선택 묶음을 rest 의 `at` 위치에 끼운다 */
+  const insertAt = (at: number) => [
+    ...rest.slice(0, at),
+    ...selected,
+    ...rest.slice(at),
+  ];
+
+  let next: Block[];
+  if (action === "front") {
+    next = [...rest, ...selected];
+  } else if (action === "back") {
+    next = [...selected, ...rest];
+  } else if (action === "forward") {
+    // 가장 위 선택 블록보다 위에 있는 첫 비선택 블록을 넘는다 (없으면 이미 맨 앞)
+    let topSel = -1;
+    for (let i = 0; i < ordered.length; i++) if (set.has(ordered[i].id)) topSel = i;
+    const neighbor = ordered.slice(topSel + 1).find((b) => !set.has(b.id));
+    if (!neighbor) return blocks;
+    next = insertAt(rest.indexOf(neighbor) + 1);
+  } else {
+    // 가장 아래 선택 블록보다 아래에 있는 마지막 비선택 블록 앞으로 내린다
+    const botSel = ordered.findIndex((b) => set.has(b.id));
+    const below = ordered.slice(0, botSel).filter((b) => !set.has(b.id));
+    const neighbor = below[below.length - 1];
+    if (!neighbor) return blocks;
+    next = insertAt(rest.indexOf(neighbor));
+  }
 
   // 1..n 으로 다시 매긴다 — 음수·0 이 생기지 않고 값이 무한정 커지지도 않는다
-  const zById = new Map(moved.map((block, index) => [block.id, index + 1]));
+  const zById = new Map(next.map((block, index) => [block.id, index + 1]));
+  if (blocks.every((block) => zById.get(block.id) === block.z)) return blocks;
   return blocks.map((block) => {
     const z = zById.get(block.id);
     return z === undefined || z === block.z ? block : { ...block, z };

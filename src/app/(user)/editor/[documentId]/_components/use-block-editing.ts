@@ -4,7 +4,9 @@ import { useCallback, useRef } from "react";
 import { toast } from "sonner";
 import {
   createBlock,
+  pageCount,
   reorderZ,
+  reorderZMany,
   uid,
   type AnyBlockProps,
   type Block,
@@ -12,6 +14,13 @@ import {
   type EditorDoc,
   type ZOrderAction,
 } from "@/lib/editor-schema";
+import {
+  alignBlocks,
+  distributeBlocks,
+  translateBlocks,
+  type AlignMode,
+  type DistributeAxis,
+} from "@/lib/block-align";
 import type { Geometry } from "./canvas-block";
 import type { DocTemplate } from "./template-store";
 import type { DocUpdater, SetDocOptions } from "./use-doc-history";
@@ -30,11 +39,12 @@ export function useBlockEditing(options: {
   replaceDoc: (next: EditorDoc) => void;
   locked: boolean;
   lockReason: string;
-  selectedId: string | null;
-  setSelectedId: (id: string | null) => void;
+  /** 선택된 블록들 (다중선택). 속성 편집은 정확히 1개일 때만 의미가 있다 */
+  selectedIds: string[];
+  setSelectedIds: (ids: string[]) => void;
   setDirty: (dirty: boolean) => void;
-  /** 새로 넣은 블록을 선택해 바로 고칠 수 있게 한다 */
-  onInserted: (id: string) => void;
+  /** 새로 넣은 블록을 선택해 바로 고칠 수 있게 한다 (복제·붙여넣기는 여러 개다) */
+  onInserted: (ids: string[]) => void;
   /** '블록 추가' 탭에서 사용자가 고쳐 둔 기본 속성 */
   baseDefaultsFor: (type: BlockType) => AnyBlockProps | undefined;
   /** 블록 삭제 toast 의 [되돌리기] */
@@ -45,13 +55,16 @@ export function useBlockEditing(options: {
     replaceDoc,
     locked,
     lockReason,
-    selectedId,
-    setSelectedId,
+    selectedIds,
+    setSelectedIds,
     setDirty,
     onInserted,
     baseDefaultsFor,
     onUndo,
   } = options;
+
+  /** 속성 편집(인스펙터)은 한 블록을 대상으로 한다 — 여러 개면 대상이 없다 */
+  const singleId = selectedIds.length === 1 ? selectedIds[0] : null;
 
   /** 팔레트로 블록을 추가할 때 놓을 y (현재 보이는 화면 기준) — 캔버스 스크롤에서 갱신 */
   const addYRef = useRef(40);
@@ -66,7 +79,7 @@ export function useBlockEditing(options: {
       const override = baseDefaultsFor(type);
       if (override) block.props = structuredClone(override);
       editDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
-      onInserted(block.id);
+      onInserted([block.id]);
     },
     [editDoc, baseDefaultsFor, onInserted],
   );
@@ -86,7 +99,7 @@ export function useBlockEditing(options: {
         props: structuredClone(cb.props),
       };
       editDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
-      onInserted(block.id);
+      onInserted([block.id]);
     },
     [editDoc, onInserted],
   );
@@ -107,40 +120,40 @@ export function useBlockEditing(options: {
 
   const handleChangeBlock = useCallback(
     (patch: Partial<Block>) => {
-      if (!selectedId) return;
+      if (!singleId) return;
       // 인스펙터의 x·y·w·h 숫자 입력은 글자마다 호출된다 — 한 건으로 묶는다
       editDoc(
         (d) => ({
           ...d,
           blocks: d.blocks.map((b) =>
-            b.id === selectedId ? { ...b, ...patch } : b,
+            b.id === singleId ? { ...b, ...patch } : b,
           ),
         }),
-        { coalesceKey: `block:${selectedId}:${Object.keys(patch).join(",")}` },
+        { coalesceKey: `block:${singleId}:${Object.keys(patch).join(",")}` },
       );
     },
-    [selectedId, editDoc],
+    [singleId, editDoc],
   );
 
   const handleChangeProps = useCallback(
     (propsPatch: Record<string, unknown>) => {
-      if (!selectedId) return;
+      if (!singleId) return;
       // 같은 속성을 이어서 고치면(텍스트 타이핑 등) 한 건, 다른 속성으로 옮기면 새 건
       editDoc(
         (d) => ({
           ...d,
           blocks: d.blocks.map((b) =>
-            b.id === selectedId
+            b.id === singleId
               ? { ...b, props: { ...b.props, ...propsPatch } }
               : b,
           ),
         }),
         {
-          coalesceKey: `props:${selectedId}:${Object.keys(propsPatch).join(",")}`,
+          coalesceKey: `props:${singleId}:${Object.keys(propsPatch).join(",")}`,
         },
       );
     },
-    [selectedId, editDoc],
+    [singleId, editDoc],
   );
 
   /** 캔버스 인라인 편집 결과 — 편집 세션 하나가 되돌리기 한 건이므로 묶지 않는다 */
@@ -156,19 +169,74 @@ export function useBlockEditing(options: {
     [editDoc],
   );
 
-  const handleRemove = useCallback(
-    (id: string) => {
-      editDoc((d) => ({ ...d, blocks: d.blocks.filter((b) => b.id !== id) }));
-      setSelectedId(null);
-      // 삭제는 확인창 없이 즉시 일어난다 — 되돌릴 수 있다는 사실을 여기서 알린다
-      // (잠긴 문서라면 editDoc 이 이미 거부 안내를 띄웠으므로 성공 문구를 겹치지 않는다)
+  /**
+   * 블록을 지운다 — 몇 개든 **한 번의 `editDoc`** 이라 ⌘Z 한 번으로 전부 돌아온다.
+   * 하나씩 나눠 지우면 되돌리기를 개수만큼 눌러야 한다.
+   *
+   * 삭제는 확인창 없이 즉시 일어나므로 **몇 개를 지웠는지 말하고** 되돌릴 길을 준다.
+   * (잠긴 문서라면 editDoc 이 이미 거부 안내를 띄웠으므로 성공 문구를 겹치지 않는다)
+   */
+  const handleRemoveMany = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      const set = new Set(ids);
+      editDoc((d) => ({ ...d, blocks: d.blocks.filter((b) => !set.has(b.id)) }));
+      setSelectedIds([]);
       if (!locked) {
-        toast.success("블록을 삭제했습니다.", {
-          action: { label: "되돌리기", onClick: onUndo },
-        });
+        toast.success(
+          ids.length === 1
+            ? "블록을 삭제했습니다."
+            : `블록 ${ids.length}개를 삭제했습니다.`,
+          { action: { label: "되돌리기", onClick: onUndo } },
+        );
       }
     },
-    [editDoc, setSelectedId, locked, onUndo],
+    [editDoc, setSelectedIds, locked, onUndo],
+  );
+
+  /** 인스펙터의 삭제 버튼 — 대상이 한 블록으로 정해져 있다 */
+  const handleRemove = useCallback(
+    (id: string) => handleRemoveMany([id]),
+    [handleRemoveMany],
+  );
+
+  /** 선택 블록을 서로 맞춘다 — 계산은 `@/lib/block-align` 순수 함수가 단일 기준이다 */
+  const handleAlign = useCallback(
+    (mode: AlignMode) => {
+      editDoc((d) => ({ ...d, blocks: alignBlocks(d.blocks, selectedIds, mode) }));
+    },
+    [selectedIds, editDoc],
+  );
+
+  const handleDistribute = useCallback(
+    (axis: DistributeAxis) => {
+      editDoc((d) => ({
+        ...d,
+        blocks: distributeBlocks(d.blocks, selectedIds, axis),
+      }));
+    },
+    [selectedIds, editDoc],
+  );
+
+  /**
+   * 선택 블록을 함께 옮긴다 (방향키 · 그룹 드래그 확정).
+   * `translateBlocks` 가 **묶음째** 캔버스 안으로 가둔다 — 각자 가두면 배치가 찌그러진다.
+   */
+  const handleTranslate = useCallback(
+    (dx: number, dy: number, coalesceKey?: string) => {
+      editDoc(
+        (d) => ({
+          ...d,
+          // 세로 경계는 전체 페이지 높이다 (한 장이 아니라 문서 전체 길이)
+          blocks: translateBlocks(d.blocks, selectedIds, dx, dy, {
+            w: d.canvas.w,
+            h: d.canvas.h * pageCount(d),
+          }),
+        }),
+        coalesceKey ? { coalesceKey } : undefined,
+      );
+    },
+    [selectedIds, editDoc],
   );
 
   // 겹침 순서(z) — 규칙은 editor-schema 의 reorderZ 가 단일 기준이다.
@@ -180,11 +248,16 @@ export function useBlockEditing(options: {
     [editDoc],
   );
 
+  /**
+   * 선택 전체의 겹침 순서. 여러 개면 `reorderZMany` 로 **묶음째** 옮긴다 —
+   * id 마다 `reorderZ` 를 반복하면 선택 내부 순서가 뒤집힌다(block-align.test 참고).
+   */
   const handleZOrderSelected = useCallback(
     (action: ZOrderAction) => {
-      if (selectedId) handleZOrder(selectedId, action);
+      if (selectedIds.length === 0) return;
+      editDoc((d) => ({ ...d, blocks: reorderZMany(d.blocks, selectedIds, action) }));
     },
-    [selectedId, handleZOrder],
+    [selectedIds, editDoc],
   );
 
   const handleAddPage = useCallback(() => {
@@ -217,11 +290,11 @@ export function useBlockEditing(options: {
         canvas: t.canvas ?? { w: 794, h: 1123, pages: 1 },
         blocks: t.blocks.map((b) => ({ ...b, id: uid() })),
       });
-      setSelectedId(null);
+      setSelectedIds([]);
       setDirty(true);
       toast.success(`템플릿 '${t.name}'을(를) 불러왔습니다.`);
     },
-    [replaceDoc, locked, lockReason, setSelectedId, setDirty],
+    [replaceDoc, locked, lockReason, setSelectedIds, setDirty],
   );
 
   return {
@@ -233,6 +306,10 @@ export function useBlockEditing(options: {
     handleChangeProps,
     handleInlineCommit,
     handleRemove,
+    handleRemoveMany,
+    handleAlign,
+    handleDistribute,
+    handleTranslate,
     handleZOrder,
     handleZOrderSelected,
     handleAddPage,
