@@ -26,8 +26,8 @@ type Props = {
   onZOrder: (id: string, action: ZOrderAction) => void;
   onEdit: (id: string) => void;
   onViewTop: (y: number) => void;
-  /** 잘린 내용에 맞춰 블록 높이를 늘린다 (진단 4) */
-  onFit: (id: string, contentHeight: number) => void;
+  /** 블록 높이를 내용에 맞춘다 — 넘치면 늘리고 남으면 줄인다 (진단 4) */
+  onFit: (id: string) => void;
   /** 블록별 잘림 상태 보고 — 툴바가 개수를 세고 저장 시 안내한다 */
   onClippedChange: (id: string, clipped: boolean) => void;
   /** 캔버스 인라인 편집 (진단 5) */

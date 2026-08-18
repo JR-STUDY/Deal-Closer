@@ -29,8 +29,8 @@ type Props = {
   onEdit: (id: string) => void;
   onDragMove: (block: Block, x: number, y: number) => void;
   onDragEnd: (block: Block, x: number, y: number) => void;
-  /** 잘린 내용에 맞춰 블록 높이를 늘린다 (진단 4) */
-  onFit: (id: string, contentHeight: number) => void;
+  /** 블록 높이를 내용에 맞춘다 — 넘치면 늘리고 남으면 줄인다 (진단 4) */
+  onFit: (id: string) => void;
   /** 잘림 여부를 부모에 보고한다 — 툴바가 "잘린 블록 N개" 를 세고 저장 시 알린다 */
   onClippedChange: (id: string, clipped: boolean) => void;
   /** 캔버스에서 직접 편집 중인 블록 id (진단 5) */
@@ -189,7 +189,7 @@ function CanvasBlockImpl({
               <button
                 type="button"
                 className="rounded bg-amber-950/15 px-1 underline-offset-2 hover:underline"
-                onClick={() => onFit(block.id, overflow.contentHeight)}
+                onClick={() => onFit(block.id)}
               >
                 맞추기
               </button>
@@ -280,6 +280,11 @@ function CanvasBlockImpl({
           </ContextMenuItem>
           <ContextMenuItem onSelect={() => onCopy(block.id)}>
             복사 <span className="ml-auto text-xs text-muted-foreground">⌘C</span>
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          {/* 넘쳐서 잘렸을 때뿐 아니라 여백이 남을 때도 쓴다 — 양방향으로 맞춘다 */}
+          <ContextMenuItem onSelect={() => onFit(block.id)}>
+            내용 높이에 맞추기
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onSelect={() => onZOrder(block.id, "front")}>

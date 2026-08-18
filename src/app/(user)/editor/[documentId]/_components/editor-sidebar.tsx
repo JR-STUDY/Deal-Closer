@@ -35,6 +35,8 @@ type Props = {
   onAlign: (mode: AlignMode) => void;
   onDistribute: (axis: DistributeAxis) => void;
   onRemoveSelected: () => void;
+  /** 고른 블록 높이를 내용에 맞춘다 (넘치면 늘리고 남으면 줄인다) */
+  onFitSelected: () => void;
   // 사용자 지정 블록/템플릿 (#3)
   customBlocks: CustomBlock[];
   onAddCustom: (cb: CustomBlock) => void;
@@ -64,6 +66,7 @@ export function EditorSidebar({
   onAlign,
   onDistribute,
   onRemoveSelected,
+  onFitSelected,
   customBlocks,
   onAddCustom,
   onDeleteCustom,
@@ -122,6 +125,7 @@ export function EditorSidebar({
                 onDistribute={onDistribute}
                 onZOrder={onZOrder}
                 onRemove={onRemoveSelected}
+                onFit={onFitSelected}
               />
             ) : (
               <BlockInspector

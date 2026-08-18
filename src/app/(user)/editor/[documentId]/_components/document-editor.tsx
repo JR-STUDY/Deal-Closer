@@ -146,8 +146,13 @@ export function DocumentEditor({
   }, [redo]);
 
   // 잘린 블록 집계 · 맞추기 (진단 4) — 저장 알림이 개수를 쓰므로 저장 훅보다 앞에 온다
-  const { clippedCount, handleClippedChange, handleFit, handleFitAll } =
-    useClippedBlocks({ doc, editDoc });
+  const {
+    clippedCount,
+    handleClippedChange,
+    handleFit,
+    handleFitAll,
+    handleFitSelected,
+  } = useClippedBlocks({ doc, editDoc });
 
   // 저장 · 미저장 이탈 (진단 1·3)
   const save = useDocumentSave({
@@ -228,7 +233,6 @@ export function DocumentEditor({
     setDirty,
     onInserted: handleInserted,
     baseDefaultsFor,
-    onUndo: handleUndo,
   });
 
   /** 연필 아이콘·컨텍스트 메뉴의 "수정" — 그 블록만 대상으로 삼는다 */
@@ -273,6 +277,10 @@ export function DocumentEditor({
   const copyFrom = useCallback(
     (id: string) => handleCopy(targetsFrom(id)),
     [handleCopy, targetsFrom],
+  );
+  const fitSelected = useCallback(
+    () => handleFitSelected(selectedIds),
+    [handleFitSelected, selectedIds],
   );
   /** 방향키 연속 이동은 한 건으로 묶는다 — 글자마다 되돌아가면 되돌리기가 쓸모없다 */
   const translateSelected = useCallback(
@@ -421,6 +429,7 @@ export function DocumentEditor({
           onAlign={handleAlign}
           onDistribute={handleDistribute}
           onRemoveSelected={removeSelected}
+          onFitSelected={fitSelected}
           customBlocks={customBlocks}
           onAddCustom={handleAddCustomBlock}
           onDeleteCustom={handleDeleteCustomBlock}

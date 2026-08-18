@@ -47,8 +47,6 @@ export function useBlockEditing(options: {
   onInserted: (ids: string[]) => void;
   /** '블록 추가' 탭에서 사용자가 고쳐 둔 기본 속성 */
   baseDefaultsFor: (type: BlockType) => AnyBlockProps | undefined;
-  /** 블록 삭제 toast 의 [되돌리기] */
-  onUndo: () => void;
 }) {
   const {
     editDoc,
@@ -60,7 +58,6 @@ export function useBlockEditing(options: {
     setDirty,
     onInserted,
     baseDefaultsFor,
-    onUndo,
   } = options;
 
   /** 속성 편집(인스펙터)은 한 블록을 대상으로 한다 — 여러 개면 대상이 없다 */
@@ -173,8 +170,9 @@ export function useBlockEditing(options: {
    * 블록을 지운다 — 몇 개든 **한 번의 `editDoc`** 이라 ⌘Z 한 번으로 전부 돌아온다.
    * 하나씩 나눠 지우면 되돌리기를 개수만큼 눌러야 한다.
    *
-   * 삭제는 확인창 없이 즉시 일어나므로 **몇 개를 지웠는지 말하고** 되돌릴 길을 준다.
-   * (잠긴 문서라면 editDoc 이 이미 거부 안내를 띄웠으므로 성공 문구를 겹치지 않는다)
+   * 삭제 결과는 캔버스에서 바로 보이므로 toast 로 알리지 않는다 — 지울 때마다 뜨는
+   * 알림은 화면만 가린다(되돌리기는 툴바 버튼과 ⌘Z 로 언제든 된다).
+   * 잠긴 문서라면 `editDoc` 이 이미 거부 안내를 띄운다.
    */
   const handleRemoveMany = useCallback(
     (ids: string[]) => {
@@ -182,16 +180,8 @@ export function useBlockEditing(options: {
       const set = new Set(ids);
       editDoc((d) => ({ ...d, blocks: d.blocks.filter((b) => !set.has(b.id)) }));
       setSelectedIds([]);
-      if (!locked) {
-        toast.success(
-          ids.length === 1
-            ? "블록을 삭제했습니다."
-            : `블록 ${ids.length}개를 삭제했습니다.`,
-          { action: { label: "되돌리기", onClick: onUndo } },
-        );
-      }
     },
-    [editDoc, setSelectedIds, locked, onUndo],
+    [editDoc, setSelectedIds],
   );
 
   /** 인스펙터의 삭제 버튼 — 대상이 한 블록으로 정해져 있다 */

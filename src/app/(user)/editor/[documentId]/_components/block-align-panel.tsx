@@ -9,6 +9,7 @@ import {
   AlignStartHorizontal,
   AlignStartVertical,
   AlignVerticalDistributeCenter,
+  MoveVertical,
   Trash2,
 } from "lucide-react";
 import type { ZOrderAction } from "@/lib/editor-schema";
@@ -71,6 +72,7 @@ export function BlockAlignPanel({
   onDistribute,
   onZOrder,
   onRemove,
+  onFit,
 }: {
   /** 선택된 블록 수 (2 이상일 때만 이 패널이 나온다) */
   count: number;
@@ -78,6 +80,8 @@ export function BlockAlignPanel({
   onDistribute: (axis: DistributeAxis) => void;
   onZOrder: (action: ZOrderAction) => void;
   onRemove: () => void;
+  /** 고른 블록을 내용 높이에 맞춘다 — 넘치면 늘리고 남으면 줄인다 */
+  onFit: () => void;
 }) {
   // 간격을 나눌 '사이' 가 있어야 한다 — 2개는 사이가 하나뿐이라 나눌 것이 없다
   const canDistribute = count >= MIN_DISTRIBUTE;
@@ -152,6 +156,19 @@ export function BlockAlignPanel({
             </Button>
           ))}
         </div>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">크기</Label>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={onFit}
+        >
+          <MoveVertical className="size-4" />
+          내용 높이에 맞추기
+        </Button>
       </div>
 
       <Button
