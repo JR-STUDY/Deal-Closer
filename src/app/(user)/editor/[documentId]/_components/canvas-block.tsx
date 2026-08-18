@@ -49,6 +49,13 @@ type Props = {
     deltaPercent: number,
     baseline: number[] | null,
   ) => void;
+  /** 표 행 높이 변경 (px) — measured 는 지금 그려진 높이 */
+  onResizeRow: (
+    id: string,
+    index: number,
+    deltaPx: number,
+    measured: number,
+  ) => void;
   /**
    * 캔버스 확대 배율. Rnd 에 넘기지 않으면 확대 상태에서 마우스 이동량과 블록 이동량이
    * 어긋나 블록이 커서를 따라오지 않는다.
@@ -82,6 +89,7 @@ function CanvasBlockImpl({
   onCellCommit,
   onItemCommit,
   onResizeColumn,
+  onResizeRow,
   scale,
   canvas,
   onResizeMove,
@@ -311,6 +319,12 @@ function CanvasBlockImpl({
                   canEditCells
                     ? (index, delta, baseline) =>
                         onResizeColumn(block.id, index, delta, baseline)
+                    : undefined
+                }
+                onResizeRow={
+                  canEditCells
+                    ? (index, delta, measured) =>
+                        onResizeRow(block.id, index, delta, measured)
                     : undefined
                 }
               />

@@ -43,6 +43,12 @@ type Props = {
     deltaPercent: number,
     baseline: number[] | null,
   ) => void;
+  onResizeRow: (
+    id: string,
+    index: number,
+    deltaPx: number,
+    measured: number,
+  ) => void;
   /** 확대 배율. "fit" 이면 보이는 폭에 맞춘다 (진단 5) */
   zoom: number | "fit";
   /** 블록 복제·복사 (진단 5) */
@@ -73,6 +79,7 @@ export function EditorCanvas({
   onCellCommit,
   onItemCommit,
   onResizeColumn,
+  onResizeRow,
   zoom,
   onDuplicate,
   onCopy,
@@ -412,6 +419,7 @@ export function EditorCanvas({
             onCellCommit={onCellCommit}
             onItemCommit={onItemCommit}
             onResizeColumn={onResizeColumn}
+            onResizeRow={onResizeRow}
             scale={scale}
             onDuplicate={onDuplicate}
             onCopy={onCopy}

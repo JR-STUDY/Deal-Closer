@@ -14,6 +14,7 @@ import {
   calcItemTableTotal,
   evalSummaryRows,
   normalizeColWidths,
+  normalizeRowHeights,
   pageCount,
   tableLayout,
   textFormat,
@@ -299,9 +300,12 @@ function renderItemTable(props: BlockPropsMap["itemTable"]): string {
 function renderTable(props: BlockPropsMap["table"]): string {
   // 병합 계산은 화면 렌더러와 **같은 tableLayout** 을 쓴다 (진단 5)
   const { cells, layout } = tableLayout(props);
+  const rowHeights = normalizeRowHeights(props.rowHeights, cells.length);
   const rows = cells
     .map((row, ri) => {
       const tag = props.hasHeader && ri === 0 ? "th" : "td";
+      // 행 높이도 화면과 같은 값을 쓴다 (0 이면 내용에 맞춤 — colgroup 과 같은 원칙)
+      const rowStyle = rowHeights[ri] > 0 ? styleAttr({ height: px(rowHeights[ri]) }) : "";
       const inner = (Array.isArray(row) ? row : [])
         .map((cell, ci) => {
           const span = layout[ri]?.[ci];
@@ -317,7 +321,7 @@ function renderTable(props: BlockPropsMap["table"]): string {
           return `<${tag}${style}${rowSpan}${colSpan}>${escapeHtml(cell)}</${tag}>`;
         })
         .join("");
-      return `<tr>${inner}</tr>`;
+      return `<tr${rowStyle}>${inner}</tr>`;
     })
     .join("");
   /*

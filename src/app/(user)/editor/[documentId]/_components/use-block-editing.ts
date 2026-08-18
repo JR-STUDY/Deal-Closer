@@ -5,8 +5,10 @@ import { toast } from "sonner";
 import {
   createBlock,
   normalizeColWidths,
+  normalizeRowHeights,
   pageCount,
   resizeTableColumn,
+  resizeTableRow,
   reorderZ,
   reorderZMany,
   uid,
@@ -270,6 +272,34 @@ export function useBlockEditing(options: {
     [editDoc],
   );
 
+  /** 표 행 높이 — 드래그 중 계속 불리므로 한 건으로 묶는다 */
+  const handleResizeRow = useCallback(
+    (id: string, index: number, deltaPx: number, measured: number) => {
+      editDoc(
+        (d) => ({
+          ...d,
+          blocks: d.blocks.map((b) => {
+            if (b.id !== id || b.type !== "table") return b;
+            const props = b.props as BlockPropsMap["table"];
+            const heights = normalizeRowHeights(
+              props.rowHeights,
+              props.cells.length,
+            );
+            return {
+              ...b,
+              props: {
+                ...props,
+                rowHeights: resizeTableRow(heights, index, deltaPx, measured),
+              },
+            };
+          }),
+        }),
+        { coalesceKey: `rowHeight:${id}:${index}` },
+      );
+    },
+    [editDoc],
+  );
+
   const handleRemoveMany = useCallback(
     (ids: string[]) => {
       if (ids.length === 0) return;
@@ -394,6 +424,7 @@ export function useBlockEditing(options: {
     handleCellCommit,
     handleItemCommit,
     handleResizeColumn,
+    handleResizeRow,
     handleRemove,
     handleRemoveMany,
     handleAlign,

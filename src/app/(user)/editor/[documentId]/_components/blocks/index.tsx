@@ -48,6 +48,7 @@ export function RenderBlock({
   onCancel,
   showColumnHandles,
   onResizeColumn,
+  onResizeRow,
 }: {
   block: Block;
   /** 블록 전체를 인라인 편집 중인지 (text·title) */
@@ -69,6 +70,7 @@ export function RenderBlock({
     deltaPercent: number,
     baseline: number[] | null,
   ) => void;
+  onResizeRow?: (index: number, deltaPx: number, measured: number) => void;
 }) {
   switch (block.type) {
     case "title":
@@ -113,6 +115,7 @@ export function RenderBlock({
           onCancel={onCancel}
           showColumnHandles={showColumnHandles}
           onResizeColumn={onResizeColumn}
+          onResizeRow={onResizeRow}
         />
       );
     case "image":

@@ -173,6 +173,12 @@ export type BlockPropsMap = {
      */
     colWidths?: number[];
     /**
+     * 행 높이 (px). 표 레이아웃에서 행 높이는 **최소값**으로 동작한다 —
+     * 내용이 더 크면 그만큼 늘어난다(줄여도 글자가 잘리지 않는다).
+     * 없으면 예전처럼 내용에 맞춰진다.
+     */
+    rowHeights?: number[];
+    /**
      * 병합 범위 (진단 5) — 계약서 표에는 병합 셀이 필수다.
      * `cells` 는 그대로 두고 병합만 얹는다 → 기존 문서와 호환된다(없으면 병합 없음).
      */
@@ -571,6 +577,46 @@ export function normalizeColWidths(
   if (sum <= 0) return Array.from({ length: colCount }, () => even);
   // 합을 100 으로 맞춘다 — 저장된 값이 조금씩 어긋나도 표가 넘치지 않는다
   return clean.map((w) => (w / sum) * 100);
+}
+
+/** 행 높이 최소값(px) — 한 줄이 들어갈 자리는 남긴다 */
+export const MIN_ROW_PX = 16;
+
+/**
+ * 행 높이 배열을 행 개수에 맞춰 정리한다.
+ *
+ * 열 폭과 달리 **합을 맞추지 않는다** — 행은 서로 독립이고, 표 전체 높이는 블록 높이가
+ * 정한다(넘치면 잘림 경고가 뜨고 "내용 높이에 맞추기"로 맞춘다).
+ * 길이가 어긋나거나 못 쓰는 값은 `0`(= 내용에 맞춤)으로 둔다.
+ */
+export function normalizeRowHeights(
+  heights: number[] | undefined,
+  rowCount: number,
+): number[] {
+  if (rowCount <= 0) return [];
+  return Array.from({ length: rowCount }, (_, i) => {
+    const value = Array.isArray(heights) ? heights[i] : undefined;
+    return typeof value === "number" && Number.isFinite(value) && value > 0
+      ? Math.max(MIN_ROW_PX, Math.round(value))
+      : 0;
+  });
+}
+
+/**
+ * 행 높이를 바꾼다 — `index` 행만 늘리거나 줄인다.
+ * 저장된 값이 없던 행은 `measured`(지금 그려진 높이)에서 이어 간다.
+ */
+export function resizeTableRow(
+  heights: number[],
+  index: number,
+  deltaPx: number,
+  measured: number,
+): number[] {
+  if (index < 0 || index >= heights.length) return heights;
+  const from = heights[index] > 0 ? heights[index] : measured;
+  const next = [...heights];
+  next[index] = Math.max(MIN_ROW_PX, Math.round(from + deltaPx));
+  return next;
 }
 
 /**

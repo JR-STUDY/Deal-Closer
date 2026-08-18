@@ -217,6 +217,7 @@ export function DocumentEditor({
     handleCellCommit,
     handleItemCommit,
     handleResizeColumn,
+    handleResizeRow,
     handleRemove,
     handleRemoveMany,
     handleAlign,
@@ -414,6 +415,7 @@ export function DocumentEditor({
             onCellCommit={handleCellCommit}
             onItemCommit={handleItemCommit}
             onResizeColumn={handleResizeColumn}
+            onResizeRow={handleResizeRow}
             zoom={zoom}
             onDuplicate={duplicateFrom}
             onCopy={copyFrom}

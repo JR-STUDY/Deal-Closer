@@ -16,6 +16,9 @@
 import assert from "node:assert/strict";
 import {
   MIN_COL_PERCENT,
+  MIN_ROW_PX,
+  normalizeRowHeights,
+  resizeTableRow,
   normalizeColWidths,
   normalizeMerges,
   resizeTableColumn,
@@ -241,4 +244,33 @@ check(
 );
 check(resizeTableColumn([50, 50], -1, 10), [50, 50], "범위 밖 경계도 그대로");
 
-console.log(`✅ 표 셀 병합·열 폭 검증 통과 — ${checks}건`);
+// ─────────────────── ⑧ 행 높이 (rowHeights) ───────────────────
+// 열 폭과 달리 합을 맞추지 않는다 — 행은 서로 독립이고 표 높이는 블록 높이가 정한다.
+
+check(normalizeRowHeights(undefined, 3), [0, 0, 0], "저장된 높이가 없으면 0(=내용에 맞춤)");
+check(normalizeRowHeights([30, 0, -5, 999], 3), [30, 0, 0], "길이를 행 수에 맞추고 0·음수는 0 으로");
+check(normalizeRowHeights([5], 1), [MIN_ROW_PX], "최소 높이보다 작으면 최소값으로 올린다");
+check(normalizeRowHeights([], 0), [], "행이 없으면 빈 배열");
+
+check(
+  resizeTableRow([0, 0], 0, 12, 26),
+  [38, 0],
+  "저장된 높이가 없던 행은 지금 그려진 높이(26)에서 이어 간다",
+);
+check(
+  resizeTableRow([40, 0], 0, -10, 40),
+  [30, 0],
+  "저장된 높이가 있으면 그 값에서 움직인다",
+);
+check(
+  resizeTableRow([40, 0], 0, -500, 40),
+  [MIN_ROW_PX, 0],
+  "최소 높이 아래로는 줄지 않는다",
+);
+check(resizeTableRow([40], 1, 10, 20), [40], "범위 밖 행은 그대로");
+ok(
+  resizeTableRow([40, 50], 1, 10, 50)[0] === 40,
+  "한 행을 바꿔도 다른 행은 건드리지 않는다 (행은 서로 독립)",
+);
+
+console.log(`✅ 표 셀 병합·열 폭·행 높이 검증 통과 — ${checks}건`);

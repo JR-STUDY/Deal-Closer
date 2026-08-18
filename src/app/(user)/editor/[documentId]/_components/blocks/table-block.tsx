@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { Block, BlockPropsMap, Align } from "@/lib/editor-schema";
-import { normalizeColWidths, tableLayout } from "@/lib/editor-schema";
+import { normalizeColWidths, normalizeRowHeights, tableLayout } from "@/lib/editor-schema";
 import { InlineText } from "./inline-text";
 
 /**
@@ -22,6 +22,7 @@ export function TableBlock({
   onCancel,
   showColumnHandles = false,
   onResizeColumn,
+  onResizeRow,
 }: {
   block: Block;
   editingCell?: { r: number; c: number };
@@ -30,9 +31,8 @@ export function TableBlock({
   onCancel?: () => void;
   /** 열 경계 손잡이 노출 (블록을 골랐을 때만 — 늘 보이면 표가 지저분하다) */
   showColumnHandles?: boolean;
-  /** 경계 `index` 를 끌어 옮긴다 (전체 폭 대비 %) */
   /**
-   * 경계 `index` 를 끌어 옮긴다 (전체 폭 대비 %).
+   * 열 경계 `index` 를 끌어 옮긴다 (전체 폭 대비 %).
    * `baseline` 은 저장된 폭이 아직 없을 때 쓸 **현재 렌더된 열 비율**이다 —
    * 없으면 첫 드래그에 균등 분배로 튄다.
    */
@@ -41,6 +41,11 @@ export function TableBlock({
     deltaPercent: number,
     baseline: number[] | null,
   ) => void;
+  /**
+   * 행 `index` 의 높이를 끌어 바꾼다 (px).
+   * `measured` 는 지금 그려진 높이 — 저장된 값이 없던 행이 여기서 이어 간다.
+   */
+  onResizeRow?: (index: number, deltaPx: number, measured: number) => void;
 }) {
   const p = block.props as BlockPropsMap["table"];
   const alignOf = (ci: number): Align => p.colAligns?.[ci] ?? "left";
@@ -49,6 +54,7 @@ export function TableBlock({
   const editable = onStartCellEdit !== undefined;
   const colCount = cells[0]?.length ?? 0;
   const widths = normalizeColWidths(p.colWidths, colCount);
+  const heights = normalizeRowHeights(p.rowHeights, cells.length);
   const wrapRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
 
@@ -104,6 +110,51 @@ export function TableBlock({
     window.addEventListener("mouseup", onUp);
   }
 
+  /**
+   * 행 경계(각 행의 아래쪽) 위치와 지금 그려진 높이 — 손잡이를 놓을 자리다.
+   * 행 높이는 내용에 따라 제각각이라 **실제로 재야** 한다.
+   */
+  const [rowGeo, setRowGeo] = useState<{ bottom: number; height: number }[]>([]);
+  const measureRows = useCallback(() => {
+    const table = tableRef.current;
+    const wrap = wrapRef.current;
+    if (!table || !wrap) return;
+    const base = wrap.getBoundingClientRect().top;
+    const next = [...table.rows].map((tr) => {
+      const r = tr.getBoundingClientRect();
+      return { bottom: Math.round(r.bottom - base), height: Math.round(r.height) };
+    });
+    setRowGeo((current) =>
+      current.length === next.length &&
+      current.every((c, i) => c.bottom === next[i].bottom && c.height === next[i].height)
+        ? current
+        : next,
+    );
+  }, []);
+  // 내용·폭이 바뀌면 행 높이도 바뀐다 — 블록이 갱신될 때마다 다시 잰다
+  useLayoutEffect(() => {
+    measureRows();
+  }, [block, measureRows]);
+
+  function beginRowDrag(index: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    const measured = rowGeo[index]?.height ?? 0;
+    const startY = e.clientY;
+    let last = 0;
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientY - startY;
+      onResizeRow?.(index, delta - last, measured);
+      last = delta;
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
   /** 경계의 왼쪽부터 누적 위치(%) — 마지막 열 오른쪽 끝에는 손잡이를 두지 않는다 */
   const boundaries: number[] = [];
   let acc = 0;
@@ -128,7 +179,7 @@ export function TableBlock({
       ) : null}
       <tbody>
         {cells.map((row, ri) => (
-          <tr key={ri}>
+          <tr key={ri} style={heights[ri] > 0 ? { height: heights[ri] } : undefined}>
             {row.map((cell, ci) => {
               const span = layout[ri]?.[ci];
               // 다른 셀에 덮인 자리 — 그리지 않는다 (그리면 열 수가 늘어 표가 깨진다)
@@ -170,6 +221,22 @@ export function TableBlock({
         ))}
       </tbody>
     </table>
+
+    {/* 행 경계 손잡이 — 아래쪽 변을 끌어 그 행의 높이를 바꾼다 */}
+    {showColumnHandles && onResizeRow
+      ? rowGeo.map((geo, i) => (
+          <div
+            key={`row-${i}`}
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={`${i + 1}번째 행 높이`}
+            onMouseDown={(e) => beginRowDrag(i, e)}
+            onDoubleClick={(e) => e.stopPropagation()}
+            className="absolute inset-x-0 z-10 h-2 -translate-y-1/2 cursor-row-resize hover:bg-primary/30"
+            style={{ top: geo.bottom }}
+          />
+        ))
+      : null}
 
     {/* 열 경계 손잡이 — 고른 블록에서만 보인다 */}
     {showColumnHandles && onResizeColumn
