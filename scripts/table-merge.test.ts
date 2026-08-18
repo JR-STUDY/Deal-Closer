@@ -15,7 +15,10 @@
 
 import assert from "node:assert/strict";
 import {
+  MIN_COL_PERCENT,
+  normalizeColWidths,
   normalizeMerges,
+  resizeTableColumn,
   shiftMergesOnColDelete,
   shiftMergesOnRowDelete,
   tableLayout,
@@ -185,4 +188,57 @@ ok(
   "merges 가 없으면 모든 셀이 1×1 로 그대로 그려진다 (하위 호환)",
 );
 
-console.log(`✅ 표 셀 병합 검증 통과 — ${checks}건`);
+
+// ─────────────────── ⑦ 열 폭 (colWidths) ───────────────────
+// 폭은 %로 저장한다 — px 로 두면 블록 폭을 줄일 때 합이 넘쳐 마지막 열이 잘린다.
+
+check(
+  normalizeColWidths(undefined, 4),
+  [25, 25, 25, 25],
+  "저장된 폭이 없으면 균등 분배",
+);
+check(normalizeColWidths([50, 50], 3), [100 / 3, 100 / 3, 100 / 3],
+  "열 개수와 길이가 다르면(행·열 추가/삭제) 균등으로 되돌린다");
+check(normalizeColWidths([], 0), [], "열이 없으면 빈 배열");
+{
+  const sum = normalizeColWidths([10, 10, 10], 3).reduce((a, b) => a + b, 0);
+  ok(Math.abs(sum - 100) < 1e-9, "합이 100 으로 맞춰진다 (30 → 100)");
+}
+check(
+  normalizeColWidths([60, -5, 0], 3).map((w) => Math.round(w)),
+  [47, 26, 26],
+  "음수·0 은 균등값으로 치유하고 다시 100 으로 정규화한다",
+);
+
+// 경계를 끌면 그 열이 커지고 **바로 오른쪽 열만** 작아진다 (합 100 유지)
+check(
+  resizeTableColumn([25, 25, 25, 25], 1, 10),
+  [25, 35, 15, 25],
+  "경계 이동 — 왼쪽 열이 커지고 오른쪽 열이 그만큼 작아진다",
+);
+{
+  const before = [25, 25, 25, 25];
+  const after = resizeTableColumn(before, 1, 10);
+  ok(
+    Math.abs(after.reduce((a, b) => a + b, 0) - 100) < 1e-9,
+    "이동 후에도 합이 100 이라 표 폭이 변하지 않는다",
+  );
+}
+check(
+  resizeTableColumn([25, 25, 25, 25], 1, 100),
+  [25, 46, MIN_COL_PERCENT, 25],
+  "오른쪽 열은 최소 폭까지만 줄어든다 (글자가 한 자도 안 들어가면 다시 잡을 수 없다)",
+);
+check(
+  resizeTableColumn([25, 25, 25, 25], 1, -100),
+  [25, MIN_COL_PERCENT, 46, 25],
+  "왼쪽으로 끌 때도 최소 폭을 지킨다",
+);
+check(
+  resizeTableColumn([50, 50], 1, 10),
+  [50, 50],
+  "마지막 열 오른쪽에는 경계가 없다 — 그대로 돌려준다",
+);
+check(resizeTableColumn([50, 50], -1, 10), [50, 50], "범위 밖 경계도 그대로");
+
+console.log(`✅ 표 셀 병합·열 폭 검증 통과 — ${checks}건`);

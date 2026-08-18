@@ -23,6 +23,7 @@ import { useDocumentSave } from "./use-document-save";
 import { useEditorShortcuts } from "./use-editor-shortcuts";
 import { useBlockEditing } from "./use-block-editing";
 import { useBlockSelection } from "./use-block-selection";
+import type { EditTarget } from "./blocks";
 import {
   BaseBlockDialog,
   BlockEditDialog,
@@ -85,8 +86,8 @@ export function DocumentEditor({
   const [sidebarTab, setSidebarTab] = useState<"palette" | "inspector">(
     "palette",
   );
-  /** 캔버스에서 직접 편집 중인 블록 (더블클릭 진입) */
-  const [editingId, setEditingId] = useState<string | null>(null);
+  /** 캔버스에서 직접 편집 중인 대상 (더블클릭 진입) — 블록 전체 또는 표의 한 칸 */
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   /*
    * 미저장 표시는 **본체가 들고 있다.** 저장 훅에 두면 순환이 생긴다 —
    * editDoc 이 setDirty 를 쓰고, 저장 훅은 잘린 블록 수를 쓰고,
@@ -213,6 +214,8 @@ export function DocumentEditor({
     handleChangeBlock,
     handleChangeProps,
     handleInlineCommit,
+    handleCellCommit,
+    handleResizeColumn,
     handleRemove,
     handleRemoveMany,
     handleAlign,
@@ -289,7 +292,8 @@ export function DocumentEditor({
   );
 
   useEditorShortcuts({
-    editingId,
+    // 표 칸을 고치는 중에도 캔버스 단축키는 양보해야 한다 (Backspace 가 블록을 지운다)
+    editingId: editTarget?.blockId ?? null,
     selectedIds,
     blocks: doc.blocks,
     onUndo: handleUndo,
@@ -403,9 +407,11 @@ export function DocumentEditor({
             onViewTop={setViewTop}
             onFit={handleFit}
             onClippedChange={handleClippedChange}
-            editingId={editingId}
-            onEditingChange={setEditingId}
+            editTarget={editTarget}
+            onEditingChange={setEditTarget}
             onInlineCommit={handleInlineCommit}
+            onCellCommit={handleCellCommit}
+            onResizeColumn={handleResizeColumn}
             zoom={zoom}
             onDuplicate={duplicateFrom}
             onCopy={copyFrom}

@@ -13,6 +13,7 @@ import {
   blocksOnPage,
   calcItemTableTotal,
   evalSummaryRows,
+  normalizeColWidths,
   pageCount,
   tableLayout,
   textFormat,
@@ -319,7 +320,19 @@ function renderTable(props: BlockPropsMap["table"]): string {
       return `<tr>${inner}</tr>`;
     })
     .join("");
-  return `<table class="blk-table blk-grid"><tbody>${rows}</tbody></table>`;
+  /*
+   * 열 폭도 화면과 같은 값을 쓴다 (`normalizeColWidths`).
+   * 저장된 값이 없으면 `<colgroup>` 을 내보내지 않아 예전처럼 자동 배분된다 —
+   * 여기서만 균등 분배하면 같은 표가 화면과 인쇄에서 다르게 나온다.
+   */
+  const colCount = cells[0]?.length ?? 0;
+  const colgroup =
+    props.colWidths && props.colWidths.length > 0 && colCount > 0
+      ? `<colgroup>${normalizeColWidths(props.colWidths, colCount)
+          .map((w) => `<col style="width:${w.toFixed(4)}%">`)
+          .join("")}</colgroup>`
+      : "";
+  return `<table class="blk-table blk-grid">${colgroup}<tbody>${rows}</tbody></table>`;
 }
 
 /**

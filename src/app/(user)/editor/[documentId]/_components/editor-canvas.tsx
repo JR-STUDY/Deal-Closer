@@ -6,6 +6,7 @@ import type { EditorDoc, BlockType, ZOrderAction, Block } from "@/lib/editor-sch
 import { BLOCK_TYPES, pageCount } from "@/lib/editor-schema";
 import { useMarquee } from "./use-marquee";
 import { CanvasBlock, type Geometry } from "./canvas-block";
+import type { EditTarget } from "./blocks";
 import { useAutoHideScroll } from "./use-auto-hide-scroll";
 
 type Props = {
@@ -30,10 +31,17 @@ type Props = {
   onFit: (id: string) => void;
   /** 블록별 잘림 상태 보고 — 툴바가 개수를 세고 저장 시 안내한다 */
   onClippedChange: (id: string, clipped: boolean) => void;
-  /** 캔버스 인라인 편집 (진단 5) */
-  editingId: string | null;
-  onEditingChange: (id: string | null) => void;
+  /** 캔버스 인라인 편집 — 블록 전체 또는 표의 한 칸 (진단 5) */
+  editTarget: EditTarget | null;
+  onEditingChange: (target: EditTarget | null) => void;
   onInlineCommit: (id: string, text: string) => void;
+  onCellCommit: (id: string, r: number, c: number, text: string) => void;
+  onResizeColumn: (
+    id: string,
+    index: number,
+    deltaPercent: number,
+    baseline: number[] | null,
+  ) => void;
   /** 확대 배율. "fit" 이면 보이는 폭에 맞춘다 (진단 5) */
   zoom: number | "fit";
   /** 블록 복제·복사 (진단 5) */
@@ -58,9 +66,11 @@ export function EditorCanvas({
   onViewTop,
   onFit,
   onClippedChange,
-  editingId,
+  editTarget,
   onEditingChange,
   onInlineCommit,
+  onCellCommit,
+  onResizeColumn,
   zoom,
   onDuplicate,
   onCopy,
@@ -394,9 +404,11 @@ export function EditorCanvas({
             canvas={{ w: doc.canvas.w, h: totalH }}
             onFit={onFit}
             onClippedChange={onClippedChange}
-            editingId={editingId}
+            editTarget={editTarget}
             onEditingChange={onEditingChange}
             onInlineCommit={onInlineCommit}
+            onCellCommit={onCellCommit}
+            onResizeColumn={onResizeColumn}
             scale={scale}
             onDuplicate={onDuplicate}
             onCopy={onCopy}

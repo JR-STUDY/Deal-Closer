@@ -12,7 +12,7 @@ import {
   ContextMenuSeparator,
 } from "@/components/ui/context-menu";
 import { Pencil, Trash2, AlertTriangle } from "lucide-react";
-import { RenderBlock, isInlineEditable } from "./blocks";
+import { RenderBlock, hasEditableCells, isInlineEditable, type EditTarget } from "./blocks";
 import { useOverflow } from "./use-overflow";
 
 export type Geometry = { x: number; y: number; w: number; h: number };
@@ -33,11 +33,20 @@ type Props = {
   onFit: (id: string) => void;
   /** 잘림 여부를 부모에 보고한다 — 툴바가 "잘린 블록 N개" 를 세고 저장 시 알린다 */
   onClippedChange: (id: string, clipped: boolean) => void;
-  /** 캔버스에서 직접 편집 중인 블록 id (진단 5) */
-  editingId: string | null;
-  onEditingChange: (id: string | null) => void;
+  /** 캔버스에서 직접 편집 중인 대상 — 블록 전체 또는 표의 한 칸 (진단 5) */
+  editTarget: EditTarget | null;
+  onEditingChange: (target: EditTarget | null) => void;
   /** 인라인 편집 결과 저장 */
   onInlineCommit: (id: string, text: string) => void;
+  /** 표 칸 편집 결과 저장 */
+  onCellCommit: (id: string, r: number, c: number, text: string) => void;
+  /** 표 열 경계 이동 (전체 폭 대비 %) — baseline 은 저장된 폭이 없을 때의 시작 비율 */
+  onResizeColumn: (
+    id: string,
+    index: number,
+    deltaPercent: number,
+    baseline: number[] | null,
+  ) => void;
   /**
    * 캔버스 확대 배율. Rnd 에 넘기지 않으면 확대 상태에서 마우스 이동량과 블록 이동량이
    * 어긋나 블록이 커서를 따라오지 않는다.
@@ -65,9 +74,11 @@ function CanvasBlockImpl({
   onDragEnd,
   onFit,
   onClippedChange,
-  editingId,
+  editTarget,
   onEditingChange,
   onInlineCommit,
+  onCellCommit,
+  onResizeColumn,
   scale,
   canvas,
   onResizeMove,
@@ -75,8 +86,12 @@ function CanvasBlockImpl({
   onDuplicate,
   onCopy,
 }: Props) {
-  const editing = editingId === block.id;
+  const mine = editTarget?.blockId === block.id;
+  /** 블록 전체 편집 중인지 (표는 칸 단위라 cell 이 있으면 여기서는 false) */
+  const editing = mine && editTarget?.cell === undefined;
+  const editingCell = mine ? editTarget?.cell : undefined;
   const canInlineEdit = !locked && isInlineEditable(block);
+  const canEditCells = !locked && hasEditableCells(block);
   /*
    * ⇧클릭으로 선택에서 **뺄 때** 이 드래그를 무시한다.
    * Rnd 는 mousedown 에 이미 드래그를 시작하므로, 선택에서 빼려던 클릭이 조금만 흔들려도
@@ -114,7 +129,7 @@ function CanvasBlockImpl({
        * 움직이지 않았다. 경계는 놓는 순간 editor-canvas 가 문서 좌표로 클램프한다.
        */
       scale={scale}
-      disableDragging={locked || editing}
+      disableDragging={locked || mine}
       enableResizing={!locked}
       dragHandleClassName="block-drag-handle"
       onMouseDown={(e) => {
@@ -252,20 +267,37 @@ function CanvasBlockImpl({
                 onSelect(block.id, false);
               }}
               onDoubleClick={() => {
-                if (canInlineEdit) onEditingChange(block.id);
+                if (canInlineEdit) onEditingChange({ blockId: block.id });
               }}
               className={`block-drag-handle h-full w-full overflow-hidden bg-background outline-none ${
-                editing ? "cursor-text" : locked ? "cursor-default" : "cursor-move"
+                mine ? "cursor-text" : locked ? "cursor-default" : "cursor-move"
               }`}
             >
               <RenderBlock
                 block={block}
                 editing={editing}
+                editingCell={editingCell}
                 onCommit={(text) => {
                   onInlineCommit(block.id, text);
                   onEditingChange(null);
                 }}
+                onCellCommit={(r, c, text) => {
+                  onCellCommit(block.id, r, c, text);
+                  onEditingChange(null);
+                }}
+                onStartCellEdit={
+                  canEditCells
+                    ? (r, c) => onEditingChange({ blockId: block.id, cell: { r, c } })
+                    : undefined
+                }
                 onCancel={() => onEditingChange(null)}
+                showColumnHandles={canEditCells && selected}
+                onResizeColumn={
+                  canEditCells
+                    ? (index, delta, baseline) =>
+                        onResizeColumn(block.id, index, delta, baseline)
+                    : undefined
+                }
               />
             </div>
           </ContextMenuTrigger>

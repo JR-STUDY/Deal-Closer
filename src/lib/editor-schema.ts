@@ -167,6 +167,12 @@ export type BlockPropsMap = {
     cells: string[][];
     colAligns: Align[];
     /**
+     * 열 폭 (%). 없으면 브라우저 자동 배분 — 기존 문서가 그대로 보인다.
+     * px 가 아니라 **비율**로 두는 이유: 블록 폭을 줄이면 표도 같이 줄어야 하는데
+     * px 로 저장하면 합이 블록보다 커져 표가 넘치거나 마지막 열이 잘린다.
+     */
+    colWidths?: number[];
+    /**
      * 병합 범위 (진단 5) — 계약서 표에는 병합 셀이 필수다.
      * `cells` 는 그대로 두고 병합만 얹는다 → 기존 문서와 호환된다(없으면 병합 없음).
      */
@@ -540,6 +546,59 @@ export type TableCellLayout = {
  * 범위는 버린다. 겹친 병합을 그대로 렌더하면 colspan 합이 열 수를 넘어 표가 깨진다.
  * 먼저 선언된 병합이 이긴다(사용자가 만든 순서를 존중한다).
  */
+/** 열 폭 최소값(%) — 이보다 좁아지면 글자가 한 자도 안 들어가 다시 잡을 수 없다 */
+export const MIN_COL_PERCENT = 4;
+
+/**
+ * 열 폭 배열을 열 개수에 맞춰 정리한다 (합 100%).
+ *
+ * 행·열을 더하거나 지우면 길이가 어긋나는데, 그대로 `<colgroup>` 에 넣으면 마지막 열이
+ * 사라지거나 표가 통째로 찌그러진다. 저장된 값이 없거나 못 쓰면 **균등 분배**로 돌린다.
+ */
+export function normalizeColWidths(
+  widths: number[] | undefined,
+  colCount: number,
+): number[] {
+  if (colCount <= 0) return [];
+  const even = 100 / colCount;
+  if (!Array.isArray(widths) || widths.length !== colCount) {
+    return Array.from({ length: colCount }, () => even);
+  }
+  const clean = widths.map((w) =>
+    typeof w === "number" && Number.isFinite(w) && w > 0 ? w : even,
+  );
+  const sum = clean.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return Array.from({ length: colCount }, () => even);
+  // 합을 100 으로 맞춘다 — 저장된 값이 조금씩 어긋나도 표가 넘치지 않는다
+  return clean.map((w) => (w / sum) * 100);
+}
+
+/**
+ * 두 열 사이 경계를 옮긴다 — `index` 열이 커지면 **바로 오른쪽 열이 그만큼 작아진다**.
+ *
+ * 다른 열까지 건드리지 않는 이유: 경계 하나를 끌었는데 표 전체가 재배치되면 사용자가
+ * 방금 맞춘 다른 열이 다시 틀어진다. 합이 100 으로 유지되므로 표 폭도 그대로다.
+ */
+export function resizeTableColumn(
+  widths: number[],
+  index: number,
+  deltaPercent: number,
+): number[] {
+  if (index < 0 || index >= widths.length - 1) return widths;
+  const left = widths[index];
+  const right = widths[index + 1];
+  // 양쪽 모두 최소 폭을 지키는 범위로 이동량을 자른다
+  const move = Math.max(
+    MIN_COL_PERCENT - left,
+    Math.min(deltaPercent, right - MIN_COL_PERCENT),
+  );
+  if (move === 0) return widths;
+  const next = [...widths];
+  next[index] = left + move;
+  next[index + 1] = right - move;
+  return next;
+}
+
 export function normalizeMerges(
   merges: readonly TableMerge[] | undefined,
   rows: number,

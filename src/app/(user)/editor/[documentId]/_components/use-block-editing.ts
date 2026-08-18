@@ -4,12 +4,15 @@ import { useCallback, useRef } from "react";
 import { toast } from "sonner";
 import {
   createBlock,
+  normalizeColWidths,
   pageCount,
+  resizeTableColumn,
   reorderZ,
   reorderZMany,
   uid,
   type AnyBlockProps,
   type Block,
+  type BlockPropsMap,
   type BlockType,
   type EditorDoc,
   type ZOrderAction,
@@ -174,6 +177,62 @@ export function useBlockEditing(options: {
    * 알림은 화면만 가린다(되돌리기는 툴바 버튼과 ⌘Z 로 언제든 된다).
    * 잠긴 문서라면 `editDoc` 이 이미 거부 안내를 띄운다.
    */
+  /** 표 한 칸의 글자 — 편집 세션 하나가 되돌리기 한 건이므로 묶지 않는다 */
+  const handleCellCommit = useCallback(
+    (id: string, r: number, c: number, text: string) => {
+      editDoc((d) => ({
+        ...d,
+        blocks: d.blocks.map((b) => {
+          if (b.id !== id || b.type !== "table") return b;
+          const props = b.props as BlockPropsMap["table"];
+          const cells = props.cells.map((row, ri) =>
+            ri === r ? row.map((cell, ci) => (ci === c ? text : cell)) : row,
+          );
+          return { ...b, props: { ...props, cells } };
+        }),
+      }));
+    },
+    [editDoc],
+  );
+
+  /**
+   * 표 열 경계 이동. 드래그 중 mousemove 마다 불리므로 **한 건으로 묶는다** —
+   * 안 묶으면 한 번 끌 때마다 되돌리기 스택이 수십 건 쌓인다.
+   */
+  const handleResizeColumn = useCallback(
+    (
+      id: string,
+      index: number,
+      deltaPercent: number,
+      baseline: number[] | null,
+    ) => {
+      editDoc(
+        (d) => ({
+          ...d,
+          blocks: d.blocks.map((b) => {
+            if (b.id !== id || b.type !== "table") return b;
+            const props = b.props as BlockPropsMap["table"];
+            const colCount = props.cells[0]?.length ?? 0;
+            // 저장된 폭이 없으면 화면에서 잰 비율에서 이어 간다 — 없으면 균등 분배
+            const widths = normalizeColWidths(
+              props.colWidths ?? baseline ?? undefined,
+              colCount,
+            );
+            return {
+              ...b,
+              props: {
+                ...props,
+                colWidths: resizeTableColumn(widths, index, deltaPercent),
+              },
+            };
+          }),
+        }),
+        { coalesceKey: `colWidth:${id}:${index}` },
+      );
+    },
+    [editDoc],
+  );
+
   const handleRemoveMany = useCallback(
     (ids: string[]) => {
       if (ids.length === 0) return;
@@ -295,6 +354,8 @@ export function useBlockEditing(options: {
     handleChangeBlock,
     handleChangeProps,
     handleInlineCommit,
+    handleCellCommit,
+    handleResizeColumn,
     handleRemove,
     handleRemoveMany,
     handleAlign,
