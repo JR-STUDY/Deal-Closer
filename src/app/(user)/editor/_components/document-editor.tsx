@@ -203,9 +203,7 @@ export function DocumentEditor({
     handleGeometry,
     handleChangeBlock,
     handleChangeProps,
-    handleInlineCommit,
-    handleCellCommit,
-    handleItemCommit,
+    handleCommitCell,
     handleResizeColumn,
     handleResizeRow,
     handleRemove,
@@ -407,9 +405,7 @@ export function DocumentEditor({
             onClippedChange={handleClippedChange}
             editTarget={editTarget}
             onEditingChange={setEditTarget}
-            onInlineCommit={handleInlineCommit}
-            onCellCommit={handleCellCommit}
-            onItemCommit={handleItemCommit}
+            onCommitCell={handleCommitCell}
             onResizeColumn={handleResizeColumn}
             onResizeRow={handleResizeRow}
             zoom={zoom}

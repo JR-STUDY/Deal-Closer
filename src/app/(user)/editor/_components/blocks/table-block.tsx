@@ -3,6 +3,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { Block, BlockPropsMap, Align } from "@/lib/editor-schema";
 import { normalizeColWidths, normalizeRowHeights, tableLayout } from "@/lib/editor-schema";
+import { sameCell, type CellRef } from "@/lib/editor-cell";
 import { InlineText } from "./inline-text";
 
 /**
@@ -16,18 +17,19 @@ import { InlineText } from "./inline-text";
  */
 export function TableBlock({
   block,
-  editingCell,
-  onCellCommit,
-  onStartCellEdit,
+  editingRef,
+  onCommitCell,
+  onStartEdit,
   onCancel,
   showColumnHandles = false,
   onResizeColumn,
   onResizeRow,
 }: {
   block: Block;
-  editingCell?: { r: number; c: number };
-  onCellCommit?: (r: number, c: number, text: string) => void;
-  onStartCellEdit?: (r: number, c: number) => void;
+  /** 지금 편집 중인 칸 (다른 블록의 칸이면 부모가 걸러 준다) */
+  editingRef?: CellRef | null;
+  onCommitCell?: (ref: CellRef, text: string) => void;
+  onStartEdit?: (ref: CellRef) => void;
   onCancel?: () => void;
   /** 열 경계 손잡이 노출 (블록을 골랐을 때만 — 늘 보이면 표가 지저분하다) */
   showColumnHandles?: boolean;
@@ -51,7 +53,7 @@ export function TableBlock({
   const alignOf = (ci: number): Align => p.colAligns?.[ci] ?? "left";
   // 병합 계산은 tableLayout 하나가 한다 — 인쇄 렌더러도 같은 함수를 쓴다
   const { cells, layout } = tableLayout(p);
-  const editable = onStartCellEdit !== undefined;
+  const editable = onStartEdit !== undefined;
   const colCount = cells[0]?.length ?? 0;
   const widths = normalizeColWidths(p.colWidths, colCount);
   const heights = normalizeRowHeights(p.rowHeights, cells.length);
@@ -185,7 +187,8 @@ export function TableBlock({
               // 다른 셀에 덮인 자리 — 그리지 않는다 (그리면 열 수가 늘어 표가 깨진다)
               if (span?.skip) return null;
               const header = p.hasHeader && ri === 0;
-              const editing = editingCell?.r === ri && editingCell?.c === ci;
+              const ref: CellRef = { kind: "cell", r: ri, c: ci };
+              const editing = sameCell(editingRef, ref);
               const Cell = header ? "th" : "td";
               return (
                 <Cell
@@ -201,7 +204,7 @@ export function TableBlock({
                       ? (e) => {
                           // 블록 전체 편집(더블클릭)으로 번지지 않게 여기서 멈춘다
                           e.stopPropagation();
-                          onStartCellEdit?.(ri, ci);
+                          onStartEdit?.(ref);
                         }
                       : undefined
                   }
@@ -211,7 +214,7 @@ export function TableBlock({
                     editing={editing}
                     // 표 칸은 값을 바꾸는 자리라 진입 시 전체 선택한다 (본문 블록과 다르다)
                     selectAll
-                    onCommit={(text) => onCellCommit?.(ri, ci, text)}
+                    onCommit={(text) => onCommitCell?.(ref, text)}
                     onCancel={onCancel}
                   />
                 </Cell>

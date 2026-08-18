@@ -12,7 +12,8 @@ import {
   ContextMenuSeparator,
 } from "@/components/ui/context-menu";
 import { Pencil, Trash2, AlertTriangle } from "lucide-react";
-import { RenderBlock, hasEditableCells, isInlineEditable, type EditTarget } from "./blocks";
+import { RenderBlock, hasEditableCells, isWholeBlockEditable, type EditTarget } from "./blocks";
+import type { CellRef } from "@/lib/editor-cell";
 import { useOverflow } from "./use-overflow";
 
 export type Geometry = { x: number; y: number; w: number; h: number };
@@ -36,12 +37,11 @@ type Props = {
   /** 캔버스에서 직접 편집 중인 대상 — 블록 전체 또는 표의 한 칸 (진단 5) */
   editTarget: EditTarget | null;
   onEditingChange: (target: EditTarget | null) => void;
-  /** 인라인 편집 결과 저장 */
-  onInlineCommit: (id: string, text: string) => void;
-  /** 표 칸 편집 결과 저장 */
-  onCellCommit: (id: string, r: number, c: number, text: string) => void;
-  /** 품목표 칸 편집 결과 저장 (필드 단위) */
-  onItemCommit: (id: string, row: number, field: string, text: string) => void;
+  /**
+   * 칸 하나의 글자를 확정한다. 종류(블록 전체·표 칸·품목 필드·정보 필드)를 구분하지
+   * 않는다 — `CellRef` 가 자리를 가리키고 쓰기 규칙은 `@/lib/editor-cell` 이 안다.
+   */
+  onCommitCell: (id: string, ref: CellRef, text: string) => void;
   /** 표 열 경계 이동 (전체 폭 대비 %) — baseline 은 저장된 폭이 없을 때의 시작 비율 */
   onResizeColumn: (
     id: string,
@@ -85,9 +85,7 @@ function CanvasBlockImpl({
   onClippedChange,
   editTarget,
   onEditingChange,
-  onInlineCommit,
-  onCellCommit,
-  onItemCommit,
+  onCommitCell,
   onResizeColumn,
   onResizeRow,
   scale,
@@ -98,11 +96,9 @@ function CanvasBlockImpl({
   onCopy,
 }: Props) {
   const mine = editTarget?.blockId === block.id;
-  /** 블록 전체 편집 중인지 (표는 칸 단위라 cell 이 있으면 여기서는 false) */
-  const editing = mine && editTarget?.cell === undefined;
-  const editingCell = mine ? editTarget?.cell : undefined;
-  const editingItem = mine ? editTarget?.item : undefined;
-  const canInlineEdit = !locked && isInlineEditable(block);
+  /** 이 블록에서 편집 중인 칸 — 다른 블록의 칸은 넘기지 않는다 */
+  const editingRef = mine ? (editTarget?.ref ?? null) : null;
+  const canInlineEdit = !locked && isWholeBlockEditable(block);
   const canEditCells = !locked && hasEditableCells(block);
   /*
    * ⇧클릭으로 선택에서 **뺄 때** 이 드래그를 무시한다.
@@ -279,7 +275,8 @@ function CanvasBlockImpl({
                 onSelect(block.id, false);
               }}
               onDoubleClick={() => {
-                if (canInlineEdit) onEditingChange({ blockId: block.id });
+                if (canInlineEdit)
+                  onEditingChange({ blockId: block.id, ref: { kind: "block" } });
               }}
               className={`block-drag-handle h-full w-full overflow-hidden bg-background outline-none ${
                 mine ? "cursor-text" : locked ? "cursor-default" : "cursor-move"
@@ -287,30 +284,14 @@ function CanvasBlockImpl({
             >
               <RenderBlock
                 block={block}
-                editing={editing}
-                editingCell={editingCell}
-                editingItem={editingItem}
-                onCommit={(text) => {
-                  onInlineCommit(block.id, text);
+                editingRef={editingRef}
+                onCommitCell={(ref, text) => {
+                  onCommitCell(block.id, ref, text);
                   onEditingChange(null);
                 }}
-                onCellCommit={(r, c, text) => {
-                  onCellCommit(block.id, r, c, text);
-                  onEditingChange(null);
-                }}
-                onStartCellEdit={
+                onStartEdit={
                   canEditCells
-                    ? (r, c) => onEditingChange({ blockId: block.id, cell: { r, c } })
-                    : undefined
-                }
-                onItemCommit={(row, field, text) => {
-                  onItemCommit(block.id, row, field, text);
-                  onEditingChange(null);
-                }}
-                onStartItemEdit={
-                  canEditCells
-                    ? (row, field) =>
-                        onEditingChange({ blockId: block.id, item: { row, field } })
+                    ? (ref) => onEditingChange({ blockId: block.id, ref })
                     : undefined
                 }
                 onCancel={() => onEditingChange(null)}

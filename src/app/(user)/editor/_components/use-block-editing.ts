@@ -19,6 +19,7 @@ import {
   type EditorDoc,
   type ZOrderAction,
 } from "@/lib/editor-schema";
+import { writeCell, type CellRef } from "@/lib/editor-cell";
 import {
   alignBlocks,
   distributeBlocks,
@@ -158,77 +159,22 @@ export function useBlockEditing(options: {
     [singleId, editDoc],
   );
 
-  /** 캔버스 인라인 편집 결과 — 편집 세션 하나가 되돌리기 한 건이므로 묶지 않는다 */
-  const handleInlineCommit = useCallback(
-    (id: string, text: string) => {
-      editDoc((d) => ({
-        ...d,
-        blocks: d.blocks.map((b) =>
-          b.id === id ? { ...b, props: { ...b.props, text } } : b,
-        ),
-      }));
-    },
-    [editDoc],
-  );
-
   /**
-   * 블록을 지운다 — 몇 개든 **한 번의 `editDoc`** 이라 ⌘Z 한 번으로 전부 돌아온다.
-   * 하나씩 나눠 지우면 되돌리기를 개수만큼 눌러야 한다.
+   * 캔버스 인라인 편집 결과 — **모든 칸이 이 한 곳을 지난다.**
    *
-   * 삭제 결과는 캔버스에서 바로 보이므로 toast 로 알리지 않는다 — 지울 때마다 뜨는
-   * 알림은 화면만 가린다(되돌리기는 툴바 버튼과 ⌘Z 로 언제든 된다).
-   * 잠긴 문서라면 `editDoc` 이 이미 거부 안내를 띄운다.
+   * 예전에는 블록 전체·격자 표 칸·품목표 필드가 각각 다른 핸들러였고, 그래서 칸 종류를
+   * 늘릴 때마다 배선을 하나 더 해야 했다(빠뜨리면 화면에는 보이는데 편집만 안 된다 —
+   * 공급자 정보·거래처 정보가 실제로 그랬다). 무엇을 어떻게 쓸지는 `writeCell` 순수
+   * 함수가 알고, 여기서는 **언제 쓸지**만 정한다.
+   *
+   * 편집 세션 하나가 되돌리기 한 건이므로 묶지 않는다.
    */
-  /** 표 한 칸의 글자 — 편집 세션 하나가 되돌리기 한 건이므로 묶지 않는다 */
-  const handleCellCommit = useCallback(
-    (id: string, r: number, c: number, text: string) => {
+  const handleCommitCell = useCallback(
+    (id: string, ref: CellRef, text: string) => {
       editDoc((d) => ({
         ...d,
-        blocks: d.blocks.map((b) => {
-          if (b.id !== id || b.type !== "table") return b;
-          const props = b.props as BlockPropsMap["table"];
-          const cells = props.cells.map((row, ri) =>
-            ri === r ? row.map((cell, ci) => (ci === c ? text : cell)) : row,
-          );
-          return { ...b, props: { ...props, cells } };
-        }),
-      }));
-    },
-    [editDoc],
-  );
-
-  /**
-   * 품목표 한 칸. 필드마다 저장 형태가 다르다 —
-   * 수량·단가는 **숫자**이므로 통화기호·쉼표를 걷어내고 정수로 만든다(정책 FORM_CURRENCY_KRW).
-   * 금액은 수량×단가 결과라 애초에 편집 대상이 아니다.
-   */
-  const handleItemCommit = useCallback(
-    (id: string, rowIndex: number, field: string, text: string) => {
-      /** 숫자 칸 — 사용자가 "1,200,000 원" 처럼 넣어도 받아 준다 */
-      const toInt = (value: string) => {
-        const digits = value.replace(/[^\d-]/g, "");
-        const parsed = Number.parseInt(digits, 10);
-        return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-      };
-      editDoc((d) => ({
-        ...d,
-        blocks: d.blocks.map((b) => {
-          if (b.id !== id || b.type !== "itemTable") return b;
-          const props = b.props as BlockPropsMap["itemTable"];
-          const rows = props.rows.map((row, ri) => {
-            if (ri !== rowIndex) return row;
-            if (field === "name") return { ...row, name: text };
-            if (field === "description") return { ...row, description: text };
-            if (field === "quantity") return { ...row, quantity: toInt(text) };
-            if (field === "unitPrice") return { ...row, unitPrice: toInt(text) };
-            if (field.startsWith("extra:")) {
-              const colId = field.slice("extra:".length);
-              return { ...row, extra: { ...(row.extra ?? {}), [colId]: text } };
-            }
-            return row;
-          });
-          return { ...b, props: { ...props, rows } };
-        }),
+        // 고칠 수 없는 칸이면 writeCell 이 같은 객체를 돌려주므로 문서가 그대로다
+        blocks: d.blocks.map((b) => (b.id === id ? writeCell(b, ref, text) : b)),
       }));
     },
     [editDoc],
@@ -300,6 +246,14 @@ export function useBlockEditing(options: {
     [editDoc],
   );
 
+  /**
+   * 블록을 지운다 — 몇 개든 **한 번의 `editDoc`** 이라 ⌘Z 한 번으로 전부 돌아온다.
+   * 하나씩 나눠 지우면 되돌리기를 개수만큼 눌러야 한다.
+   *
+   * 삭제 결과는 캔버스에서 바로 보이므로 toast 로 알리지 않는다 — 지울 때마다 뜨는
+   * 알림은 화면만 가린다(되돌리기는 툴바 버튼과 ⌘Z 로 언제든 된다).
+   * 잠긴 문서라면 `editDoc` 이 이미 거부 안내를 띄운다.
+   */
   const handleRemoveMany = useCallback(
     (ids: string[]) => {
       if (ids.length === 0) return;
@@ -420,9 +374,7 @@ export function useBlockEditing(options: {
     handleGeometry,
     handleChangeBlock,
     handleChangeProps,
-    handleInlineCommit,
-    handleCellCommit,
-    handleItemCommit,
+    handleCommitCell,
     handleResizeColumn,
     handleResizeRow,
     handleRemove,

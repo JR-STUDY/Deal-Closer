@@ -7,6 +7,7 @@ import { BLOCK_TYPES, pageCount } from "@/lib/editor-schema";
 import { useMarquee } from "./use-marquee";
 import { CanvasBlock, type Geometry } from "./canvas-block";
 import type { EditTarget } from "./blocks";
+import type { CellRef } from "@/lib/editor-cell";
 import { useAutoHideScroll } from "./use-auto-hide-scroll";
 
 type Props = {
@@ -34,9 +35,8 @@ type Props = {
   /** 캔버스 인라인 편집 — 블록 전체 또는 표의 한 칸 (진단 5) */
   editTarget: EditTarget | null;
   onEditingChange: (target: EditTarget | null) => void;
-  onInlineCommit: (id: string, text: string) => void;
-  onCellCommit: (id: string, r: number, c: number, text: string) => void;
-  onItemCommit: (id: string, row: number, field: string, text: string) => void;
+  /** 칸 하나의 글자 확정 — 종류는 CellRef 가 가리킨다 (@/lib/editor-cell) */
+  onCommitCell: (id: string, ref: CellRef, text: string) => void;
   onResizeColumn: (
     id: string,
     index: number,
@@ -75,9 +75,7 @@ export function EditorCanvas({
   onClippedChange,
   editTarget,
   onEditingChange,
-  onInlineCommit,
-  onCellCommit,
-  onItemCommit,
+  onCommitCell,
   onResizeColumn,
   onResizeRow,
   zoom,
@@ -415,9 +413,7 @@ export function EditorCanvas({
             onClippedChange={onClippedChange}
             editTarget={editTarget}
             onEditingChange={onEditingChange}
-            onInlineCommit={onInlineCommit}
-            onCellCommit={onCellCommit}
-            onItemCommit={onItemCommit}
+            onCommitCell={onCommitCell}
             onResizeColumn={onResizeColumn}
             onResizeRow={onResizeRow}
             scale={scale}
