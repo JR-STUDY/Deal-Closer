@@ -32,8 +32,29 @@ import {
 import { AccountsToolbar } from "./_components/accounts-toolbar";
 import { AccountRowActions } from "./_components/account-row-actions";
 import { NewAccountButton } from "./_components/new-account-button";
+import {
+  OPPORTUNITY_PEEK_LIMIT,
+  OpportunityPeek,
+} from "./_components/opportunity-peek";
 
 const LIST_HREF = "/accounts";
+
+/**
+ * 표 한 칸에 담기 위해 메모를 **한 줄로 접는다** (5차 피드백 1).
+ * 메모는 여러 줄일 수 있어 원문을 그대로 넣으면 행 높이가 메모 길이만큼 제각각이 되고,
+ * 표를 세로로 훑을 때 눈이 걸린다. 줄바꿈·연속 공백은 공백 하나로 눕히고, 넘치는 부분은
+ * 말줄임 + 툴팁이 맡는다 (기존 담당자 칸과 같은 처리).
+ */
+function collapseToLine(memo: string): string {
+  return memo.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * 툴팁에 펼칠 메모 길이의 상한.
+ * 메모는 2000자까지 저장된다(`ACCOUNT_MEMO_MAX`) — 툴팁도 긴 글을 읽는 자리는 아니라서,
+ * 여기서 잘린 메모는 거래처 상세에서 마저 읽는다.
+ */
+const MEMO_TOOLTIP_MAX = 300;
 
 /**
  * 거래처 목록 (F-102) — 회사명·담당자명·연락처·기회 수.
@@ -78,6 +99,29 @@ export default async function AccountsPage({
         // 목록에 노출하는 담당자는 **대표 1명뿐**이다 (거래처-8).
         // 전원을 실어 오면 행마다 조회량이 담당자 수만큼 늘고, 보여줄 곳도 없다.
         contacts: { where: { isPrimary: true } },
+        /**
+         * 기회 칸 팝오버가 펼칠 **제목 몇 건** (5차 피드백 2).
+         *
+         * 건수만 필요할 때는 `_count` 로 충분했지만, 제목을 보여주려면 기회를 실제로 읽어야
+         * 한다. **거래처마다 따로 조회하지 않는다** — 이 `include` 는 목록 조회에 딸린 관계
+         * 로드라 Prisma 가 한 페이지분(거래처 10곳)을 **한 번의 질의**로 가져온다. 행을
+         * 그리며 `prisma` 를 다시 부르는 것이 N+1 이고, 여기서는 그 길을 열지 않는다.
+         *
+         * `take` 로 **거래처당 상한을 DB 에서 건다** — 기회가 200건인 거래처 한 곳이 한
+         * 화면의 조회량을 통째로 끌어올리지 못한다. 전체 건수는 위의 `_count` 가 이미 들고
+         * 있으므로, 잘린 만큼은 팝오버가 "외 N건" 으로 알린다.
+         *
+         * 정렬은 **기회 목록의 기본 정렬과 같은 `updatedAt desc`** 다
+         * (`DEFAULT_OPPORTUNITY_SORT`). 두 화면이 다른 순서를 주장하면 "이 거래처의 기회
+         * 5건" 이 기회 목록에서 본 차례와 달라 같은 데이터로 읽히지 않는다. 최근에 손댄
+         * 기회가 대체로 지금 들여다보는 기회이기도 하다. 같은 시각이 여럿일 때를 대비해
+         * `id` 를 마지막 기준으로 붙인다(DB 는 동순위 순서를 보장하지 않는다).
+         */
+        opportunities: {
+          orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+          take: OPPORTUNITY_PEEK_LIMIT,
+          select: { id: true, name: true, stage: true },
+        },
       },
     }),
     prisma.user.findMany({
@@ -163,17 +207,27 @@ export default async function AccountsPage({
                 왜 연락처인가 — 이메일은 한 글자씩 읽고 복사하는 값이라 잘리면 손해가 크고,
                 담당자 칸은 이번에 툴팁이 붙어 잘려도 전체를 되찾을 수 있다.
                 최근 수정일(128px)은 통째로 지웠다.
-                `min-w` 는 지운 칸만큼 줄여 880px — 좁은 화면에서 가로 스크롤이 더 늦게 시작된다.
+
+                5차 피드백 1 로 **메모 칸이 들어오면서 잔여 폭의 주인이 바뀌었다.**
+                직전까지는 연락처가 남는 폭을 흡수했는데, 이제 **연락처에 240px 를 명시하고
+                잔여 폭은 메모가 가진다.** 근거는 "폭을 더 줘서 얻는 것이 있는 칸인가" 하나다 —
+                연락처는 전화번호(13자)와 이메일(대개 30자 안쪽)이라 길이 상한이 예측되고,
+                240px 를 넘겨 줘도 오른쪽이 빈 채로 남는다. 메모는 2000자까지 저장되므로
+                (`ACCOUNT_MEMO_MAX`) 넓어지는 만큼 실제로 더 읽히는 유일한 칸이다.
+                넘치는 몫은 두 칸 모두 말줄임 + 툴팁으로 되찾는다.
+                `min-w` 는 고정 폭 합(240+208+240+88+56=832)에 메모 최소 208px 를 더해 1040px.
               */}
-              <Table className="min-w-[880px] table-fixed">
+              <Table className="min-w-[1040px] table-fixed">
                 <TableHeader>
                   <TableRow>
                     {/* 240px: 남는 폭을 먹지 않도록 명시 (4차 피드백 2) */}
                     <TableHead className="w-[240px]">회사명</TableHead>
                     {/* 208px: "한그레이스 · Sales Director"(이름+직함) 가 들어가는 폭 */}
                     <TableHead className="w-[208px]">담당자</TableHead>
-                    {/* 폭 미지정 = 남는 폭 전부. `min-w` 에서 최소 288px 를 보장받는다 */}
-                    <TableHead>연락처</TableHead>
+                    {/* 240px: 이메일 30자 안쪽이 들어간다 — 더 넓혀도 오른쪽이 빈다 */}
+                    <TableHead className="w-[240px]">연락처</TableHead>
+                    {/* 폭 미지정 = 남는 폭 전부 (5차 피드백 1) */}
+                    <TableHead>메모</TableHead>
                     {/* 88px: "12건" 은 아주 짧다 — 머리글 "기회" 가 폭의 하한이다 */}
                     <TableHead className="w-[88px] text-right">기회</TableHead>
                     {/* 56px: ⋯ 버튼(32px) + 셀 좌우 여백(16px) — 기회 목록과 같다 */}
@@ -191,6 +245,10 @@ export default async function AccountsPage({
                       account._count.contacts - (primary ? 1 : 0),
                       0,
                     );
+                    // 메모는 표에서 한 줄로 접는다 (위 `collapseToLine` 주석 참고).
+                    // 공백만 들어 있던 메모는 접고 나면 빈 문자열이라 `—` 로 떨어진다.
+                    const memo = account.memo ?? "";
+                    const memoLine = collapseToLine(memo);
                     return (
                     // 행 어디를 눌러도 상세로 간다 (거래처-1) — 덮개는 회사명 링크가 만든다
                     <TableRow key={account.id} className={ROW_LINK_ROW}>
@@ -282,10 +340,51 @@ export default async function AccountsPage({
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      {/* 자릿수마다 글자폭이 같아야 세로로 읽힌다 (tabular-nums) */}
+                      {/*
+                        메모 칸 (5차 피드백 1) — 표에서는 **한 줄로 접어** 보여주고 전체는
+                        툴팁으로 편다. 툴팁은 담당자 칸과 **같은 `HintTooltip`** 이라
+                        생김새·여는 방법(호버·Tab 초점)이 칸마다 달라지지 않는다.
+                        `title` 속성으로는 뜨지 않는다 — 행 덮개가 위를 지나가므로 트리거만
+                        덮개 위로 올린다(칸 전체가 아니라 글자만, 빈 자리는 상세로 간다).
+                        메모가 비면 다른 칸과 같은 관례대로 `—` 를 놓는다.
+                      */}
+                      <TableCell className="text-sm">
+                        {memoLine ? (
+                          <HintTooltip
+                            className={`inline-block max-w-full truncate align-middle ${ROW_LINK_ABOVE}`}
+                            content={
+                              // 줄바꿈은 툴팁에서 되살린다 — 접은 것은 표 안에서뿐이다
+                              <p className="whitespace-pre-wrap">
+                                {memo.slice(0, MEMO_TOOLTIP_MAX)}
+                                {memo.length > MEMO_TOOLTIP_MAX
+                                  ? " … (거래처 상세에서 전체를 보실 수 있습니다)"
+                                  : ""}
+                              </p>
+                            }
+                          >
+                            {memoLine}
+                          </HintTooltip>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      {/*
+                        기회 칸 — 건수를 누르거나 호버하면 기회 제목이 펼쳐지고 제목을 누르면
+                        기회 상세로 간다 (5차 피드백 2). 자릿수마다 글자폭이 같아야 세로로
+                        읽힌다(tabular-nums — 트리거 쪽에 걸려 있다).
+
+                        **0건이면 열 것이 없으므로 팝오버를 붙이지 않는다.** 눌러도 빈 패널이
+                        뜨는 트리거는 사용자를 한 번 속인다. 겸사겸사 기회가 없는 행은
+                        클라이언트 컴포넌트를 아예 싣지 않는다.
+                      */}
                       <TableCell className="text-right tabular-nums">
                         {account._count.opportunities > 0 ? (
-                          `${formatNumber(account._count.opportunities)}건`
+                          <OpportunityPeek
+                            accountId={account.id}
+                            companyName={account.companyName}
+                            totalCount={account._count.opportunities}
+                            opportunities={account.opportunities}
+                          />
                         ) : (
                           <span className="text-muted-foreground">0건</span>
                         )}
