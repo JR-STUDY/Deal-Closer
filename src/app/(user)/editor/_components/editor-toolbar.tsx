@@ -16,7 +16,8 @@ import { AiReviseDialog } from "./ai-revise-dialog";
 import type { AiModelOption } from "@/lib/ai/models";
 
 type Props = {
-  documentId: string;
+  /** 문서일 때만 있다 — 없으면(표준 양식) 발송·AI 재작성을 감춘다 */
+  documentId: string | null;
   /** 본문이 잠긴 문서면 편집 도구를 감춘다 — 미리보기·발송은 남긴다 (진단 3) */
   locked: boolean;
   /** 선택 가능한 AI 모델 (AI 부분 재작성용) */
@@ -152,8 +153,8 @@ export function EditorToolbar({
         미리보기
       </Button>
 
-      {/* AI 부분 재작성 (F-215) — 결과는 새 버전으로 저장된다 */}
-      {locked ? null : (
+      {/* AI 부분 재작성 (F-215) — 결과는 새 버전으로 저장된다 (문서 전용) */}
+      {locked || !documentId ? null : (
       <AiReviseDialog
         documentId={documentId}
         getContentJson={getContentJson}
@@ -195,12 +196,15 @@ export function EditorToolbar({
           {saving ? "저장 중…" : "저장"}
         </Button>
       )}
-      <Button asChild variant="outline" className="shrink-0">
-        <Link href={`/sender/${documentId}`}>
-          <Send className="size-4" />
-          발송하기
-        </Link>
-      </Button>
+      {/* 발송은 문서에만 있다 — 양식은 발송 대상이 아니다 */}
+      {documentId ? (
+        <Button asChild variant="outline" className="shrink-0">
+          <Link href={`/sender/${documentId}`}>
+            <Send className="size-4" />
+            발송하기
+          </Link>
+        </Button>
+      ) : null}
     </div>
   );
 }

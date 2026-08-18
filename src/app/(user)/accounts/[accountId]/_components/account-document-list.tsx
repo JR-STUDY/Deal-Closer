@@ -82,7 +82,8 @@ export function AccountDocumentList({
 
       {preview ? (
         <DocumentPreviewDialog
-          documentId={preview.id}
+
+          id={preview.id}
           title={preview.title}
           open
           onOpenChange={(open) => {

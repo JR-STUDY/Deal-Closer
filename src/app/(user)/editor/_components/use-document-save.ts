@@ -33,10 +33,18 @@ export type ZeroAmountWarning = {
 };
 
 export function useDocumentSave(options: {
-  documentId: string;
+  /** 저장 대상 API (문서 또는 표준 양식) */
+  endpoint: string;
+  /** 제목이 저장되는 필드 — 문서는 title, 양식은 name */
+  titleField: "title" | "name";
+  /**
+   * 금액이 사라지는 저장을 확인창으로 막을지.
+   * 표준 양식에는 금액이 없다 — 양식에서 확인창을 띄우면 있지도 않은 금액을 말하게 된다.
+   */
+  guardAmount: boolean;
   doc: EditorDoc;
   docTitle: string;
-  /** 저장된 Document.amount — 금액이 0 으로 떨어지는지 판단하는 기준 */
+  /** 저장된 Document.amount — 금액이 0 으로 떨어지는지 판단하는 기준 (양식은 0) */
   initialAmount: number;
   locked: boolean;
   lockReason: string;
@@ -50,7 +58,9 @@ export function useDocumentSave(options: {
   setDirty: Dispatch<SetStateAction<boolean>>;
 }) {
   const {
-    documentId,
+    endpoint,
+    titleField,
+    guardAmount,
     doc,
     docTitle,
     initialAmount,
@@ -72,12 +82,12 @@ export function useDocumentSave(options: {
   const performSave = useCallback(async (): Promise<boolean> => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/documents/${documentId}`, {
+      const res = await fetch(endpoint, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           contentJson: JSON.stringify(doc),
-          title: docTitle,
+          [titleField]: docTitle,
         }),
       });
       const json = await res.json().catch(() => null);
@@ -104,12 +114,12 @@ export function useDocumentSave(options: {
     } finally {
       setSaving(false);
     }
-  }, [doc, docTitle, documentId, clippedCount, setDirty]);
+  }, [doc, docTitle, endpoint, titleField, clippedCount, setDirty]);
 
   /** 이 저장으로 금액이 사라지는가 (품목표가 비어 0 이 되는 경우만 — 근거가 없으면 서버가 보존한다) */
   const wipesAmount = useCallback(
-    () => deriveAmount(doc) === 0 && savedAmountRef.current > 0,
-    [doc],
+    () => guardAmount && deriveAmount(doc) === 0 && savedAmountRef.current > 0,
+    [doc, guardAmount],
   );
 
   const handleSave = useCallback(async () => {

@@ -4,8 +4,12 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { Lock } from "lucide-react";
 import type { EditorDoc, CatalogOption } from "@/lib/editor-schema";
-import type { DocumentEditLock } from "@/lib/document-edit";
-import type { AiModelOption } from "@/lib/ai/models";
+import {
+  targetEndpoint,
+  targetLock,
+  targetTitleField,
+  type EditorTarget,
+} from "./editor-target";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { EditorCanvas } from "./editor-canvas";
@@ -46,39 +50,22 @@ import {
  */
 
 type Props = {
-  documentId: string;
+  /** 무엇을 편집하는지 — 문서 또는 표준 양식 (`editor-target` 참고) */
+  target: EditorTarget;
   initialTitle: string;
-  initialStatus: string;
   initialDoc: EditorDoc;
-  /** 저장된 Document.amount — 저장으로 금액이 0 이 되는지 판단하는 기준 */
-  initialAmount: number;
   catalog: CatalogOption[];
-  /** 현재 문서의 버전 번호 (F-214) */
-  version: number;
-  /** 확정본 여부 (F-214) */
-  isConfirmed: boolean;
-  /** 본문 편집 잠금 (발송·계약완료·확정본·폐기) — 서버 PATCH 와 같은 판정 */
-  lock: DocumentEditLock;
-  /** 선택 가능한 AI 모델 (AI 부분 재작성용) */
-  models: AiModelOption[];
-  defaultModel: string;
-  mockProvider: boolean;
 };
 
 export function DocumentEditor({
-  documentId,
+  target,
   initialTitle,
-  initialStatus,
   initialDoc,
-  initialAmount,
   catalog,
-  version,
-  isConfirmed,
-  lock,
-  models,
-  defaultModel,
-  mockProvider,
 }: Props) {
+  /** 문서일 때만 있는 것들(상태·버전·확정본·발송·AI·금액)을 한 곳에서 좁힌다 */
+  const doc$ = target.kind === "document" ? target : null;
+  const lock = targetLock(target);
   // 문서 상태는 되돌리기 히스토리가 함께 관리한다 (진단 2)
   const { doc, setDoc, replaceDoc, undo, redo, canUndo, canRedo } =
     useDocHistory(initialDoc);
@@ -157,10 +144,13 @@ export function DocumentEditor({
 
   // 저장 · 미저장 이탈 (진단 1·3)
   const save = useDocumentSave({
-    documentId,
+    endpoint: targetEndpoint(target),
+    titleField: targetTitleField(target),
+    // 양식에는 금액이 없다 — 있지도 않은 금액이 사라진다고 물으면 안 된다
+    guardAmount: doc$ !== null,
     doc,
     docTitle,
-    initialAmount,
+    initialAmount: doc$?.initialAmount ?? 0,
     locked,
     lockReason: lock.reason,
     clippedCount,
@@ -317,7 +307,8 @@ export function DocumentEditor({
    * 버전 이력 다이얼로그의 "새 버전으로 저장"과 같은 훅을 써 동작·문구를 맞춘다.
    */
   const { createVersion, saving: creatingVersion } = useCreateVersion({
-    documentId,
+    // 양식에는 버전이 없다 — 빈 문자열이면 잠금 배너 자체가 뜨지 않아 호출되지 않는다
+    documentId: doc$?.documentId ?? "",
     getContentJson,
     onNavigate: save.goToVersion,
   });
@@ -331,22 +322,26 @@ export function DocumentEditor({
               <Input
                 value={docTitle}
                 onChange={(e) => handleTitleChange(e.target.value)}
-                aria-label="문서 제목"
-                placeholder="문서 제목"
+                aria-label={doc$ ? "문서 제목" : "양식 이름"}
+                placeholder={doc$ ? "문서 제목" : "양식 이름"}
                 className="h-auto min-w-0 flex-1 border-transparent bg-transparent px-2 py-1 text-xl font-semibold tracking-tight shadow-none hover:border-input focus-visible:border-input"
               />
-              {/* 버전 이력·확정본 (F-214) */}
-              <DocumentVersionControl
-                documentId={documentId}
-                version={version}
-                isConfirmed={isConfirmed}
-                getContentJson={getContentJson}
-                onNavigate={save.goToVersion}
-              />
-              <DocumentStatusControl
-                documentId={documentId}
-                status={initialStatus}
-              />
+              {/* 버전 이력·확정본·상태는 문서에만 있다 (F-214) */}
+              {doc$ ? (
+                <>
+                  <DocumentVersionControl
+                    documentId={doc$.documentId}
+                    version={doc$.version}
+                    isConfirmed={doc$.isConfirmed}
+                    getContentJson={getContentJson}
+                    onNavigate={save.goToVersion}
+                  />
+                  <DocumentStatusControl
+                    documentId={doc$.documentId}
+                    status={doc$.initialStatus}
+                  />
+                </>
+              ) : null}
             </div>
 
             {/* 잠긴 문서 안내 + 고치는 유일한 길 (진단 3) */}
@@ -369,7 +364,8 @@ export function DocumentEditor({
             ) : null}
 
             <EditorToolbar
-              documentId={documentId}
+              // 발송·AI 재작성은 문서에만 있다 — 양식이면 null 을 주어 감춘다
+              documentId={doc$?.documentId ?? null}
               locked={locked}
               dirty={dirty}
               saving={save.saving}
@@ -388,9 +384,9 @@ export function DocumentEditor({
               onPreview={() => setPreviewOpen(true)}
               getContentJson={getContentJson}
               onRevised={save.goToVersion}
-              models={models}
-              defaultModel={defaultModel}
-              mockProvider={mockProvider}
+              models={doc$?.models ?? []}
+              defaultModel={doc$?.defaultModel ?? ""}
+              mockProvider={doc$?.mockProvider ?? false}
             />
           </div>
 

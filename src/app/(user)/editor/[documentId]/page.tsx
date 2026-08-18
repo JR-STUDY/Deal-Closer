@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { parseContentJson, seedTemplate } from "@/lib/editor-schema";
-import { DocumentEditorLoader } from "./_components/document-editor-loader";
+import { DocumentEditorLoader } from "../_components/document-editor-loader";
 import { availableModels } from "@/lib/ai/model-access";
 import { documentEditLock } from "@/lib/document-edit";
 
@@ -56,19 +56,22 @@ export default async function EditorPage({
 
   return (
     <DocumentEditorLoader
-      documentId={document.id}
+      target={{
+        kind: "document",
+        documentId: document.id,
+        initialStatus: document.status,
+        initialAmount: document.amount,
+        version: document.version,
+        isConfirmed: document.isConfirmed,
+        // 잠금 판정은 서버(PATCH)와 같은 순수 함수를 쓴다 — 화면과 API 가 갈라지지 않게
+        lock: documentEditLock(document),
+        models,
+        defaultModel,
+        mockProvider: mock,
+      }}
       initialTitle={document.title}
-      initialStatus={document.status}
       initialDoc={initialDoc}
-      initialAmount={document.amount}
       catalog={catalog}
-      version={document.version}
-      isConfirmed={document.isConfirmed}
-      // 잠금 판정은 서버(PATCH)와 같은 순수 함수를 쓴다 — 화면과 API 가 갈라지지 않게
-      lock={documentEditLock(document)}
-      models={models}
-      defaultModel={defaultModel}
-      mockProvider={mock}
     />
   );
 }
