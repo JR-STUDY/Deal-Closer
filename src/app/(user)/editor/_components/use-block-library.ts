@@ -90,14 +90,23 @@ export function useBlockLibrary(options: {
     );
   }, []);
 
+  /**
+   * 기본 블록 수정 확정.
+   *
+   * **부수효과를 상태 갱신 함수 안에 두지 않는다.** 예전에는 `setEditBase(current => ...)`
+   * 안에서 localStorage 를 쓰고 toast 를 띄웠는데, React 는 갱신 함수를 순수 함수로
+   * 가정하고 StrictMode(개발)에서 **두 번 호출**한다 — 실측으로 toast 2개와
+   * localStorage 쓰기 2회가 나왔다. 이 프로젝트는 `use-doc-history` 에서 같은 함정을
+   * 이미 겪었다(되돌리기 스택이 두 번 쌓였다).
+   *
+   * 대신 값(`editBase`)을 밖에서 읽어 효과를 내고, 상태는 닫기만 한다.
+   */
   const saveEditBase = useCallback(() => {
-    setEditBase((current) => {
-      if (!current) return null;
-      baseDefaultsRef.current = saveBaseDefault(current.type, current.props);
-      toast.success("기본 블록을 수정했습니다.");
-      return null;
-    });
-  }, []);
+    if (!editBase) return;
+    baseDefaultsRef.current = saveBaseDefault(editBase.type, editBase.props);
+    setEditBase(null);
+    toast.success("기본 블록을 수정했습니다.");
+  }, [editBase]);
 
   const handleSaveAsCustom = useCallback(() => {
     if (!selectedBlock) return;

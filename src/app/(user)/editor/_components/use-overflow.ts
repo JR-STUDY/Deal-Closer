@@ -36,13 +36,12 @@ const TOLERANCE = 2;
  */
 export function useOverflow(
   revision: unknown,
-): [(node: HTMLElement | null) => void, OverflowState] {
+): [(node: HTMLElement | null) => (() => void) | undefined, OverflowState] {
   const [state, setState] = useState<OverflowState>({
     clipped: false,
     contentHeight: 0,
   });
   const nodeRef = useRef<HTMLElement | null>(null);
-  const observerRef = useRef<ResizeObserver | null>(null);
 
   const measure = useCallback(() => {
     const node = nodeRef.current;
@@ -57,18 +56,25 @@ export function useOverflow(
     );
   }, []);
 
-  /** 블록의 `overflow: hidden` 상자에 붙이는 ref 콜백 */
+  /**
+   * 블록의 `overflow: hidden` 상자에 붙이는 ref 콜백.
+   *
+   * **정리 함수를 돌려준다** (React 19). 예전에는 관측자를 ref 에 담아 두고 다음 호출과
+   * 언마운트 효과에서 각각 끊었는데, 같은 일을 두 곳에서 하니 어느 쪽이 책임인지
+   * 흐릿하다. 붙일 때 만들고 뗄 때 끊는 것이 한 쌍으로 보이는 편이 낫다.
+   */
   const ref = useCallback(
     (node: HTMLElement | null) => {
-      observerRef.current?.disconnect();
-      observerRef.current = null;
       nodeRef.current = node;
       if (!node) return;
 
       measure();
       const observer = new ResizeObserver(measure);
       observer.observe(node);
-      observerRef.current = observer;
+      return () => {
+        observer.disconnect();
+        nodeRef.current = null;
+      };
     },
     [measure],
   );
@@ -84,8 +90,6 @@ export function useOverflow(
       cancelled = true;
     };
   }, [revision, measure]);
-
-  useEffect(() => () => observerRef.current?.disconnect(), []);
 
   return [ref, state];
 }
