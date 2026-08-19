@@ -7,6 +7,7 @@ import {
   parseContentJson,
   type EditorDoc,
   type BlockPropsMap,
+  findMetaField,
 } from "@/lib/editor-schema";
 import {
   BATCH_BASE_TYPE,
@@ -77,14 +78,19 @@ function cloneBaseDoc(): EditorDoc | null {
   return BASE_DOC ? (JSON.parse(JSON.stringify(BASE_DOC)) as EditorDoc) : null;
 }
 
-/** clientMeta 블록의 "고객사명" 값을 치환한다. */
+/**
+ * clientMeta 블록의 거래처명 값을 치환한다.
+ * 대상은 **역할**로 찾는다 — 라벨 문자열로 찾으면 사용자가 라벨을 고친 문서에서 조용히 빗나간다.
+ */
 function applyClientName(doc: EditorDoc, clientName: string): void {
   const meta = doc.blocks.find((b) => b.type === "clientMeta");
   if (!meta) return;
   const props = meta.props as BlockPropsMap["clientMeta"];
   if (!Array.isArray(props.fields)) return;
+  const target = findMetaField(props.fields, "clientName");
+  if (!target) return;
   props.fields = props.fields.map((f) =>
-    f.label?.includes("고객사") ? { ...f, value: clientName } : f,
+    f.id === target.id ? { ...f, value: clientName } : f,
   );
 }
 

@@ -1,9 +1,11 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 import { DOCUMENT_STATUSES, DOCUMENT_TYPES } from "@/lib/constants";
 import {
   parseContentJson,
+  contentJsonSizeError,
   deriveAmount,
   extractClientName,
 } from "@/lib/editor-schema";
@@ -29,8 +31,11 @@ function toNonNegativeInt(value: unknown): number {
 /** GET /api/documents/:id — 단건 + 라인아이템 */
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
-  const doc = await prisma.document.findUnique({
-    where: { id },
+  const user = await getCurrentUser();
+  // 조직 범위로 좁혀 조회한다 — 다른 조직의 문서 id 는 404 로 끝나야 한다
+  // (형제 라우트 preview·versions·send·revise 와 같은 규칙)
+  const doc = await prisma.document.findFirst({
+    where: { id, orgId: user.orgId },
     include: {
       items: { orderBy: { sortOrder: "asc" } },
       author: { select: { id: true, name: true } },
@@ -58,7 +63,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return fail("잘못된 요청 본문입니다.");
   }
 
-  const existing = await prisma.document.findUnique({ where: { id } });
+  const user = await getCurrentUser();
+  // 조직 범위로 좁힌다 — 소유 확인 없이 수정하면 다른 조직 문서를 고칠 수 있다
+  const existing = await prisma.document.findFirst({
+    where: { id, orgId: user.orgId },
+  });
   if (!existing) return fail("문서를 찾을 수 없습니다.", 404);
 
   /*
@@ -114,6 +123,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   // ── contentJson 파생 (블록 캔버스 에디터) ──
   const contentJson =
     typeof body.contentJson === "string" ? body.contentJson : undefined;
+  // 크기 상한은 서버가 판정한다 — 인스펙터의 1MB 이미지 검사는 화면 검사일 뿐이다
+  if (contentJson) {
+    const tooBig = contentJsonSizeError(contentJson);
+    if (tooBig) return fail(tooBig, 413);
+  }
   const parsed = contentJson ? parseContentJson(contentJson) : null;
   /*
    * `deriveAmount` 는 품목표 블록이 없으면 `null` 을 준다 — "합계 0원"이 아니라
@@ -204,7 +218,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
  */
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const { id } = await params;
-  const existing = await prisma.document.findUnique({ where: { id } });
+  const user = await getCurrentUser();
+  // 조직 범위로 좁힌다 — 삭제는 되돌릴 수 없으므로 소유 확인이 특히 중요하다
+  const existing = await prisma.document.findFirst({
+    where: { id, orgId: user.orgId },
+  });
   if (!existing) return fail("문서를 찾을 수 없습니다.", 404);
 
   await prisma.$transaction(async (tx) => {

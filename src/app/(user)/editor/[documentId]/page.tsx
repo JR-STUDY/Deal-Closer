@@ -16,8 +16,10 @@ export default async function EditorPage({
   // getCurrentOrg 는 React.cache 로 사실상 무비용 → 먼저 해소 후 document·branding·catalog 병렬 (async-parallel)
   const org = await getCurrentOrg();
   const [document, branding, catalog] = await Promise.all([
-    prisma.document.findUnique({
-      where: { id: documentId },
+    // 조직 범위로 좁혀 조회한다 — 다른 조직의 문서 id 는 404 로 끝나야 한다
+    // (양식 편집 페이지·발송 페이지와 같은 규칙)
+    prisma.document.findFirst({
+      where: { id: documentId, orgId: org.id },
       include: { items: { orderBy: { sortOrder: "asc" } } },
     }),
     prisma.branding.findUnique({ where: { orgId: org.id } }),

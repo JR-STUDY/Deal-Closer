@@ -143,7 +143,101 @@ export type CatalogOption = {
   unit: string;
 };
 
-export type MetaField = { id: string; label: string; value: string };
+/**
+ * 라벨/값 정보 필드의 **역할** — 코드가 이 필드를 찾을 때 쓰는 안정된 식별자.
+ *
+ * 예전에는 라벨 문자열이 곧 키였다(`label.includes("고객사")` · `label === "상호"`).
+ * 그래서 사용자가 라벨을 `거래처명` 으로 바꾸면 조회가 끊겼고, `Document.clientName`
+ * 은 PATCH 에서 `undefined` 가 되어 **문서 목록에 옛 거래처명이 영구히 남았다**
+ * (본문과 목록이 서로 다른 거래처를 주장한다). 캔버스에서 라벨을 더블클릭 한 번으로
+ * 고칠 수 있게 된 뒤로는 걸리기 쉬운 함정이 됐다.
+ *
+ * 옵셔널이다 — 예전 `contentJson` 에는 없으므로 `parseContentJson` 이 라벨로 추정해
+ * 채워 주고(치유), 다음 저장에 함께 남는다. 필수로 만들면 예전 문서가 통째로 어긋난다.
+ */
+export type MetaFieldRole = "clientName" | "supplierName";
+
+export type MetaField = {
+  id: string;
+  label: string;
+  value: string;
+  /** 코드가 이 필드를 찾는 열쇠. 없으면 라벨로 추정한다(예전 문서) */
+  role?: MetaFieldRole;
+};
+
+/** 역할별로 예전 문서에서 라벨을 추정할 때 쓰는 조각 (치유·폴백 전용) */
+const ROLE_LABEL_HINT: Record<MetaFieldRole, string> = {
+  clientName: "고객사",
+  supplierName: "상호",
+};
+
+/**
+ * 역할에 해당하는 필드를 찾는다 — **역할이 먼저, 라벨은 폴백**이다.
+ *
+ * 라벨 폴백은 `role` 이 없는 예전 문서를 위한 것이고, 역할을 가진 필드가 하나라도
+ * 있으면 라벨은 보지 않는다(라벨을 바꿔도 조회가 유지되는 이유).
+ */
+export function findMetaField(
+  fields: MetaField[] | undefined,
+  role: MetaFieldRole,
+): MetaField | null {
+  if (!Array.isArray(fields)) return null;
+  const byRole = fields.find((f) => f?.role === role);
+  if (byRole) return byRole;
+  const hint = ROLE_LABEL_HINT[role];
+  return fields.find((f) => typeof f?.label === "string" && f.label.includes(hint)) ?? null;
+}
+
+/**
+ * 역할이 비어 있는 필드에 역할을 채운다.
+ *
+ * 두 가지 단서를 쓴다.
+ *  ① **라벨 조각** — 예전 `contentJson` 치유용 (`고객사명` → clientName).
+ *  ② **값 일치**(`valueHints`) — 라벨을 **모델이 정하는** AI 생성 경로용. 거래처명이
+ *     `수요기관`·`발주처` 같은 라벨로 오면 라벨 조각으로는 영영 못 찾는데, 그 값이
+ *     무엇인지는 호출측이 알고 있다(`spec.clientName` · 브랜딩 회사명).
+ *
+ * 이미 그 역할을 가진 필드가 있으면 더 만들지 않는다 — 역할은 블록당 하나여야
+ * 조회 결과가 흔들리지 않는다.
+ */
+export function healMetaFieldRoles(
+  fields: MetaField[],
+  valueHints?: Partial<Record<MetaFieldRole, string>>,
+): MetaField[] {
+  if (!Array.isArray(fields)) return fields;
+  const taken = new Set(fields.map((f) => f?.role).filter(Boolean));
+  const roles = Object.keys(ROLE_LABEL_HINT) as MetaFieldRole[];
+  const norm = (v: unknown) => String(v ?? "").trim();
+  let changed = false;
+
+  const claim = (f: MetaField, role: MetaFieldRole) => {
+    taken.add(role);
+    changed = true;
+    return { ...f, role };
+  };
+
+  // 1차: 라벨 조각 (예전 문서). 라벨이 관례를 따르는 경우가 대부분이다
+  let next = fields.map((f) => {
+    if (!f || f.role) return f;
+    const role = roles.find(
+      (r) => !taken.has(r) && typeof f.label === "string" && f.label.includes(ROLE_LABEL_HINT[r]),
+    );
+    return role ? claim(f, role) : f;
+  });
+
+  // 2차: 값 일치 (AI 가 라벨을 정한 경우). 빈 값은 단서가 되지 않는다
+  if (valueHints) {
+    next = next.map((f) => {
+      if (!f || f.role || !norm(f.value)) return f;
+      const role = roles.find(
+        (r) => !taken.has(r) && norm(valueHints[r]) !== "" && norm(valueHints[r]) === norm(f.value),
+      );
+      return role ? claim(f, role) : f;
+    });
+  }
+
+  return changed ? next : fields;
+}
 
 /**
  * 표 병합 범위 — 시작 셀(r, c)에서 rs 행 × cs 열.
@@ -365,7 +459,7 @@ export function defaultProps(type: BlockType): AnyBlockProps {
       return {
         labelWidth: 72,
         fields: [
-          { id: uid(), label: "상호", value: "" },
+          { id: uid(), label: "상호", value: "", role: "supplierName" as const },
           { id: uid(), label: "대표자", value: "" },
           { id: uid(), label: "등록번호", value: "" },
           { id: uid(), label: "주소", value: "" },
@@ -377,7 +471,7 @@ export function defaultProps(type: BlockType): AnyBlockProps {
       return {
         labelWidth: 96,
         fields: [
-          { id: uid(), label: "고객사명", value: "" },
+          { id: uid(), label: "고객사명", value: "", role: "clientName" as const },
           { id: uid(), label: "수신자", value: "" },
           { id: uid(), label: "견적일", value: "" },
           { id: uid(), label: "유효기간", value: "" },
@@ -789,6 +883,37 @@ function isValidBlock(b: unknown): b is Block {
 }
 
 /**
+ * 저장할 수 있는 `contentJson` 최대 바이트.
+ *
+ * 이미지는 `dataUrl` 로 본문 안에 들어간다(별도 저장소가 없다). 인스펙터가 1MB 로
+ * 막지만 그건 **화면 검사**이고 서버는 본문을 그대로 저장했다 — 프로젝트가 이미
+ * 겪은 교훈(문서 잠금)과 같은 구조다: 화면에서만 막으면 API 로 그대로 통한다.
+ * 본문 전체에 상한을 두면 이미지 몇 장이든 한 규칙으로 묶인다.
+ *
+ * 4MB 는 넉넉하다 — 현재 문서 53건의 contentJson 합계가 21KB 다.
+ */
+export const MAX_CONTENT_JSON_BYTES = 4 * 1024 * 1024;
+
+/** 본문이 상한을 넘으면 사용자에게 보일 이유, 넘지 않으면 null */
+export function contentJsonSizeError(raw: string): string | null {
+  const bytes = new TextEncoder().encode(raw).length;
+  if (bytes <= MAX_CONTENT_JSON_BYTES) return null;
+  const mb = (n: number) => (n / 1024 / 1024).toFixed(1);
+  return `문서 본문이 너무 큽니다 (${mb(bytes)}MB / 최대 ${mb(
+    MAX_CONTENT_JSON_BYTES,
+  )}MB). 이미지 크기를 줄여 주세요.`;
+}
+
+/** 정보 블록(공급자·거래처)의 필드 역할을 채운 props — 그 외 블록은 그대로 */
+function healBlockMetaRoles(block: Block): Block["props"] {
+  if (block.type !== "supplier" && block.type !== "clientMeta") return block.props;
+  const props = block.props as BlockPropsMap["clientMeta"];
+  if (!Array.isArray(props.fields)) return block.props;
+  const fields = healMetaFieldRoles(props.fields);
+  return fields === props.fields ? block.props : { ...props, fields };
+}
+
+/**
  * contentJson 문자열을 EditorDoc 으로 안전 파싱한다.
  * 형태가 어긋나거나 유효 블록이 없으면 null 을 반환하고,
  * 개별 블록도 최소 스키마를 검증해 렌더 크래시를 방지한다.
@@ -814,6 +939,13 @@ export function parseContentJson(
       // (예전 "맨 뒤로" 가 min-1 로 내려 음수를 만들었다. 지금은 reorderZ 가 1..n 을 지킨다.)
       z: typeof b.z === "number" ? Math.max(1, Math.trunc(b.z)) : 1,
       locked: typeof b.locked === "boolean" ? b.locked : false,
+      /*
+       * 정보 필드의 **역할**을 여기서 채운다 (예전 contentJson 에는 없다).
+       * 지금 채워 두면 다음 저장에 함께 남으므로, 그 뒤로는 라벨을 고쳐도 거래처명·
+       * 공급자명 조회가 끊기지 않는다. 마이그레이션 없이 읽는 쪽에서 치유하는 방식은
+       * 음수 z 와 같은 선례다.
+       */
+      props: healBlockMetaRoles(b),
     }));
     return {
       version: 1,
@@ -829,14 +961,15 @@ export function parseContentJson(
   }
 }
 
-/** 거래처 메타 블록에서 "고객사명" 값을 추출한다 (Document.clientName 동기화용). */
+/**
+ * 거래처 메타 블록에서 거래처명을 추출한다 (`Document.clientName` 동기화용).
+ * 조회는 **역할**로 한다 — 라벨을 `거래처명` 으로 바꿔도 목록의 거래처명이 끊기지 않는다.
+ */
 export function extractClientName(doc: EditorDoc): string | null {
   const meta = doc.blocks.find((b) => b.type === "clientMeta");
   if (!meta) return null;
   const fields = (meta.props as BlockPropsMap["clientMeta"]).fields;
-  if (!Array.isArray(fields)) return null;
-  const field = fields.find((f) => f.label?.includes("고객사"));
-  const value = field?.value?.trim();
+  const value = findMetaField(fields, "clientName")?.value?.trim();
   return value ? value : null;
 }
 
@@ -877,14 +1010,15 @@ export function seedTemplate(input: {
 
   const supplier = createBlock("supplier", { x: 437, y: 130 });
   const supplierProps = supplier.props as BlockPropsMap["supplier"];
-  // 첫 필드(상호) 값에 공급자명을 시드한다.
+  // 공급자명은 **역할**로 찾는다 — 라벨 문자열 비교는 라벨을 고치는 순간 끊긴다
+  const supplierNameField = findMetaField(supplierProps.fields, "supplierName");
   supplierProps.fields = supplierProps.fields.map((f) =>
-    f.label === "상호" ? { ...f, value: input.supplierName } : f,
+    f.id === supplierNameField?.id ? { ...f, value: input.supplierName } : f,
   );
 
   const clientMeta = createBlock("clientMeta", { x: 40, y: 130 });
   (clientMeta.props as BlockPropsMap["clientMeta"]).fields = [
-    { id: uid(), label: "고객사명", value: input.clientName ?? "" },
+    { id: uid(), label: "고객사명", value: input.clientName ?? "", role: "clientName" },
     { id: uid(), label: "수신자", value: "" },
     { id: uid(), label: "견적일", value: "" },
     { id: uid(), label: "유효기간", value: "" },

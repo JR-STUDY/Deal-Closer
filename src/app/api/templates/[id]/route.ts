@@ -3,7 +3,10 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 import { TEMPLATE_SELECT } from "@/lib/template";
-import { parseContentJson } from "@/lib/editor-schema";
+import {
+  parseContentJson,
+  contentJsonSizeError,
+} from "@/lib/editor-schema";
 import { DOCUMENT_TYPES, TEMPLATE_SCOPES } from "@/lib/constants";
 
 type Params = { params: Promise<{ id: string }> };
@@ -61,6 +64,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     !(TEMPLATE_SCOPES as readonly string[]).includes(body.scope)
   ) {
     return fail("알 수 없는 문서함 구분입니다.");
+  }
+  // 양식 본문도 문서와 같은 크기 상한을 쓴다 (같은 에디터·같은 이미지 경로다)
+  if (typeof body.contentJson === "string") {
+    const tooBig = contentJsonSizeError(body.contentJson);
+    if (tooBig) return fail(tooBig, 413);
   }
   if (typeof body.contentJson === "string" && !parseContentJson(body.contentJson)) {
     return fail("양식 본문 형식이 올바르지 않습니다.");

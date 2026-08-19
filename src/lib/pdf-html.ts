@@ -24,6 +24,8 @@ import {
   type BlockPropsMap,
   type EditorDoc,
   type FontFamily,
+  findMetaField,
+  type MetaFieldRole,
 } from "./editor-schema";
 import { formatKRW } from "./format";
 
@@ -209,8 +211,12 @@ function renderText(props: BlockPropsMap["text"]): string {
   return `<div class="blk-text"${style}>${escapeHtml(props.text)}</div>`;
 }
 
-/** 값이 빈 필드에만 적용할 대체값 — 사용자가 입력한 값은 절대 덮어쓰지 않는다 */
-type FieldFallback = { match: (label: string) => boolean; value: string };
+/**
+ * 값이 빈 필드에만 적용할 대체값 — 사용자가 입력한 값은 절대 덮어쓰지 않는다.
+ * 대상은 **역할**로 지목한다(`findMetaField`) — 예전에는 라벨 문자열로 찾아서
+ * 사용자가 `상호` 라벨을 고치면 폴백이 조용히 끊겼다.
+ */
+type FieldFallback = { role: MetaFieldRole; value: string };
 
 /** 라벨/값 2열 표 (공급자·거래처 메타 공용) */
 function renderFieldTable(
@@ -220,12 +226,17 @@ function renderFieldTable(
 ): string {
   const fields = Array.isArray(props.fields) ? props.fields : [];
   const labelWidth = px(clamp(props.labelWidth, 0, MAX_CANVAS_SIZE));
+  // 폴백 대상 필드를 역할로 미리 찾아 둔다 (필드 id 로 비교하면 라벨과 무관해진다)
+  const fallbackByFieldId = new Map(
+    fallbacks
+      .map((c) => [findMetaField(fields, c.role)?.id, c.value] as const)
+      .filter((pair): pair is readonly [string, string] => typeof pair[0] === "string"),
+  );
   const rows = fields
     .map((f) => {
       const label = String(f.label ?? "");
       const value =
-        String(f.value ?? "").trim() ||
-        (fallbacks.find((c) => c.match(label))?.value ?? "");
+        String(f.value ?? "").trim() || (fallbackByFieldId.get(f.id) ?? "");
       return `<tr><th${styleAttr({ width: labelWidth })}>${escapeHtml(
         label,
       )}</th><td>${escapeHtml(value)}</td></tr>`;
@@ -385,7 +396,7 @@ function renderBlockContent(block: Block, branding: PdfBranding | null): string 
         block.props as BlockPropsMap["supplier"],
         "blk-supplier",
         branding?.companyName
-          ? [{ match: (l) => l.includes("상호"), value: branding.companyName }]
+          ? [{ role: "supplierName" as const, value: branding.companyName }]
           : [],
       );
     case "clientMeta":
