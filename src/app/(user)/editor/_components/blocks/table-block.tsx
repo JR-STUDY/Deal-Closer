@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { Block, BlockPropsMap, Align } from "@/lib/editor-schema";
 import { normalizeColWidths, normalizeRowHeights, tableLayout } from "@/lib/editor-schema";
 import { sameCell, type CellRef } from "@/lib/editor-cell";
@@ -61,29 +61,6 @@ export function TableBlock({
   const tableRef = useRef<HTMLTableElement>(null);
 
   /**
-   * 지금 화면에 그려진 열 비율(%). 저장된 폭이 없을 때의 시작점이다.
-   *
-   * 병합이 없는 행에서만 잰다 — colspan 이 걸린 행의 칸 폭은 여러 열의 합이라
-   * 열별 폭을 알 수 없다. 그런 행이 없으면 null 을 주고 균등 분배로 시작한다.
-   */
-  function measuredPercents(): number[] | null {
-    const table = tableRef.current;
-    if (!table || colCount === 0) return null;
-    const plainRow = layout.findIndex(
-      (row) =>
-        row.length === colCount &&
-        row.every((cell) => !cell.skip && cell.rowSpan === 1 && cell.colSpan === 1),
-    );
-    if (plainRow < 0) return null;
-    const tr = table.rows[plainRow];
-    if (!tr || tr.cells.length !== colCount) return null;
-    const px = [...tr.cells].map((cell) => cell.offsetWidth);
-    const total = px.reduce((a, b) => a + b, 0);
-    if (total <= 0) return null;
-    return px.map((w) => (w / total) * 100);
-  }
-
-  /**
    * 경계를 끌어 열 폭을 바꾼다.
    * 이동량은 **표 폭 대비 %** 로 환산한다 — 캔버스에 `transform: scale()` 이 걸려 있어도
    * 같은 비율이 나오도록 화면 px 를 표의 화면 폭으로 나눈다(둘 다 배율이 곱해져 상쇄된다).
@@ -92,11 +69,18 @@ export function TableBlock({
     // Rnd 가 블록 드래그를 시작하지 않게 막는다
     e.stopPropagation();
     e.preventDefault();
-    const width = wrapRef.current?.getBoundingClientRect().width ?? 0;
+    /*
+     * 표 폭은 **이벤트가 준 요소**에서 잰다 (손잡이의 부모가 곧 감싸는 상자다).
+     * ref 로 읽으면 "렌더 중 ref 접근" 으로 잡히고(react-hooks/refs), 상태로 들고 있으면
+     * 확대 배율이 바뀔 때 낡은 값이 된다 — 배율은 블록을 바꾸지 않아 다시 재지 않는다.
+     * 여기서 재면 배율이 걸린 화면 폭을 그때그때 얻는다(이동량도 화면 px 라 상쇄된다).
+     */
+    const width =
+      e.currentTarget.parentElement?.getBoundingClientRect().width ?? 0;
     if (width <= 0) return;
     const startX = e.clientX;
-    // 저장된 폭이 없으면 지금 보이는 비율에서 이어 간다 (드래그 시작에 표가 튀지 않게)
-    const baseline = p.colWidths && p.colWidths.length > 0 ? null : measuredPercents();
+    // 저장된 폭이 없으면 지금 보이는 비율에서 이어 간다 (조정 시작에 표가 튀지 않게)
+    const baseline = columnBaseline();
     let last = 0;
     const onMove = (ev: MouseEvent) => {
       const percent = ((ev.clientX - startX) / width) * 100;
@@ -117,26 +101,67 @@ export function TableBlock({
    * 행 높이는 내용에 따라 제각각이라 **실제로 재야** 한다.
    */
   const [rowGeo, setRowGeo] = useState<{ bottom: number; height: number }[]>([]);
-  const measureRows = useCallback(() => {
+  /**
+   * 지금 화면에 그려진 열 비율(%) — 저장된 폭이 없을 때 조정의 시작점이다.
+   * 없으면 첫 조정에 표가 균등 분배로 튄다.
+   *
+   * **상태로 둔다.** 예전에는 조정을 시작할 때 ref 로 DOM 을 직접 쟀는데, 그러면
+   * 렌더 중 ref 를 읽는 함수를 이벤트 핸들러에 넘기는 모양이 되어 규칙에 걸린다
+   * (react-hooks/refs). 행 높이와 똑같이 레이아웃 직후 한 번 재서 들고 있으면 된다.
+   */
+  const [colPercents, setColPercents] = useState<number[] | null>(null);
+  /*
+   * 레이아웃 직후 행 높이와 열 비율을 잰다.
+   *
+   * 효과 안에서 ref 를 읽는 것은 규칙에 맞다 — 예전처럼 이벤트 핸들러가 부르는 함수에서
+   * 재면 "렌더 중 ref 읽기" 로 잡힌다(react-hooks/refs). 내용·폭이 바뀌면 다시 잰다.
+   */
+  useLayoutEffect(() => {
     const table = tableRef.current;
     const wrap = wrapRef.current;
     if (!table || !wrap) return;
+
     const base = wrap.getBoundingClientRect().top;
-    const next = [...table.rows].map((tr) => {
+    const rows = [...table.rows].map((tr) => {
       const r = tr.getBoundingClientRect();
       return { bottom: Math.round(r.bottom - base), height: Math.round(r.height) };
     });
     setRowGeo((current) =>
-      current.length === next.length &&
-      current.every((c, i) => c.bottom === next[i].bottom && c.height === next[i].height)
+      current.length === rows.length &&
+      current.every((c, i) => c.bottom === rows[i].bottom && c.height === rows[i].height)
         ? current
-        : next,
+        : rows,
     );
-  }, []);
-  // 내용·폭이 바뀌면 행 높이도 바뀐다 — 블록이 갱신될 때마다 다시 잰다
-  useLayoutEffect(() => {
-    measureRows();
-  }, [block, measureRows]);
+
+    /*
+     * 열 비율은 **병합이 없는 행에서만** 잰다 — colspan 이 걸린 행의 칸 폭은 여러 열의
+     * 합이라 열별 폭을 알 수 없다. 그런 행이 없으면 null 이고 균등 분배로 시작한다.
+     */
+    const plainRow = layout.findIndex(
+      (row) =>
+        row.length === colCount &&
+        row.every((cell) => !cell.skip && cell.rowSpan === 1 && cell.colSpan === 1),
+    );
+    const tr = plainRow >= 0 ? table.rows[plainRow] : null;
+    const px =
+      tr && tr.cells.length === colCount
+        ? [...tr.cells].map((cell) => cell.offsetWidth)
+        : null;
+    const total = px?.reduce((a, b) => a + b, 0) ?? 0;
+    const percents = px && total > 0 ? px.map((w) => (w / total) * 100) : null;
+    setColPercents((current) => {
+      if (current === null && percents === null) return current;
+      if (
+        current !== null &&
+        percents !== null &&
+        current.length === percents.length &&
+        current.every((c, i) => Math.abs(c - percents[i]) < 0.01)
+      ) {
+        return current;
+      }
+      return percents;
+    });
+  }, [block, layout, colCount]);
 
   function beginRowDrag(index: number, e: React.MouseEvent) {
     e.stopPropagation();
@@ -155,6 +180,46 @@ export function TableBlock({
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+  }
+
+  /** 저장된 폭이 있으면 그것을 쓰고, 없으면 화면에서 잰 비율에서 이어 간다 */
+  function columnBaseline(): number[] | null {
+    return p.colWidths && p.colWidths.length > 0 ? null : colPercents;
+  }
+
+  /*
+   * 키보드로도 폭·높이를 바꾼다.
+   *
+   * 드래그만 두면 마우스 없이는 표를 조정할 방법이 아예 없다 — 이 프로젝트는 같은 상황에
+   * 대해 이미 규칙을 갖고 있다("단계 변경 UI 는 드래그 전용으로 만들지 않는다", ACC_*).
+   * 인스펙터에도 폭·높이 입력이 없으므로 여기가 유일한 경로다.
+   *
+   * 방향키는 **캔버스의 블록 이동과 같은 키**다 — `stopPropagation` 으로 삼켜야 손잡이에
+   * 포커스를 둔 채 누를 때 블록이 함께 움직이지 않는다.
+   */
+  const COL_STEP = 1; // %
+  const ROW_STEP = 4; // px
+  const COARSE = 4; // ⇧ 를 누르면 이만큼 곱한다
+
+  function onColumnKeyDown(index: number, e: React.KeyboardEvent) {
+    const dir = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+    if (dir === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onResizeColumn?.(
+      index,
+      dir * COL_STEP * (e.shiftKey ? COARSE : 1),
+      columnBaseline(),
+    );
+  }
+
+  function onRowKeyDown(index: number, e: React.KeyboardEvent) {
+    const dir = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+    if (dir === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const measured = rowGeo[index]?.height ?? 0;
+    onResizeRow?.(index, dir * ROW_STEP * (e.shiftKey ? COARSE : 1), measured);
   }
 
   /** 경계의 왼쪽부터 누적 위치(%) — 마지막 열 오른쪽 끝에는 손잡이를 두지 않는다 */
@@ -232,10 +297,13 @@ export function TableBlock({
             key={`row-${i}`}
             role="separator"
             aria-orientation="horizontal"
-            aria-label={`${i + 1}번째 행 높이`}
+            aria-label={`${i + 1}번째 행 높이 (방향키로 조정)`}
+            aria-valuenow={geo.height}
+            tabIndex={0}
             onMouseDown={(e) => beginRowDrag(i, e)}
+            onKeyDown={(e) => onRowKeyDown(i, e)}
             onDoubleClick={(e) => e.stopPropagation()}
-            className="absolute inset-x-0 z-10 h-2 -translate-y-1/2 cursor-row-resize hover:bg-primary/30"
+            className="absolute inset-x-0 z-10 h-2 -translate-y-1/2 cursor-row-resize hover:bg-primary/30 focus-visible:bg-primary/50 focus-visible:outline-2 focus-visible:outline-primary"
             style={{ top: geo.bottom }}
           />
         ))
@@ -248,10 +316,15 @@ export function TableBlock({
             key={i}
             role="separator"
             aria-orientation="vertical"
-            aria-label={`${i + 1}번째와 ${i + 2}번째 열 경계`}
+            aria-label={`${i + 1}번째와 ${i + 2}번째 열 경계 (방향키로 조정)`}
+            aria-valuenow={Math.round(left)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            tabIndex={0}
             onMouseDown={(e) => beginColumnDrag(i, e)}
+            onKeyDown={(e) => onColumnKeyDown(i, e)}
             onDoubleClick={(e) => e.stopPropagation()}
-            className="absolute top-0 z-10 h-full w-2 -translate-x-1/2 cursor-col-resize hover:bg-primary/30"
+            className="absolute top-0 z-10 h-full w-2 -translate-x-1/2 cursor-col-resize hover:bg-primary/30 focus-visible:bg-primary/50 focus-visible:outline-2 focus-visible:outline-primary"
             style={{ left: `${left}%` }}
           />
         ))
