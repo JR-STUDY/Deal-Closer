@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarClock, MoreHorizontal, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { OPPORTUNITY_STAGE_LABELS, type OpportunityStage } from "@/lib/constants";
+import {
+  OPPORTUNITY_STAGE_LABELS,
+  type OpportunityStage,
+} from "@/lib/constants";
 import { parseDateInput, type OpportunityDTO } from "@/lib/opportunity";
 import { summarizeByStage } from "@/lib/pipeline";
 import { formatDate, formatKRW, formatNumber } from "@/lib/format";
@@ -52,12 +55,15 @@ export function OpportunityBoard({
   opportunities: OpportunityDTO[];
 }) {
   const router = useRouter();
-  const { request, pending, cancel, confirm, isSaving } = useStageChange({
-    onChanged: () => router.refresh(),
-  });
+  const { request, pending, cancel, confirm, confirmLost, isSaving } =
+    useStageChange({
+      onChanged: () => router.refresh(),
+    });
 
   // 낙관적 단계 보정치 (id → 옮겨 놓은 단계). 저장 성공 후 서버 데이터가 도착하면 버린다.
-  const [overrides, setOverrides] = useState<Record<string, OpportunityStage>>({});
+  const [overrides, setOverrides] = useState<Record<string, OpportunityStage>>(
+    {},
+  );
   const [source, setSource] = useState(opportunities);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropStage, setDropStage] = useState<OpportunityStage | null>(null);
@@ -123,8 +129,8 @@ export function OpportunityBoard({
   return (
     <>
       <p className="text-xs text-muted-foreground">
-        카드를 다른 단계로 끌어다 놓으면 단계가 바뀝니다. 마우스를 쓰기 어려우시면
-        카드의 ⋯ 메뉴에서 ‘단계 변경’ 을 선택하셔도 됩니다.
+        카드를 다른 단계로 끌어다 놓으면 단계가 바뀝니다. 마우스를 쓰기
+        어려우시면 카드의 ⋯ 메뉴에서 ‘단계 변경’ 을 선택하셔도 됩니다.
       </p>
 
       <div className="flex gap-4 overflow-x-auto pb-2">
@@ -184,6 +190,7 @@ export function OpportunityBoard({
         isSaving={isSaving}
         onCancel={cancel}
         onConfirm={confirm}
+        onConfirmLost={confirmLost}
       />
     </>
   );

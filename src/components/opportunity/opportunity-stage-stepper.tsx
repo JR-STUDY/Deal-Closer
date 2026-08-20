@@ -404,6 +404,7 @@ export function OpportunityStageStepper({
         isSaving={stageChange.isSaving}
         onCancel={stageChange.cancel}
         onConfirm={stageChange.confirm}
+        onConfirmLost={stageChange.confirmLost}
       />
     </div>
   );

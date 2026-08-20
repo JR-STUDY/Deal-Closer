@@ -129,6 +129,7 @@ export function OpportunityRowActions({
         isSaving={stageChange.isSaving}
         onCancel={stageChange.cancel}
         onConfirm={stageChange.confirm}
+        onConfirmLost={stageChange.confirmLost}
       />
 
       {isEditing ? (
