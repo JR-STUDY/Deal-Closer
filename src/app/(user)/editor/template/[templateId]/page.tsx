@@ -21,9 +21,10 @@ export default async function TemplateEditorPage({
 }: {
   params: Promise<{ templateId: string }>;
 }) {
-  const { templateId } = await params;
+  // params 와 조직 조회는 서로 독립이다 — 순차로 기다리면 왕복이 하나 늘어난다
+  // (성능 규칙 ①: 독립 조회는 Promise.all 로 묶는다. generator/page.tsx 와 같은 형태)
+  const [{ templateId }, org] = await Promise.all([params, getCurrentOrg()]);
 
-  const org = await getCurrentOrg();
   const [template, branding, catalog] = await Promise.all([
     prisma.template.findFirst({ where: { id: templateId, orgId: org.id } }),
     prisma.branding.findUnique({ where: { orgId: org.id } }),
