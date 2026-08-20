@@ -6,6 +6,8 @@
  * (`src/lib/contact.ts`, 거래처-8). 이 파일은 회사 자체의 정보만 본다.
  */
 
+import type { Prisma } from "@/generated/prisma/client";
+import { OPPORTUNITY_PEEK_LIMIT } from "./constants";
 import type { ContactDTO } from "./contact";
 
 // ── 저장 제약 (정책 VAL_*) ──
@@ -168,3 +170,45 @@ export function accountsWhere(orgId: string, query: string) {
     ],
   };
 }
+
+/**
+ * 거래처 **목록 한 행**이 필요한 관계 데이터 (F-102 · 거래처-3).
+ *
+ * 조회는 페이지가 하고 표는 `_components/accounts-table` 이 그리는데, 둘이 같은 모양을
+ * 봐야 해서 조회 모양을 여기 한 곳에 둔다(`OPPORTUNITY_DTO_SELECT` 와 같은 선례).
+ * 표가 쓰는 필드를 빼면 이 상수에서 파생된 `AccountListRow` 타입이 곧바로 타입 오류를 낸다.
+ */
+export const ACCOUNT_LIST_INCLUDE = {
+  _count: { select: { opportunities: true, contacts: true } },
+  // 목록에 노출하는 담당자는 **대표 1명뿐**이다 (거래처-8).
+  // 전원을 실어 오면 행마다 조회량이 담당자 수만큼 늘고, 보여줄 곳도 없다.
+  contacts: { where: { isPrimary: true } },
+  /**
+   * 기회 칸 팝오버가 펼칠 **제목 몇 건** (5차 피드백 2).
+   *
+   * 건수만 필요할 때는 `_count` 로 충분했지만, 제목을 보여주려면 기회를 실제로 읽어야
+   * 한다. **거래처마다 따로 조회하지 않는다** — 이 `include` 는 목록 조회에 딸린 관계
+   * 로드라 Prisma 가 한 페이지분(거래처 10곳)을 **한 번의 질의**로 가져온다. 행을
+   * 그리며 `prisma` 를 다시 부르는 것이 N+1 이고, 여기서는 그 길을 열지 않는다.
+   *
+   * `take` 로 **거래처당 상한을 DB 에서 건다** — 기회가 200건인 거래처 한 곳이 한
+   * 화면의 조회량을 통째로 끌어올리지 못한다. 전체 건수는 위의 `_count` 가 이미 들고
+   * 있으므로, 잘린 만큼은 팝오버가 "외 N건" 으로 알린다.
+   *
+   * 정렬은 **기회 목록의 기본 정렬과 같은 `updatedAt desc`** 다
+   * (`DEFAULT_OPPORTUNITY_SORT`). 두 화면이 다른 순서를 주장하면 "이 거래처의 기회
+   * 5건" 이 기회 목록에서 본 차례와 달라 같은 데이터로 읽히지 않는다. 최근에 손댄
+   * 기회가 대체로 지금 들여다보는 기회이기도 하다. 같은 시각이 여럿일 때를 대비해
+   * `id` 를 마지막 기준으로 붙인다(DB 는 동순위 순서를 보장하지 않는다).
+   */
+  opportunities: {
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+    take: OPPORTUNITY_PEEK_LIMIT,
+    select: { id: true, name: true, stage: true },
+  },
+} satisfies Prisma.AccountInclude;
+
+/** 거래처 목록 한 행 — 페이지가 `ACCOUNT_LIST_INCLUDE` 로 읽은 그대로다 */
+export type AccountListRow = Prisma.AccountGetPayload<{
+  include: typeof ACCOUNT_LIST_INCLUDE;
+}>;
