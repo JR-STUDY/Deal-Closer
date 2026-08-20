@@ -65,6 +65,8 @@ export default async function LibraryPage({
         ...queryWhere,
       },
       orderBy: { createdAt: "desc" },
+      // 어느 기회에 붙은 문서인지 보여준다 — 붙지 않은 문서를 눈에 띄게 하려는 목적
+      include: { opportunity: { select: { name: true } } },
     }),
     // 문서함 폴더 (카드 '폴더 이동' 선택지 · 경로 표시)
     prisma.folder.findMany({

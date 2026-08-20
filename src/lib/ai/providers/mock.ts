@@ -47,6 +47,9 @@ function userRequestOf(text: string): string {
 
 /** "- 고객사명: OOO" 또는 프롬프트 안의 회사명스러운 토큰을 찾는다 */
 function clientNameOf(text: string): string {
+  // 기회 블록(describeOpportunity)의 CRM 등록값이 최우선 — 접두사 "- " 가 없다
+  const fromCrm = text.match(/^고객사명: (.+)$/m);
+  if (fromCrm) return fromCrm[1].trim();
   const explicit = text.match(/^- 고객사명: (.+)$/m);
   if (explicit) return explicit[1].trim();
   // (주)OOO · OOO 주식회사 · OOO㈜ 형태
@@ -152,9 +155,16 @@ function mockVariables(): SpecVariable[] {
 
 // ===================== 스키마별 응답 =====================
 
+/** 프롬프트에 기회 컨텍스트가 들어왔는지 + 기회명 */
+function opportunityOf(text: string): string | null {
+  if (!text.includes("# 이 문서를 만드는 영업 기회·거래처")) return null;
+  return text.match(/^기회명: (.+)$/m)?.[1]?.trim() ?? "(이름 없음)";
+}
+
 function mockDocSpec(text: string): DocSpec {
   const request = userRequestOf(text);
   const client = clientNameOf(text) || "(주)예시커머스";
+  const opportunityName = opportunityOf(text);
   const documentType = documentTypeOf(text);
   const today = todayOf(text);
   const isQuote = documentType === "QUOTE";
@@ -164,10 +174,15 @@ function mockDocSpec(text: string): DocSpec {
     documentType,
     headingText: isQuote ? "견 적 서" : "계 약 서",
     clientName: client,
-    summary: `[목 프로바이더] ${client} 대상 ${isQuote ? "견적서" : "계약서"} 초안을 생성했습니다. 실제 AI 호출은 하지 않았습니다.`,
+    summary: `[목 프로바이더] ${client} 대상 ${isQuote ? "견적서" : "계약서"} 초안을 생성했습니다.${
+      opportunityName ? ` 기회 "${opportunityName}" 의 CRM 거래처 정보를 사용했습니다.` : " 기회 연결 없음."
+    } 실제 AI 호출은 하지 않았습니다.`,
     clientFields: [
       { label: "고객사명", value: client },
-      { label: "수신", value: "구매담당자님" },
+      {
+        label: "수신",
+        value: text.match(/^담당자: (.+?)(?: \(|$)/m)?.[1]?.trim() ?? "구매담당자님",
+      },
       { label: isQuote ? "견적일" : "작성일", value: today },
       { label: isQuote ? "유효기간" : "계약기간", value: isQuote ? "발행일로부터 30일" : "12개월" },
     ],

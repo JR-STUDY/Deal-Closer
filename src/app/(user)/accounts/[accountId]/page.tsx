@@ -3,7 +3,6 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { toAccountDTO } from "@/lib/account";
 import { toContactDTO } from "@/lib/contact";
-import { formatDate, formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { DetailShell } from "@/components/detail-shell";
 import { NewOpportunityButton } from "@/components/opportunity/new-opportunity-button";
@@ -119,9 +118,14 @@ export default async function AccountDetailPage({
          * 기회 상세와 **같은 2줄 구조**다 (3차 피드백 3) — 위 줄이 그 칸의 뜻(거래처),
          * 아래 줄이 값(회사명)이다. 칸이 하나뿐이라 `>` 구분자는 나오지 않는다.
          * caption 을 주지 않는 다른 화면(보관함 등)은 기존 한 줄 표기를 그대로 쓴다.
+         *
+         * 위 줄의 `거래처` 는 거래처 목록으로 가는 링크다 (4차 피드백 1) — 경로는 공용
+         * 컴포넌트가 caption 으로 정하므로 화면이 따로 넘기지 않는다(기회 상세와 같은 동작).
+         *
+         * 등록·최근 수정 일시는 싣지 않는다 (4차 피드백 3) — 회사 정보의 생성·수정 시각은
+         * 영업 판단에 쓰이지 않는데 제목 바로 아래를 차지해 회사명보다 먼저 눈에 든다.
          */
         breadcrumb={[{ caption: "거래처", label: account.companyName }]}
-        description={`${formatDate(account.createdAt)} 등록 · ${formatDateTime(account.updatedAt)} 최근 수정`}
         actions={
           <>
             <NewOpportunityButton

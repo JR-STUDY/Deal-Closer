@@ -347,26 +347,64 @@ export function isBlankContactForm(values: ContactFormValues): boolean {
 }
 
 /**
- * 한 번에 등록하는 담당자들의 대표 여부. **정확히 한 명만 true** 다.
- * 아무도 고르지 않았으면 첫 담당자가 대표가 되고(`resolveCreateIsPrimary` 와 같은 규칙),
- * 여러 명을 골랐으면 **가장 앞의 한 명만** 남긴다 — 화면의 라디오는 하나만 고르게 하지만
- * API 로는 여러 개가 들어올 수 있고, 그때 대표가 2명인 상태를 만들면 안 된다.
+ * 여러 명을 **한 번에 붙일 때**의 대표 여부. 새로 들어오는 사람 중 대표는 **최대 한 명**이다.
+ *
+ * `resolveCreateIsPrimary`(첫 담당자 자동 대표)를 배열로 늘린 것이다.
+ *  - 기존 담당자가 없으면(`existingCount === 0`) 아무도 고르지 않아도 **첫 사람**이 대표가 된다
+ *    — 하나뿐인데 대표가 아니면 거래처 목록의 담당자 칸이 빈다.
+ *  - **이미 담당자가 있고 아무도 고르지 않았으면 새로 들어오는 사람 중 대표는 없다** —
+ *    담당자를 덧붙였을 뿐인데 대표가 바뀌면 거래처 목록에 나오는 이름이 예고 없이 달라진다.
+ *  - 여러 명을 골랐으면 **가장 앞의 한 명만** 남긴다 — 화면의 라디오는 하나만 고르게 하지만
+ *    API 로는 여러 개가 들어올 수 있고, 그때 대표가 2명인 상태를 만들면 안 된다.
+ *
+ * 기존 대표를 내리는 일은 이 함수가 하지 않는다 — true 가 하나라도 있으면 저장하는 쪽이
+ * `demotionTargetIds` 로 **같은 트랜잭션에서** 해제한다.
  */
-export function resolveBatchIsPrimary(
+export function resolveAppendIsPrimary(
+  existingCount: number,
   requests: readonly { isPrimary: boolean }[],
 ): boolean[] {
   if (requests.length === 0) return [];
   const requested = requests.findIndex((one) => one.isPrimary);
-  const primaryIndex = requested === -1 ? 0 : requested;
+  // 고른 사람이 없을 때: 기존 담당자가 있으면 아무도 대표가 아니다(-1 은 어느 행과도 안 맞는다)
+  const primaryIndex =
+    requested !== -1 ? requested : existingCount === 0 ? 0 : -1;
   return requests.map((_, index) => index === primaryIndex);
 }
 
 /**
- * 거래처 등록 시 함께 보낸 담당자 배열을 검증한다 (한 명씩은 `parseContactInput` 이 본다).
- * 어느 줄이 잘못됐는지 알려야 고칠 수 있으므로 메시지에 순번을 붙인다.
- * 대표는 이 함수가 확정한다 — 호출자가 다시 판단하면 규칙이 갈라진다.
+ * 대표 플래그만 규칙에 맞게 바꾼 새 목록 (편집 중인 폼 행에 그대로 쓴다).
+ * 행을 넣거나 지울 때마다 이 함수를 통과시키면 화면의 라디오와 서버의 판정이 어긋나지 않는다.
  */
-export function parseContactInputs(
+export function withAppendPrimary<T extends { isPrimary: boolean }>(
+  existingCount: number,
+  rows: readonly T[],
+): T[] {
+  const flags = resolveAppendIsPrimary(existingCount, rows);
+  return rows.map((row, index) => ({ ...row, isPrimary: flags[index] }));
+}
+
+/**
+ * 거래처를 **새로 만들 때** 함께 오는 담당자들의 대표 여부. **정확히 한 명만 true** 다.
+ * 새 거래처에는 담당자가 아직 없으므로 `resolveAppendIsPrimary` 의 `existingCount = 0` 이다.
+ */
+export function resolveBatchIsPrimary(
+  requests: readonly { isPrimary: boolean }[],
+): boolean[] {
+  return resolveAppendIsPrimary(0, requests);
+}
+
+/**
+ * 담당자 배열을 **검증만** 한다 (한 명씩은 `parseContactInput` 이 본다).
+ * 어느 줄이 잘못됐는지 알려야 고칠 수 있으므로 메시지에 순번을 붙인다.
+ *
+ * `isPrimary` 는 **사용자가 고른 그대로** 남긴다 — 기존 담당자 수를 알아야 대표를 정할 수
+ * 있고, 그 수는 저장 트랜잭션 안에서만 믿을 수 있기 때문이다(트랜잭션 밖에서 세면 그 사이에
+ * 담당자가 늘거나 줄어 대표가 0명 또는 2명이 되는 순간이 생긴다). 검증은 요청을 받자마자,
+ * 대표 판정은 `resolveAppendIsPrimary` 로 저장 직전에 — 이렇게 나누면 잘못된 입력은 트랜잭션을
+ * 열기도 전에 되돌려보낼 수 있다.
+ */
+export function parseContactAdditions(
   value: unknown,
 ): ContactInput[] | { error: string } {
   if (value === undefined || value === null) return [];
@@ -383,6 +421,19 @@ export function parseContactInputs(
     if ("error" in one) return { error: `담당자 ${index + 1}: ${one.error}` };
     parsed.push(one);
   }
+  return parsed;
+}
+
+/**
+ * 거래처 **등록 시** 함께 보낸 담당자 배열을 검증하고 대표까지 확정한다.
+ * 새 거래처에는 담당자가 아직 없으므로 대표는 이 함수가 정할 수 있다(정확히 1명).
+ * 이미 있는 거래처에 덧붙일 때는 `parseContactAdditions` + `resolveAppendIsPrimary` 를 쓴다.
+ */
+export function parseContactInputs(
+  value: unknown,
+): ContactInput[] | { error: string } {
+  const parsed = parseContactAdditions(value);
+  if ("error" in parsed) return parsed;
 
   const flags = resolveBatchIsPrimary(parsed);
   return parsed.map((one, index) => ({ ...one, isPrimary: flags[index] }));

@@ -16,6 +16,7 @@ import {
   pageHref,
   pageItems,
   pageQueryRange,
+  parsePageInput,
   parsePageParam,
   resolvePagination,
   type PageItem,
@@ -382,5 +383,122 @@ check(
 const noResult = resolvePagination({ totalCount: 0, requestedPage: 1 });
 check(noResult.totalCount, 0, "0건: 총 건수 0 — 페이지 UI 를 감추는 기준");
 check(noResult.totalPages, 1, "0건: 총 페이지는 여전히 1 (빈 1페이지)");
+
+// ─────────────────── parsePageInput (4차 피드백 1 — 직접 입력) ───────────────────
+/**
+ * 주소창(`parsePageParam`)과 **다르게** 판정하는지가 핵심이다 — 주소는 조용히 1페이지로
+ * 떨어뜨리지만, 사람이 칸에 적은 값은 왜 못 갔는지 말해 줘야 한다.
+ */
+for (const raw of [undefined, null, "", "   ", "\t\n"]) {
+  const result = parsePageInput(raw, 10);
+  check(result.ok, false, `parsePageInput(${JSON.stringify(raw)}): 막는다`);
+  check(
+    result.ok === false && result.reason,
+    "empty",
+    `parsePageInput(${JSON.stringify(raw)}): 빈 값으로 판정`,
+  );
+}
+
+// 숫자가 아닌 값 — 부호·소수점·쉼표·지수·한글·공백 낀 값까지 전부 막는다
+for (const raw of [
+  "abc",
+  "2.5",
+  "-3",
+  "+3",
+  "1,2",
+  "1e3",
+  "3쪽",
+  "3 4",
+  "０３", // 전각 숫자
+  "0x3",
+]) {
+  const result = parsePageInput(raw, 10);
+  check(result.ok, false, `parsePageInput("${raw}"): 막는다`);
+  check(
+    result.ok === false && result.reason,
+    "invalid",
+    `parsePageInput("${raw}"): 숫자 아님으로 판정`,
+  );
+}
+
+// 범위 밖 — 0·총 페이지 초과. **마지막 페이지로 조용히 당겨 주지 않는다**
+for (const raw of ["0", "00", "11", "99", "1000"]) {
+  const result = parsePageInput(raw, 10);
+  check(result.ok, false, `parsePageInput("${raw}", 10): 막는다`);
+  check(
+    result.ok === false && result.reason,
+    "outOfRange",
+    `parsePageInput("${raw}", 10): 범위 밖으로 판정`,
+  );
+}
+
+// 정상 — 첫·중간·마지막 페이지, 공백·앞자리 0 은 다듬어 읽는다
+check(parsePageInput("1", 10), { ok: true, page: 1 }, "첫 페이지");
+check(parsePageInput("7", 10), { ok: true, page: 7 }, "중간 페이지");
+check(parsePageInput("10", 10), { ok: true, page: 10 }, "마지막 페이지(경계)");
+check(parsePageInput(" 4 ", 10), { ok: true, page: 4 }, "공백은 다듬는다");
+check(
+  parsePageInput("0007", 10),
+  { ok: true, page: 7 },
+  "앞자리 0 도 정수로 읽는다",
+);
+
+// 1페이지뿐인 목록 — 1만 되고 2는 막힌다 (UI 는 여전히 노출된다)
+check(parsePageInput("1", 1), { ok: true, page: 1 }, "1페이지뿐: 1은 통과");
+check(
+  parsePageInput("2", 1).ok,
+  false,
+  "1페이지뿐: 2는 막힌다 (조용히 1로 보내지 않는다)",
+);
+
+// 총 페이지가 이상해도 최소 1페이지는 있는 것으로 보정한다 (`resolvePagination` 과 같은 기준)
+for (const total of [0, -5, 0.4]) {
+  check(
+    parsePageInput("1", total),
+    { ok: true, page: 1 },
+    `총 페이지 ${total} → 최소 1페이지로 보정`,
+  );
+}
+
+// 안전 정수를 벗어난 입력도 범위 밖으로 막는다 (숫자 형식 자체는 통과하므로)
+check(
+  parsePageInput("99999999999999999999", 10).ok,
+  false,
+  "안전 정수를 벗어나면 막는다",
+);
+
+// 안내 문구는 순수 함수가 만든다 — 화면이 문구를 새로 짜지 않게 한다
+const outOfRange = parsePageInput("99", 12);
+check(
+  outOfRange.ok === false && outOfRange.message,
+  "1부터 12까지의 번호를 입력해주세요.",
+  "범위 안내에 실제 총 페이지 수가 들어간다",
+);
+const emptyInput = parsePageInput("", 12);
+check(
+  emptyInput.ok === false && emptyInput.message.length > 0,
+  true,
+  "빈 값에도 안내 문구가 있다",
+);
+const invalidInput = parsePageInput("abc", 12);
+check(
+  invalidInput.ok === false && invalidInput.message.length > 0,
+  true,
+  "숫자 아님에도 안내 문구가 있다",
+);
+
+// 통과한 값은 그대로 `pageHref` 에 넘겨 주소로 만들 수 있어야 한다 (입력 → 이동의 연결)
+const jump = parsePageInput("3", 10);
+check(
+  jump.ok === true && pageHref("/accounts", { q: "테크" }, jump.page),
+  `/accounts?q=%ED%85%8C%ED%81%AC&${PAGE_PARAM}=3`,
+  "입력값으로 만든 주소가 검색어를 유지한다",
+);
+const jumpFirst = parsePageInput("1", 10);
+check(
+  jumpFirst.ok === true && pageHref("/accounts", { q: "테크" }, jumpFirst.page),
+  "/accounts?q=%ED%85%8C%ED%81%AC",
+  "1페이지로 입력하면 page 파라미터가 지워진다",
+);
 
 console.log(`pagination: ${checks}건 검증 통과`);

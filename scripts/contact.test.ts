@@ -18,9 +18,11 @@ import {
   isBlankContactForm,
   isPhone,
   normalizePhone,
+  parseContactAdditions,
   parseContactInput,
   parseContactInputs,
   primaryContact,
+  resolveAppendIsPrimary,
   resolveBatchIsPrimary,
   resolveCreateIsPrimary,
   resolveDeletion,
@@ -62,6 +64,40 @@ function applyCreate(
       demote.has(row.id) ? { ...row, isPrimary: false } : row,
     ),
     { id: next.id, name: next.name, createdAt: next.createdAt, isPrimary },
+  ];
+}
+
+/**
+ * POST /api/accounts/:id/contacts — **여러 명을 한 번에** (4차 피드백 2).
+ * 라우트의 트랜잭션과 같은 순서다: 대표 판정 → 기존 대표 해제 → 입력 순서대로 생성.
+ */
+function applyBatchAppend(
+  rows: readonly Row[],
+  additions: readonly {
+    id: string;
+    name: string;
+    createdAt: string;
+    requested: boolean;
+  }[],
+): Row[] {
+  const flags = resolveAppendIsPrimary(
+    rows.length,
+    additions.map((one) => ({ isPrimary: one.requested })),
+  );
+  // 새 담당자는 아직 목록에 없으므로 현재 대표 전원이 해제 대상이다
+  const demote = new Set(
+    flags.includes(true) ? demotionTargetIds(rows, "") : [],
+  );
+  return [
+    ...rows.map((row) =>
+      demote.has(row.id) ? { ...row, isPrimary: false } : row,
+    ),
+    ...additions.map((one, index) => ({
+      id: one.id,
+      name: one.name,
+      createdAt: one.createdAt,
+      isPrimary: flags[index],
+    })),
   ];
 }
 
@@ -602,6 +638,116 @@ check(
     },
   ],
   "배열로 들어와도 연락처를 정규화한다",
+);
+
+// ── 이미 있는 거래처에 여러 명 덧붙이기 (resolveAppendIsPrimary · 4차 피드백 2) ──
+// 담당자를 한 명 더 넣었을 뿐인데 대표가 바뀌면 거래처 목록에 나오는 이름이 예고 없이 달라진다.
+check(resolveAppendIsPrimary(0, []), [], "0명을 붙이면 대표도 없다");
+check(
+  resolveAppendIsPrimary(3, []),
+  [],
+  "기존 담당자가 있어도 0명을 붙이면 빈 결과다",
+);
+check(
+  resolveAppendIsPrimary(0, [{ isPrimary: false }, { isPrimary: false }]),
+  [true, false],
+  "담당자가 없던 거래처에서는 아무도 고르지 않아도 첫 사람이 대표가 된다",
+);
+check(
+  resolveAppendIsPrimary(2, [{ isPrimary: false }, { isPrimary: false }]),
+  [false, false],
+  "이미 담당자가 있으면 아무도 고르지 않은 추가는 대표를 바꾸지 않는다",
+);
+check(
+  resolveAppendIsPrimary(2, [{ isPrimary: false }, { isPrimary: true }]),
+  [false, true],
+  "고른 한 명만 대표가 된다",
+);
+check(
+  resolveAppendIsPrimary(2, [{ isPrimary: true }, { isPrimary: true }]),
+  [true, false],
+  "여러 명을 골라도 가장 앞의 한 명만 남는다 (API 로는 여러 개가 들어올 수 있다)",
+);
+check(
+  resolveAppendIsPrimary(0, [{ isPrimary: false }, { isPrimary: true }]),
+  resolveBatchIsPrimary([{ isPrimary: false }, { isPrimary: true }]),
+  "기존 0명이면 거래처 등록(resolveBatchIsPrimary)과 같은 판정이다",
+);
+
+// ───── 덧붙이는 담당자 배열은 검증만 한다 (parseContactAdditions) ─────
+check(parseContactAdditions(undefined), [], "담당자를 안 보내면 0명");
+check(parseContactAdditions(null), [], "null 도 0명으로 본다");
+check(
+  parseContactAdditions("이서준"),
+  { error: "담당자 목록 형식이 올바르지 않습니다." },
+  "배열이 아니면 거절한다",
+);
+check(
+  batchPrimaryFlags(
+    parseContactAdditions([{ name: "김대리" }, { name: "이과장" }]),
+  ),
+  [false, false],
+  "대표를 만들어 내지 않는다 — 판정은 기존 담당자 수를 아는 저장 시점에 한다",
+);
+check(
+  batchPrimaryFlags(
+    parseContactAdditions([
+      { name: "김대리" },
+      { name: "이과장", isPrimary: true },
+    ]),
+  ),
+  [false, true],
+  "사용자가 고른 대표는 그대로 남긴다",
+);
+check(
+  parseContactAdditions([{ name: "김대리" }, { name: "" }]),
+  { error: "담당자 2: 담당자명을 입력해주세요." },
+  "몇 번째 줄이 잘못됐는지 알려준다",
+);
+check(
+  parseContactAdditions([{ name: "김대리", phone: "+82 10-1234-5678" }]),
+  [
+    {
+      name: "김대리",
+      position: null,
+      phone: "010-1234-5678",
+      email: null,
+      isPrimary: false,
+    },
+  ],
+  "덧붙이는 담당자도 연락처를 정규화한다",
+);
+
+// ───── 시나리오: 여러 명을 한 트랜잭션에 덧붙여도 불변식이 선다 ─────
+const seeded = applyBatchAppend(
+  [],
+  [
+    { id: "n1", name: "김대리", createdAt: at(10), requested: false },
+    { id: "n2", name: "이과장", createdAt: at(10), requested: false },
+    { id: "n3", name: "박부장", createdAt: at(10), requested: false },
+  ],
+);
+assertInvariant(seeded, "담당자 0명 거래처에 3명 추가");
+check(seeded.length, 3, "세 명 모두 들어간다 (일부만 저장되지 않는다)");
+check(primaryContact(seeded)?.id, "n1", "아무도 고르지 않으면 첫 사람이 대표다");
+
+const kept = applyBatchAppend(trio, [
+  { id: "n4", name: "최차장", createdAt: at(11), requested: false },
+  { id: "n5", name: "정팀장", createdAt: at(11), requested: false },
+]);
+assertInvariant(kept, "대표가 있는 거래처에 2명 추가 (대표 미선택)");
+check(primaryContact(kept)?.id, "c1", "덧붙이기만 하면 기존 대표가 유지된다");
+
+const swapped = applyBatchAppend(trio, [
+  { id: "n6", name: "최차장", createdAt: at(12), requested: false },
+  { id: "n7", name: "정팀장", createdAt: at(12), requested: true },
+]);
+assertInvariant(swapped, "대표가 있는 거래처에 2명 추가 (두 번째를 대표로)");
+check(primaryContact(swapped)?.id, "n7", "새로 고른 사람이 대표가 된다");
+check(
+  swapped.find((row) => row.id === "c1")?.isPrimary,
+  false,
+  "기존 대표는 같은 트랜잭션에서 내려간다",
 );
 
 console.log(`contact: ${checks}건 검증 통과`);

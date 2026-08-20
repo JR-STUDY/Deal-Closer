@@ -1852,7 +1852,18 @@ async function main() {
       name: true,
       stage: true,
       documents: {
-        select: { id: true, title: true, status: true, amount: true, updatedAt: true },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          amount: true,
+          updatedAt: true,
+          // 버전 묶음 판정에 필요하다 (기회-6) — 런타임과 같은 입력을 넘겨야
+          // 시드가 만든 금액과 화면이 계산한 금액이 어긋나지 않는다.
+          rootId: true,
+          version: true,
+          isConfirmed: true,
+        },
       },
     },
   });
