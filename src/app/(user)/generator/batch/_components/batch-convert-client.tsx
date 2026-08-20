@@ -10,7 +10,6 @@ import { FolderBatchPanel } from "./folder-batch-panel";
 type Payload = {
   folderName: string;
   fileNames: string[];
-  saveAsCommon: boolean;
 };
 
 /** 새 문서 생성에서 폴더 드롭 시 sessionStorage 로 넘긴 변환 대상을 읽어 렌더한다. */
@@ -36,7 +35,6 @@ export function BatchConvertClient() {
                 ? parsed.folderName
                 : "가져온 양식",
             fileNames: parsed.fileNames.filter((n) => typeof n === "string"),
-            saveAsCommon: parsed.saveAsCommon === true,
           };
         }
       }
@@ -70,7 +68,6 @@ export function BatchConvertClient() {
     <FolderBatchPanel
       folderName={state.payload.folderName}
       fileNames={state.payload.fileNames}
-      saveAsCommon={state.payload.saveAsCommon}
       onRestart={() => router.push("/generator")}
     />
   );

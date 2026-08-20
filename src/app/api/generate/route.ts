@@ -34,7 +34,6 @@ import {
  *  - clientName / clientContact / clientEmail / clientMemo: 거래처 정보 (선택)
  *  - files: 첨부 파일 0개 이상 (PDF·이미지·엑셀·CSV)
  *  - referenceIds: 참고 보관함 문서 id 0개 이상
- *  - saveAsCommon: "true" 면 공용문서함에 저장
  *  - model: 사용자가 고른 AI 모델 id (선택 — 카탈로그에 있는 값만 허용)
  *
  * Claude 호출이 실패하면 문서도 크레딧 거래도 만들지 않는다 (503/502 반환).
@@ -51,8 +50,6 @@ export async function POST(req: NextRequest) {
 
   const prompt = String(form.get("prompt") ?? "").trim();
   if (!prompt) return fail("생성할 문서 내용을 입력해주세요.");
-
-  const saveAsCommon = String(form.get("saveAsCommon") ?? "") === "true";
 
   // ── 모델 선택 검증 (임의 모델 호출 차단) ──
   const resolved = resolveRequestedModel(form.get("model"));
@@ -288,7 +285,6 @@ export async function POST(req: NextRequest) {
         title: generated.title,
         type: generated.documentType,
         status: "DRAFT",
-        isCommon: saveAsCommon,
         clientName: generated.clientName,
         amount: generated.amount,
         contentJson: generated.contentJson,

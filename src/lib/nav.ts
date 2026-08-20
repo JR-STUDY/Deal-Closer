@@ -41,7 +41,6 @@ export const userNav: NavItem[] = [
     icon: FolderClosed,
     children: [
       { href: "/library/templates", label: "표준 양식" },
-      { href: "/library/common", label: "공용문서함" },
       { href: "/library", label: "내 문서함" },
     ],
   },

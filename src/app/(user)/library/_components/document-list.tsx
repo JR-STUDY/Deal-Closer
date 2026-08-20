@@ -34,7 +34,6 @@ export type DocRow = {
   amount: number;
   createdAt: Date;
   folderId: string | null;
-  isCommon: boolean;
   /** 버전 번호 (F-214) — 목록에는 묶음별 최신 버전만 노출된다 */
   version: number;
   /** 확정본 여부 (F-214) */
@@ -178,7 +177,6 @@ export function DocumentList({
                     <DocumentCardActions
                       documentId={doc.id}
                       documentTitle={doc.title}
-                      isCommon={doc.isCommon}
                       currentFolderId={doc.folderId}
                       folders={folders}
                     />
@@ -301,7 +299,6 @@ export function DocumentList({
                       <DocumentCardActions
                         documentId={doc.id}
                         documentTitle={doc.title}
-                        isCommon={doc.isCommon}
                         currentFolderId={doc.folderId}
                         folders={folders}
                       />

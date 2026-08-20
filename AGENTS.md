@@ -96,7 +96,7 @@ src/
     list-pagination.tsx / list-row-link.tsx  # 목록 공용 — 페이지 이동 UI, 행 전체 클릭 링크
     info-hint.tsx        # ⓘ 툴팁 — 조건부 안내 문구를 접어 같은 줄 입력의 폭이 흔들리지 않게 한다
     app-sidebar.tsx    # 공용 사이드바
-    sidebar-folders.tsx / add-folder-button.tsx  # 보관함 폴더 트리 UI
+    sidebar-folders.tsx / add-folder-button.tsx  # 보관함 폴더 트리 UI (문서함은 하나 — 파티션 없음)
     signature-html-editor.tsx / signature-preview.tsx  # 메일 서명 편집·미리보기
     provider-logo.tsx  # Gmail/Outlook 브랜드 로고
     page-header.tsx / back-button.tsx / status-badge.tsx / loading-state.tsx  # 공용 UI
@@ -213,6 +213,16 @@ src/
   기회에 붙은 문서와 폐기 문서를 뺀다 — 한 문서가 두 기회의 금액을 동시에 좌우할 수 없다.
   기회 등록 팝업(기회-17)과 기회 상세의 "기존 문서 연결"(기회-5)은 `@/lib/document-link` 의
   같은 후보 규칙을 쓴다. 연결은 **복제가 아니다** — 복제하면 어느 쪽을 고쳐야 금액이 바뀌는지 알 수 없다.
+- **문서 보관함은 `표준 양식`(`/library/templates`)과 `내 문서함`(`/library`) 둘뿐이다.**
+  팀 공용/개인 문서함 파티션(`Document.isCommon` · `Folder.isCommon`)은 걷어냈다 —
+  그 구분은 결국 **팀 워크스페이스 기능**인데 MVP 에는 인증이 없어(`session.ts` 가 데모 사용자
+  1명 고정) 나눌 주체가 없고, "공용 문서함"이라는 말을 `Template.scope=COMMON`(표준 양식)과
+  문서 파티션이 함께 써서 같은 이름이 두 가지를 가리켰다.
+  **두 컬럼은 스키마에 남아 있지만 기본값(`false`)으로만 쓴다** — 조회 조건에 넣거나
+  요청 본문으로 받지 않는다(`/api/folders` · `PATCH /api/documents/:id` · 생성 라우트 모두).
+  하나라도 입력을 열어 주면 화면에 없는 두 번째 문서함이 데이터에만 생겨,
+  사이드바에서 영영 보이지 않는 폴더·문서가 만들어진다. 팀 워크스페이스를 실제로 도입할 때
+  되살릴 자리이므로 컬럼 자체는 지우지 않았다.
 - **문서 미리보기는 `@/lib/pdf-html` 을 재사용한다** (기회-19). 서버가 만든 인쇄용 HTML 을
   `GET /api/documents/:id/preview` 로 내려 `sandbox` iframe 에 띄운다 — 미리보기용 렌더러를 따로 만들면
   실제 PDF 와 다르게 보이기 시작한다.

@@ -56,12 +56,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export function FolderBatchPanel({
   folderName,
   fileNames,
-  saveAsCommon,
   onRestart,
 }: {
   folderName: string;
   fileNames: string[];
-  saveAsCommon: boolean;
   onRestart: () => void;
 }) {
   const [items, setItems] = useState<BatchItem[]>(() =>
@@ -71,10 +69,7 @@ export function FolderBatchPanel({
       progress: 0,
     })),
   );
-  const [folderInfo, setFolderInfo] = useState<{
-    id: string;
-    isCommon: boolean;
-  } | null>(null);
+  const [folderInfo, setFolderInfo] = useState<{ id: string } | null>(null);
   const [failed, setFailed] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const startedRef = useRef(false);
@@ -102,7 +97,7 @@ export function FolderBatchPanel({
         const res = await fetch("/api/generate/batch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ folderName, fileNames, saveAsCommon }),
+          body: JSON.stringify({ folderName, fileNames }),
         });
         const json = await res.json().catch(() => null);
         if (!res.ok) {
@@ -112,10 +107,7 @@ export function FolderBatchPanel({
         }
         docs = json?.data?.documents ?? [];
         if (json?.data?.folder) {
-          setFolderInfo({
-            id: json.data.folder.id,
-            isCommon: json.data.folder.isCommon,
-          });
+          setFolderInfo({ id: json.data.folder.id });
         }
       } catch {
         toast.error("네트워크 오류로 변환에 실패했습니다.");
@@ -155,12 +147,8 @@ export function FolderBatchPanel({
   }, []);
 
   const libraryHref = folderInfo
-    ? folderInfo.isCommon
-      ? `/library/common?folder=${folderInfo.id}`
-      : `/library?folder=${folderInfo.id}`
-    : saveAsCommon
-      ? "/library/common"
-      : "/library";
+    ? `/library?folder=${folderInfo.id}`
+    : "/library";
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
