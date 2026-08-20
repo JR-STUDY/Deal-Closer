@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  primaryContact,
   resolveDeletion,
   sortContacts,
   toContactFormValues,
@@ -247,6 +248,7 @@ export function AccountContacts({
           accountId={accountId}
           companyName={companyName}
           existingContactCount={sorted.length}
+          currentPrimary={primaryContact(sorted)}
           onSaved={() => router.refresh()}
           onClose={() => setIsAdding(false)}
         />

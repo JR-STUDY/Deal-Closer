@@ -23,6 +23,13 @@ import {
   type ContactDraft,
 } from "../../_components/contact-draft-fields";
 
+/** 안내 문구에 쓸 대표 표기 — 직책이 있으면 괄호로 덧붙인다 ("김철수(구매팀장)") */
+function primaryLabel(primary: { name: string; position: string | null }) {
+  return primary.position
+    ? `${primary.name}(${primary.position})`
+    : primary.name;
+}
+
 /**
  * 거래처 상세의 담당자 **다중 추가** 다이얼로그 (4차 피드백 2).
  *
@@ -43,6 +50,7 @@ export function ContactAddDialog({
   accountId,
   companyName,
   existingContactCount,
+  currentPrimary,
   onSaved,
   onClose,
 }: {
@@ -50,6 +58,17 @@ export function ContactAddDialog({
   companyName: string;
   /** 이 거래처에 이미 있는 담당자 수 (대표 초기값·안내 문구가 이 값에 달려 있다) */
   existingContactCount: number;
+  /**
+   * 현재 대표 담당자 (없으면 null) — **안내 문구에만** 쓴다 (5차 피드백 3).
+   *
+   * 이 팝업은 이미 대표가 있는 거래처에서 라디오를 아무것도 켜지 않는다. 담당자를 덧붙였을
+   * 뿐인데 목록에 나오는 이름이 바뀌면 안 되기 때문인데, **그 이유가 화면에 없으면**
+   * 비어 있는 라디오가 버그로 읽힌다. 그래서 누가 대표인지, 새로 고르면 그 사람이
+   * 어떻게 되는지를 이름과 함께 밝힌다.
+   *
+   * 판정은 여기서 하지 않는다 — 호출측이 `@/lib/contact` 의 `primaryContact()` 로 뽑아 넘긴다.
+   */
+  currentPrimary: { name: string; position: string | null } | null;
   onSaved: () => void;
   onClose: () => void;
 }) {
@@ -156,7 +175,9 @@ export function ContactAddDialog({
           <p className="text-xs text-muted-foreground">
             {existingContactCount === 0
               ? "첫 담당자가 자동으로 대표가 되며, 거래처 목록에는 대표 담당자 한 분만 표시됩니다."
-              : "대표를 고르지 않으시면 현재 대표 담당자가 그대로 유지됩니다. 새로 고르시면 기존 대표는 자동으로 해제됩니다."}
+              : currentPrimary
+                ? `현재 대표는 ${primaryLabel(currentPrimary)} 님입니다. 대표를 고르지 않으시면 그대로 유지되고, 새로 고르시면 ${currentPrimary.name} 님은 대표에서 내려옵니다.`
+                : "대표를 고르지 않으시면 현재 대표 담당자가 그대로 유지됩니다. 새로 고르시면 기존 대표는 자동으로 해제됩니다."}
           </p>
         </form>
 
