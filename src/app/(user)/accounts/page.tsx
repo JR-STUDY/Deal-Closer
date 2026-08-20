@@ -4,6 +4,7 @@ import { Building2, SearchX } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import { accountsWhere, toAccountDTO } from "@/lib/account";
+import { OPPORTUNITY_PEEK_LIMIT } from "@/lib/constants";
 import { primaryContact } from "@/lib/contact";
 import {
   pageHref,
@@ -32,10 +33,7 @@ import {
 import { AccountsToolbar } from "./_components/accounts-toolbar";
 import { AccountRowActions } from "./_components/account-row-actions";
 import { NewAccountButton } from "./_components/new-account-button";
-import {
-  OPPORTUNITY_PEEK_LIMIT,
-  OpportunityPeek,
-} from "./_components/opportunity-peek";
+import { OpportunityPeek } from "./_components/opportunity-peek";
 
 const LIST_HREF = "/accounts";
 

@@ -133,6 +133,23 @@ export function isClosedOpportunityStage(stage: OpportunityStage): boolean {
  */
 export const LIST_PAGE_SIZE = 10;
 
+/**
+ * 거래처 목록에서 한 거래처당 펼쳐 보여줄 기회 수의 **상한** (5차 피드백 2).
+ *
+ * 왜 상한이 필요한가 — 목록은 한 페이지에 거래처 10곳이라, 상한이 없으면 기회가 많은
+ * 거래처 한 곳이 한 화면의 조회량을 통째로 끌어올린다. 왜 하필 5인가 — 팝오버는 **훑어보는
+ * 자리**이지 목록을 대체하는 자리가 아니다. 5줄이면 패널이 행 아래 한 뼘에 들어가 뒤의 표를
+ * 가리지 않는다. 넘치는 만큼은 "외 N건" 으로 **사실만 알리고** 거래처 상세로 보낸다 —
+ * 패널에 스크롤을 넣어 전부 담으면 목록 화면이 두 개가 된다.
+ *
+ * **이 값은 순수 모듈에 둔다 — 팝오버 컴포넌트에 두지 않는다.** 상한을 거는 곳은 서버
+ * 페이지의 Prisma `take` 인데, `"use client"` 모듈에서 export 하면 서버가 받는 것은 숫자가
+ * 아니라 **클라이언트 참조**다.
+ * 그러면 `take: [object Function]` 으로 쿼리가 죽는다(거래처 목록이 실제로 터졌다).
+ * 타입은 `number` 로 보이므로 `pnpm typecheck` 에 걸리지 않고 런타임에만 드러난다.
+ */
+export const OPPORTUNITY_PEEK_LIMIT = 5;
+
 // ── 활동 이력 이벤트 유형 (PRD F-114) ──
 export const ACTIVITY_EVENT_TYPES = [
   "OPPORTUNITY_CREATED",

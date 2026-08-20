@@ -20,17 +20,6 @@ export type PeekOpportunity = {
 };
 
 /**
- * 한 거래처당 펼쳐 보여줄 기회 수의 **상한** (5차 피드백 2).
- *
- * 왜 상한이 필요한가 — 목록은 한 페이지에 거래처 10곳이라, 상한이 없으면 기회가 많은
- * 거래처 한 곳이 한 화면의 조회량을 통째로 끌어올린다. 왜 하필 5인가 — 팝오버는 **훑어보는
- * 자리**이지 목록을 대체하는 자리가 아니다. 5줄이면 패널이 행 아래 한 뼘에 들어가 뒤의 표를
- * 가리지 않는다. 넘치는 만큼은 "외 N건" 으로 **사실만 알리고** 거래처 상세로 보낸다 —
- * 패널에 스크롤을 넣어 전부 담으면 목록 화면이 두 개가 된다.
- */
-export const OPPORTUNITY_PEEK_LIMIT = 5;
-
-/**
  * 마우스가 트리거를 떠난 뒤 닫기까지의 유예 (ms).
  * 트리거와 패널 사이에는 `sideOffset` 만큼의 빈틈이 있어, 곧바로 닫으면 그 틈을 지나는 동안
  * 패널이 사라져 **제목을 누를 수 없다**. 유예 동안 패널에 포인터가 들어오면 닫기를 취소한다.
@@ -69,7 +58,7 @@ export function OpportunityPeek({
   companyName: string;
   /** 이 거래처의 기회 **전체** 건수 (상한에 걸려 잘린 수가 아니다) */
   totalCount: number;
-  /** 펼쳐 보여줄 기회 (최대 `OPPORTUNITY_PEEK_LIMIT` 건) */
+  /** 펼쳐 보여줄 기회. 서버가 OPPORTUNITY_PEEK_LIMIT 만큼만 실어 내린다 */
   opportunities: readonly PeekOpportunity[];
 }) {
   const [open, setOpen] = useState(false);
