@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { EditorDoc } from "@/lib/editor-schema";
-import { pageCount } from "@/lib/editor-schema";
+import { blocksOnPage, pageCount } from "@/lib/editor-schema";
 import {
   Dialog,
   DialogContent,
@@ -28,9 +28,8 @@ export function EditorPreview({ open, onOpenChange, doc, title }: Props) {
   const [page, setPage] = useState(0);
   const current = Math.min(page, pages - 1);
 
-  const pageBlocks = doc.blocks.filter(
-    (b) => b.y < (current + 1) * h && b.y + b.h > current * h,
-  );
+  // 쪽 나눔 판정은 PDF(`pdf-html`)와 같은 순수 함수를 쓴다 — 각자 구현하면 조용히 어긋난다
+  const pageBlocks = blocksOnPage(doc, current);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -73,7 +72,7 @@ export function EditorPreview({ open, onOpenChange, doc, title }: Props) {
             style={{ width: w * scale, height: h * scale }}
           >
             <div
-              className="absolute left-0 top-0"
+              className="absolute left-0 top-0 isolate"
               style={{
                 width: w,
                 height: h,

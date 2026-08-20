@@ -6,23 +6,37 @@ import type {
   ZOrderAction,
   CatalogOption,
 } from "@/lib/editor-schema";
+import type { AlignMode, DistributeAxis } from "@/lib/block-align";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BlockPalette } from "./block-palette";
 import { BlockInspector } from "./block-inspector";
+import { BlockAlignPanel } from "./block-align-panel";
 import { useAutoHideScroll } from "./use-auto-hide-scroll";
 import type { CustomBlock, DocTemplate } from "./template-store";
 
 type Props = {
   tab: string;
+  /** 본문이 잠긴 문서 — 팔레트를 감추고 인스펙터를 읽기 전용으로 (진단 3) */
+  locked: boolean;
+  lockReason: string;
   onTabChange: (v: string) => void;
   onAdd: (type: BlockType) => void;
   onEditBase: (type: BlockType) => void;
   catalog: CatalogOption[];
+  /** 정확히 1개를 골랐을 때의 그 블록 (여러 개면 null — 정렬 패널이 나온다) */
   block: Block | null;
+  /** 고른 블록 수 — 2 이상이면 속성 대신 정렬 패널을 보여준다 */
+  selectedCount: number;
   onChange: (patch: Partial<Block>) => void;
   onChangeProps: (propsPatch: Record<string, unknown>) => void;
   onRemove: (id: string) => void;
   onZOrder: (action: ZOrderAction) => void;
+  // 다중선택 정렬 (2개 이상)
+  onAlign: (mode: AlignMode) => void;
+  onDistribute: (axis: DistributeAxis) => void;
+  onRemoveSelected: () => void;
+  /** 고른 블록 높이를 내용에 맞춘다 (넘치면 늘리고 남으면 줄인다) */
+  onFitSelected: () => void;
   // 사용자 지정 블록/템플릿 (#3)
   customBlocks: CustomBlock[];
   onAddCustom: (cb: CustomBlock) => void;
@@ -37,15 +51,22 @@ type Props = {
 /** 블록 추가(팔레트) + 블록 속성(인스펙터)를 하나의 우측 사이드바에 탭으로 통합 (#1) */
 export function EditorSidebar({
   tab,
+  locked,
+  lockReason,
   onTabChange,
   onAdd,
   onEditBase,
   catalog,
   block,
+  selectedCount,
   onChange,
   onChangeProps,
   onRemove,
   onZOrder,
+  onAlign,
+  onDistribute,
+  onRemoveSelected,
+  onFitSelected,
   customBlocks,
   onAddCustom,
   onDeleteCustom,
@@ -78,6 +99,9 @@ export function EditorSidebar({
           onScroll={onScroll}
         >
           <TabsContent value="palette" className="mt-0">
+            {locked ? (
+              <p className="text-sm text-muted-foreground">{lockReason}</p>
+            ) : (
             <BlockPalette
               onAdd={onAdd}
               onEditBase={onEditBase}
@@ -89,17 +113,33 @@ export function EditorSidebar({
               onLoadTemplate={onLoadTemplate}
               onDeleteTemplate={onDeleteTemplate}
             />
+            )}
           </TabsContent>
           <TabsContent value="inspector" className="mt-0">
-            <BlockInspector
-              block={block}
-              catalog={catalog}
-              onChange={onChange}
-              onChangeProps={onChangeProps}
-              onRemove={onRemove}
-              onZOrder={onZOrder}
-              onSaveAsCustom={onSaveAsCustom}
-            />
+            {/* 2개 이상이면 "이 블록의 속성" 이 없다 — 서로 맞추는 도구를 준다.
+                잠긴 문서에서는 정렬도 막히므로 패널을 내놓지 않는다(기존 관례) */}
+            {selectedCount >= 2 && !locked ? (
+              <BlockAlignPanel
+                count={selectedCount}
+                onAlign={onAlign}
+                onDistribute={onDistribute}
+                onZOrder={onZOrder}
+                onRemove={onRemoveSelected}
+                onFit={onFitSelected}
+              />
+            ) : (
+              <BlockInspector
+                readOnly={locked}
+                readOnlyReason={lockReason}
+                block={block}
+                catalog={catalog}
+                onChange={onChange}
+                onChangeProps={onChangeProps}
+                onRemove={onRemove}
+                onZOrder={onZOrder}
+                onSaveAsCustom={onSaveAsCustom}
+              />
+            )}
           </TabsContent>
         </div>
       </Tabs>

@@ -41,7 +41,8 @@ export function TimelineDocumentButton({
       </button>
 
       <DocumentPreviewDialog
-        documentId={documentId}
+
+          id={documentId}
         title={title}
         open={isOpen}
         onOpenChange={setIsOpen}

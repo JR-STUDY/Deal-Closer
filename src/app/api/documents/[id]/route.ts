@@ -1,13 +1,16 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 import { DOCUMENT_STATUSES, DOCUMENT_TYPES } from "@/lib/constants";
 import {
   parseContentJson,
-  computeAmount,
+  contentJsonSizeError,
+  deriveAmount,
   extractClientName,
 } from "@/lib/editor-schema";
 import { syncOpportunityAmount } from "@/lib/opportunity-amount";
+import { documentEditLock, isContentMutation } from "@/lib/document-edit";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -28,8 +31,11 @@ function toNonNegativeInt(value: unknown): number {
 /** GET /api/documents/:id — 단건 + 라인아이템 */
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
-  const doc = await prisma.document.findUnique({
-    where: { id },
+  const user = await getCurrentUser();
+  // 조직 범위로 좁혀 조회한다 — 다른 조직의 문서 id 는 404 로 끝나야 한다
+  // (형제 라우트 preview·versions·send·revise 와 같은 규칙)
+  const doc = await prisma.document.findFirst({
+    where: { id, orgId: user.orgId },
     include: {
       items: { orderBy: { sortOrder: "asc" } },
       author: { select: { id: true, name: true } },
@@ -57,8 +63,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return fail("잘못된 요청 본문입니다.");
   }
 
-  const existing = await prisma.document.findUnique({ where: { id } });
+  const user = await getCurrentUser();
+  // 조직 범위로 좁힌다 — 소유 확인 없이 수정하면 다른 조직 문서를 고칠 수 있다
+  const existing = await prisma.document.findFirst({
+    where: { id, orgId: user.orgId },
+  });
   if (!existing) return fail("문서를 찾을 수 없습니다.", 404);
+
+  /*
+   * 발송·계약완료·확정본·폐기 문서의 **본문**은 고치지 않는다 (진단 3).
+   * 화면에서만 막으면 API 로는 그대로 통하므로 서버가 같은 순수 함수로 다시 판정한다.
+   * 상태·확정본·폴더 변경은 통과시킨다 — 발송 라우트가 상태를 올리고, 확정본 해제가
+   * 잠금을 푸는 길이다. 여기서 그것까지 막으면 문서를 영영 잠긴 채로 둔다.
+   */
+  const lock = documentEditLock(existing);
+  if (lock.locked && isContentMutation(body)) {
+    return fail(lock.reason, 409);
+  }
 
   // ── enum 검증 ──
   if (
@@ -102,14 +123,27 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   // ── contentJson 파생 (블록 캔버스 에디터) ──
   const contentJson =
     typeof body.contentJson === "string" ? body.contentJson : undefined;
+  // 크기 상한은 서버가 판정한다 — 인스펙터의 1MB 이미지 검사는 화면 검사일 뿐이다
+  if (contentJson) {
+    const tooBig = contentJsonSizeError(contentJson);
+    if (tooBig) return fail(tooBig, 413);
+  }
   const parsed = contentJson ? parseContentJson(contentJson) : null;
-  const recomputedAmount = parsed ? computeAmount(parsed) : undefined;
+  /*
+   * `deriveAmount` 는 품목표 블록이 없으면 `null` 을 준다 — "합계 0원"이 아니라
+   * "본문에 금액 근거가 없다"는 뜻이다. 그 경우 `undefined` 를 넘겨 Prisma 가
+   * amount 를 건드리지 않게 해 **저장된 금액을 보존**한다. 예전 코드는 0 을 그대로
+   * 써서, 계약서를 열어 저장만 눌러도 금액이 0 이 되고 확정 문서를 통해 기회
+   * 예상 금액까지 0 으로 내려갔다.
+   */
+  const derived = parsed ? deriveAmount(parsed) : null;
+  const recomputedAmount = derived ?? undefined;
   const derivedClientName = parsed ? extractClientName(parsed) : null;
 
   const bodyClientName =
     typeof body.clientName === "string" ? body.clientName.trim() || null : undefined;
 
-  const doc = await prisma.$transaction(async (tx) => {
+  const { document: doc, amountSync } = await prisma.$transaction(async (tx) => {
     if (hasItems) {
       await tx.documentItem.deleteMany({ where: { documentId: id } });
       if (normalizedItems.length > 0) {
@@ -155,17 +189,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
      * 총액이 items·contentJson·body.amount 세 경로에서 재계산되기 때문이다 —
      * 실제로 달라진 값이 없으면 `syncOpportunityAmount` 가 쓰기를 건너뛴다.
      */
-    if (existing.opportunityId) {
-      await syncOpportunityAmount(
-        { opportunityId: existing.opportunityId, orgId: existing.orgId },
-        tx,
-      );
-    }
+    const sync = existing.opportunityId
+      ? await syncOpportunityAmount(
+          { opportunityId: existing.opportunityId, orgId: existing.orgId },
+          tx,
+        )
+      : null;
 
-    return updated;
+    return { document: updated, amountSync: sync };
   });
 
-  return ok(doc);
+  /*
+   * 재판정 결과를 응답에 실어 보낸다 — 에디터가 저장 직후 "예상 금액이 얼마로,
+   * 어느 문서 기준으로 바뀌었는지" 를 알려야 한다 (기회-6 ②: 금액이 소리 없이
+   * 달라지면 안 된다). 문서 본문은 기존 그대로 두어 응답 모양이 깨지지 않게 한다.
+   */
+  return ok({ ...doc, amountSync });
 }
 
 /**
@@ -177,7 +216,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
  */
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const { id } = await params;
-  const existing = await prisma.document.findUnique({ where: { id } });
+  const user = await getCurrentUser();
+  // 조직 범위로 좁힌다 — 삭제는 되돌릴 수 없으므로 소유 확인이 특히 중요하다
+  const existing = await prisma.document.findFirst({
+    where: { id, orgId: user.orgId },
+  });
   if (!existing) return fail("문서를 찾을 수 없습니다.", 404);
 
   await prisma.$transaction(async (tx) => {

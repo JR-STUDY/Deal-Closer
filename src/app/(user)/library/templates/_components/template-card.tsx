@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, MoreVertical, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { Eye, Loader2, MoreVertical, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DocTypeBadge } from "@/components/status-badge";
+import { DocumentPreviewDialog } from "@/components/document/document-preview-dialog";
 import { formatDateTime } from "@/lib/format";
 import { TEMPLATE_SCOPE_LABELS, type TemplateScope } from "@/lib/constants";
 
@@ -51,6 +52,7 @@ export function TemplateCard({ template }: { template: TemplateCardData }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const reextract = async () => {
     if (busy) return;
@@ -169,15 +171,37 @@ export function TemplateCard({ template }: { template: TemplateCardData }) {
             {formatDateTime(template.updatedAt)}
           </p>
 
-          <div className="mt-auto">
-            <Button asChild variant="outline" className="w-full">
+          {/*
+            양식도 **본문(contentJson)을 가진 문서**다. 미리보기 길이 없으면 무엇이
+            담겼는지 확인할 방법이 "문서를 하나 만들어 보는 것"뿐이었다.
+            문서 미리보기와 같은 인쇄용 렌더러를 쓴다 — 양식에서 본 모습이 결과물과 같다.
+          */}
+          <div className="mt-auto grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPreviewOpen(true)}
+              disabled={busy}
+            >
+              <Eye className="size-4" />
+              미리보기
+            </Button>
+            <Button asChild variant="outline">
               <Link href={`/generator?template=${template.id}`}>
-                <Sparkles className="size-4" />이 양식으로 문서 만들기
+                <Sparkles className="size-4" />문서 만들기
               </Link>
             </Button>
           </div>
         </CardContent>
       </Card>
+
+      <DocumentPreviewDialog
+        id={template.id}
+        title={template.name}
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        previewUrl={`/api/templates/${template.id}/preview`}
+        editHref={`/editor/template/${template.id}`}
+      />
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>

@@ -19,6 +19,9 @@ import {
   type Block,
   type BlockPropsMap,
   type EditorDoc,
+  findMetaField,
+  healMetaFieldRoles,
+  type MetaFieldRole,
 } from "@/lib/editor-schema";
 import {
   DOCUMENT_TYPES,
@@ -456,6 +459,19 @@ const FIELD_ROW_HEIGHT = 22;
  * - 라벨이 일치하는 필드는 값만 덮어쓴다 (빈 값은 양식 값을 보존)
  * - 양식에 없는 필드는 뒤에 덧붙이고 블록 높이를 늘린다
  */
+/**
+ * 정보 블록의 필드에 역할(`MetaFieldRole`)을 배정한다 — 조회가 라벨에 매이지 않게.
+ * 라벨 조각으로 먼저 찾고, 못 찾으면 **값 일치**로 찾는다(AI 가 라벨을 정한 경우).
+ */
+function assignMetaRoles(
+  block: Block,
+  valueHints: Partial<Record<MetaFieldRole, string>>,
+): void {
+  const props = block.props as BlockPropsMap["clientMeta"];
+  if (!Array.isArray(props.fields)) return;
+  props.fields = healMetaFieldRoles(props.fields, valueHints);
+}
+
 function fillMetaBlock(block: Block, specFields: SpecField[]): void {
   const props = block.props as BlockPropsMap["clientMeta"];
   if (!Array.isArray(props.fields)) return;
@@ -600,6 +616,12 @@ export function fillTemplateDoc(base: EditorDoc, spec: DocSpec): EditorDoc {
   for (const block of doc.blocks) {
     if (block.type === "clientMeta") {
       fillMetaBlock(block, spec.clientFields);
+      /*
+       * 채운 뒤 **역할**을 배정한다. 양식·모델이 라벨을 정하므로(`수요기관`·`발주처`)
+       * 라벨 조각만으로는 거래처명 필드를 못 찾는다 — 그러면 Document.clientName 이
+       * 영영 동기화되지 않아 목록과 본문이 다른 거래처를 주장한다. 값은 우리가 안다.
+       */
+      assignMetaRoles(block, { clientName: spec.clientName });
     } else if (block.type === "itemTable") {
       fillItemTableBlock(block, spec);
     }
@@ -679,10 +701,13 @@ export function buildDocFromSpec(
       value: f.value,
     }));
   } else {
+    // 공급자명 필드는 **역할**로 찾는다 (라벨 문자열 비교는 라벨을 고치면 끊긴다)
+    const target = findMetaField(supplierProps.fields, "supplierName");
     supplierProps.fields = supplierProps.fields.map((f) =>
-      f.label === "상호" ? { ...f, value: opts.supplierName } : f,
+      f.id === target?.id ? { ...f, value: opts.supplierName } : f,
     );
   }
+  assignMetaRoles(supplier, { supplierName: opts.supplierName });
   supplier.h = Math.max(140, 12 + supplierProps.fields.length * FIELD_ROW_HEIGHT);
   blocks.push(supplier);
 
@@ -696,6 +721,7 @@ export function buildDocFromSpec(
     label: f.label,
     value: f.value,
   }));
+  assignMetaRoles(clientMeta, { clientName: spec.clientName });
   clientMeta.h = Math.max(150, 12 + clientFields.length * FIELD_ROW_HEIGHT);
   blocks.push(clientMeta);
 

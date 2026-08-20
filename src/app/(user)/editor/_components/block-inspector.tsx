@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { toast } from "sonner";
 import type {
   Block,
@@ -11,14 +12,21 @@ import type {
   CatalogOption,
   Align,
   FontFamily,
+  TableMerge,
   ZOrderAction,
 } from "@/lib/editor-schema";
 import {
   uid,
   FONT_FAMILY_LABELS,
   FORMULA_PRESETS,
+  DEFAULT_LINE_HEIGHT,
   evalFormula,
   calcItemTableTotal,
+  textFormat,
+  normalizeMerges,
+  shiftMergesOnColDelete,
+  shiftMergesOnRowDelete,
+  tableLayout,
 } from "@/lib/editor-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Trash2, Plus, BookmarkPlus } from "lucide-react";
+import { BLOCK_LABELS } from "@/lib/editor-schema";
 import { CatalogCombobox } from "./catalog-combobox";
 
 const MAX_IMAGE_BYTES = 1024 * 1024; // 1MB — 로고/직인 수준
@@ -48,6 +57,9 @@ const Z_ACTIONS: { action: ZOrderAction; label: string }[] = [
 
 type Props = {
   block: Block | null;
+  /** 문서 전체가 잠겼는지 (발송·확정본 등) — 블록별 `block.locked` 와는 별개다 (진단 3) */
+  readOnly?: boolean;
+  readOnlyReason?: string;
   catalog: CatalogOption[];
   onChange: (patch: Partial<Block>) => void;
   onChangeProps: (propsPatch: Record<string, unknown>) => void;
@@ -89,6 +101,8 @@ function ColorField({
 
 export function BlockInspector({
   block,
+  readOnly = false,
+  readOnlyReason = "",
   catalog,
   onChange,
   onChangeProps,
@@ -101,6 +115,23 @@ export function BlockInspector({
       <p className="text-sm text-muted-foreground">
         블록을 선택하면 여기에서 편집합니다.
       </p>
+    );
+  }
+
+  /*
+   * 잠긴 문서에서는 편집 컨트롤을 아예 그리지 않는다 — 비활성 입력만 늘어놓으면
+   * 왜 안 되는지 알 수 없다. 대신 이유를 그 자리에 적는다.
+   */
+  if (readOnly) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm font-medium">
+          블록 속성 · {BLOCK_LABELS[block.type]}
+        </p>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {readOnlyReason}
+        </p>
+      </div>
     );
   }
 
@@ -350,6 +381,8 @@ function TextForm({
   onChangeProps: (p: Record<string, unknown>) => void;
 }) {
   const p = block.props as BlockPropsMap["text"];
+  // 기본값 판단은 textFormat 하나가 한다 — 예전 문서(속성 없음)도 화면·인쇄와 같게 보인다
+  const f = textFormat(p, block.type === "title" ? "title" : "text");
   return (
     <div className="space-y-3">
       <div className="space-y-2">
@@ -371,8 +404,49 @@ function TextForm({
       </div>
       <FontFamilyField
         value={p.fontFamily}
-        onChange={(f) => onChangeProps({ fontFamily: f })}
+        onChange={(next) => onChangeProps({ fontFamily: next })}
       />
+      {/* 서식은 블록 단위다 — 한 블록 안에서 단어별로 다르게 하려면 블록을 나눈다 */}
+      <div className="space-y-1">
+        <Label className="text-xs">서식</Label>
+        <div className="flex gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant={f.bold ? "default" : "outline"}
+            className="flex-1 font-bold"
+            aria-pressed={f.bold}
+            onClick={() => onChangeProps({ bold: !f.bold })}
+          >
+            굵게
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={f.italic ? "default" : "outline"}
+            className="flex-1 italic"
+            aria-pressed={f.italic}
+            onClick={() => onChangeProps({ italic: !f.italic })}
+          >
+            기울임
+          </Button>
+        </div>
+      </div>
+      <div>
+        <Label className="text-xs">줄 높이 (배수)</Label>
+        <Input
+          type="number"
+          step="0.05"
+          min="0.5"
+          max="5"
+          value={f.lineHeight}
+          onChange={(e) =>
+            onChangeProps({
+              lineHeight: Number(e.target.value) || DEFAULT_LINE_HEIGHT,
+            })
+          }
+        />
+      </div>
       <AlignField value={p.align} onChange={(a) => onChangeProps({ align: a })} />
       <ColorField
         label="글자 색상"
@@ -771,12 +845,17 @@ function TableForm({
       cells: cells.map((row) => [...row, ""]),
       colAligns: [...aligns, "left"],
     });
+  // 행·열을 지우면 병합 좌표도 함께 옮긴다 — 안 그러면 병합이 격자 밖을 가리켜 표가 어긋난다
   const delRow = (ri: number) =>
-    onChangeProps({ cells: cells.filter((_, r) => r !== ri) });
+    onChangeProps({
+      cells: cells.filter((_, r) => r !== ri),
+      merges: shiftMergesOnRowDelete(p.merges, ri),
+    });
   const delCol = (ci: number) =>
     onChangeProps({
       cells: cells.map((row) => row.filter((_, c) => c !== ci)),
       colAligns: aligns.filter((_, c) => c !== ci),
+      merges: shiftMergesOnColDelete(p.merges, ci),
     });
   const setAlign = (ci: number, a: Align) => {
     const next = [...aligns];
@@ -863,6 +942,108 @@ function TableForm({
           <Plus className="size-4" /> 열 추가
         </Button>
       </div>
+
+      <MergeForm block={block} onChangeProps={onChangeProps} />
+    </div>
+  );
+}
+
+/**
+ * 표 셀 병합 (진단 5) — 계약서 표에는 병합 셀이 필수다.
+ *
+ * 시작 셀 + 크기로 받는다. 격자 밖이거나 이미 병합된 자리와 겹치면
+ * `normalizeMerges` 가 걸러내므로, 저장 전에 같은 함수로 미리 확인해 안내한다
+ * (조용히 무시하면 왜 병합이 안 되는지 알 수 없다).
+ */
+function MergeForm({
+  block,
+  onChangeProps,
+}: {
+  block: Block;
+  onChangeProps: (p: Record<string, unknown>) => void;
+}) {
+  const p = block.props as BlockPropsMap["table"];
+  const cells = Array.isArray(p.cells) ? p.cells : [];
+  const rows = cells.length;
+  const cols = cells.reduce((max, row) => Math.max(max, row?.length ?? 0), 0);
+  const merges = tableLayout(p).merges;
+
+  const [start, setStart] = useState({ r: 0, c: 0 });
+  const [size, setSize] = useState({ rs: 1, cs: 2 });
+
+  function add() {
+    const next: TableMerge = { r: start.r, c: start.c, rs: size.rs, cs: size.cs };
+    const accepted = normalizeMerges([...merges, next], rows, cols);
+    if (accepted.length === merges.length) {
+      toast.error(
+        "그 범위는 병합할 수 없습니다. 표 안쪽이고 다른 병합과 겹치지 않아야 하며 2칸 이상이어야 합니다.",
+      );
+      return;
+    }
+    onChangeProps({ merges: accepted });
+  }
+
+  return (
+    <div className="space-y-2 rounded border p-2">
+      <Label className="text-xs">셀 병합</Label>
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        시작 칸(행·열)과 합칠 칸 수를 정합니다. 값은 시작 칸의 내용을 씁니다.
+      </p>
+      <div className="grid grid-cols-4 gap-1">
+        {(
+          [
+            ["시작 행", start.r + 1, (v: number) => setStart((s) => ({ ...s, r: v - 1 })), 1, Math.max(1, rows)],
+            ["시작 열", start.c + 1, (v: number) => setStart((s) => ({ ...s, c: v - 1 })), 1, Math.max(1, cols)],
+            ["행 수", size.rs, (v: number) => setSize((s) => ({ ...s, rs: v })), 1, Math.max(1, rows)],
+            ["열 수", size.cs, (v: number) => setSize((s) => ({ ...s, cs: v })), 1, Math.max(1, cols)],
+          ] as const
+        ).map(([label, value, set, min, max]) => (
+          <div key={label}>
+            <Label className="text-[10px] text-muted-foreground">{label}</Label>
+            <Input
+              type="number"
+              min={min}
+              max={max}
+              value={value}
+              onChange={(e) => set(Math.max(min, Math.min(max, toInt(e.target.value))))}
+            />
+          </div>
+        ))}
+      </div>
+      <Button variant="outline" size="sm" onClick={add}>
+        <Plus className="size-4" /> 병합
+      </Button>
+
+      {merges.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground">병합된 칸이 없습니다.</p>
+      ) : (
+        <div className="space-y-1">
+          {merges.map((m) => (
+            <div
+              key={`${m.r}:${m.c}:${m.rs}:${m.cs}`}
+              className="flex items-center gap-1 text-[11px]"
+            >
+              <span className="flex-1 tabular-nums">
+                {m.r + 1}행 {m.c + 1}열 → {m.rs}×{m.cs}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="병합 해제"
+                onClick={() =>
+                  onChangeProps({
+                    merges: merges.filter(
+                      (x) => !(x.r === m.r && x.c === m.c && x.rs === m.rs && x.cs === m.cs),
+                    ),
+                  })
+                }
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

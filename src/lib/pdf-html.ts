@@ -10,14 +10,22 @@
  */
 
 import {
+  blocksOnPage,
   calcItemTableTotal,
   evalSummaryRows,
+  normalizeColWidths,
+  normalizeRowHeights,
   pageCount,
+  tableLayout,
+  textFormat,
+  FONT_FAMILIES,
   type Align,
   type Block,
   type BlockPropsMap,
   type EditorDoc,
   type FontFamily,
+  findMetaField,
+  type MetaFieldRole,
 } from "./editor-schema";
 import { formatKRW } from "./format";
 
@@ -47,21 +55,25 @@ const PRINT_COLORS = {
   divider: "#d1d5db",
 } as const;
 
-/**
- * 인쇄용 글꼴 스택 — 헤드리스 브라우저는 서버(리눅스 컨테이너 포함)에서 돌 수 있어
- * 화면용 스택(editor-schema)만으로는 한글이 깨질 수 있다. 한글 글꼴을 명시한다.
- *
- * 순서가 중요하다. 글꼴 대체는 글자 단위로 왼쪽부터 찾으므로, 계열에 맞는 **한글** 글꼴을
- * 라틴 글꼴 바로 뒤에 두어야 한다. 고딕 글꼴을 앞에 두면 명조를 골라도 한글만 고딕으로
- * 나온다. 맨 끝의 고딕은 어느 한글 글꼴도 없을 때 두부(□)를 피하려는 최후 수단이다.
- * 실제로 어떤 글꼴이 쓰였는지는 `pdf.ts` 의 `checkKoreanFonts()` 로 확인한다.
+/*
+ * 글꼴 스택은 `editor-schema` 의 FONT_FAMILIES 하나를 화면·인쇄가 함께 쓴다.
+ * 따로 두면 같은 글의 줄바꿈 지점이 달라져, 화면에서 딱 맞춘 블록이 PDF 에서 넘친다.
  */
-const PRINT_FONT_STACKS: Record<FontFamily, string> = {
-  sans: 'ui-sans-serif, system-ui, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", sans-serif',
-  serif:
-    'ui-serif, Georgia, "Nanum Myeongjo", "Noto Serif KR", AppleMyungjo, Batang, "Apple SD Gothic Neo", serif',
-  mono: 'ui-monospace, SFMono-Regular, "D2Coding ligature", D2Coding, "Noto Sans Mono CJK KR", "Nanum Gothic Coding", "Apple SD Gothic Neo", monospace',
-};
+
+/*
+ * **줄 높이는 화면 렌더러와 숫자까지 같아야 한다** (진단 4).
+ *
+ * 인쇄 CSS 는 줄 높이를 지정하지 않아 `normal`(≈1.2)로 렌더됐고, 화면은 Tailwind 값을
+ * 썼다. 그래서 같은 표가 화면 21.5px / 인쇄 19px 행으로 그려져, 화면에서 딱 맞춘 블록이
+ * 인쇄에서는 남고(반대로 넘치기도) 줄바꿈 지점도 어긋났다.
+ *
+ * 아래 값은 화면 블록 렌더러가 쓰는 Tailwind 클래스의 실측 비율이다.
+ * 화면 쪽 클래스를 바꾸면 이 값도 함께 바꿔야 한다.
+ */
+/** Tailwind `text-xs` 의 줄 높이 비율 (12px → 16px). 품목표·표·거래처 메타가 쓴다. */
+const TEXT_XS_LEADING = "1.33333";
+/** 앱 기본 줄 높이 1.5 — 공급자 블록은 `text-[11px]` 만 지정해 이 값을 물려받는다 (11px → 16.5px) */
+const BASE_LEADING = "1.5";
 
 const ALIGNS: readonly Align[] = ["left", "center", "right"];
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -95,7 +107,7 @@ function safeAlign(value: unknown, fallback: Align = "left"): Align {
 }
 
 function safeFontStack(value: unknown): string {
-  return PRINT_FONT_STACKS[value as FontFamily] ?? PRINT_FONT_STACKS.sans;
+  return FONT_FAMILIES[value as FontFamily] ?? FONT_FAMILIES.sans;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -151,6 +163,22 @@ const px = (n: number): string => `${Number.isFinite(n) ? n : 0}px`;
 
 // ============ 블록 렌더러 (editor/_components/blocks/* 와 1:1 대응) ============
 
+/**
+ * 굵기·기울임·줄 높이 (진단 5). 기본값은 화면 렌더러와 **같은 `textFormat`** 이 정한다 —
+ * 따로 적으면 예전 문서(이 속성이 없는 contentJson)가 화면과 인쇄에서 다르게 보인다.
+ */
+function textStyleAttrs(
+  props: BlockPropsMap["text"],
+  type: "title" | "text",
+): StyleMap {
+  const f = textFormat(props, type);
+  return {
+    "font-weight": f.bold ? "700" : "400",
+    "font-style": f.italic ? "italic" : "normal",
+    "line-height": String(clamp(f.lineHeight, 0.5, 5)),
+  };
+}
+
 function renderTitle(props: BlockPropsMap["title"]): string {
   const align = safeAlign(props.align);
   const justify =
@@ -164,6 +192,7 @@ function renderTitle(props: BlockPropsMap["title"]): string {
       ? `1px solid ${safeHexColor(props.borderColor, PRINT_COLORS.border)}`
       : undefined,
     "justify-content": justify,
+    ...textStyleAttrs(props, "title"),
   });
   return `<div class="blk-title"${style}>${escapeHtml(props.text)}</div>`;
 }
@@ -177,12 +206,17 @@ function renderText(props: BlockPropsMap["text"]): string {
     border: props.border
       ? `1px solid ${safeHexColor(props.borderColor, PRINT_COLORS.border)}`
       : undefined,
+    ...textStyleAttrs(props, "text"),
   });
   return `<div class="blk-text"${style}>${escapeHtml(props.text)}</div>`;
 }
 
-/** 값이 빈 필드에만 적용할 대체값 — 사용자가 입력한 값은 절대 덮어쓰지 않는다 */
-type FieldFallback = { match: (label: string) => boolean; value: string };
+/**
+ * 값이 빈 필드에만 적용할 대체값 — 사용자가 입력한 값은 절대 덮어쓰지 않는다.
+ * 대상은 **역할**로 지목한다(`findMetaField`) — 예전에는 라벨 문자열로 찾아서
+ * 사용자가 `상호` 라벨을 고치면 폴백이 조용히 끊겼다.
+ */
+type FieldFallback = { role: MetaFieldRole; value: string };
 
 /** 라벨/값 2열 표 (공급자·거래처 메타 공용) */
 function renderFieldTable(
@@ -192,12 +226,17 @@ function renderFieldTable(
 ): string {
   const fields = Array.isArray(props.fields) ? props.fields : [];
   const labelWidth = px(clamp(props.labelWidth, 0, MAX_CANVAS_SIZE));
+  // 폴백 대상 필드를 역할로 미리 찾아 둔다 (필드 id 로 비교하면 라벨과 무관해진다)
+  const fallbackByFieldId = new Map(
+    fallbacks
+      .map((c) => [findMetaField(fields, c.role)?.id, c.value] as const)
+      .filter((pair): pair is readonly [string, string] => typeof pair[0] === "string"),
+  );
   const rows = fields
     .map((f) => {
       const label = String(f.label ?? "");
       const value =
-        String(f.value ?? "").trim() ||
-        (fallbacks.find((c) => c.match(label))?.value ?? "");
+        String(f.value ?? "").trim() || (fallbackByFieldId.get(f.id) ?? "");
       return `<tr><th${styleAttr({ width: labelWidth })}>${escapeHtml(
         label,
       )}</th><td>${escapeHtml(value)}</td></tr>`;
@@ -270,22 +309,45 @@ function renderItemTable(props: BlockPropsMap["itemTable"]): string {
 }
 
 function renderTable(props: BlockPropsMap["table"]): string {
-  const cells = Array.isArray(props.cells) ? props.cells : [];
+  // 병합 계산은 화면 렌더러와 **같은 tableLayout** 을 쓴다 (진단 5)
+  const { cells, layout } = tableLayout(props);
+  const rowHeights = normalizeRowHeights(props.rowHeights, cells.length);
   const rows = cells
     .map((row, ri) => {
       const tag = props.hasHeader && ri === 0 ? "th" : "td";
+      // 행 높이도 화면과 같은 값을 쓴다 (0 이면 내용에 맞춤 — colgroup 과 같은 원칙)
+      const rowStyle = rowHeights[ri] > 0 ? styleAttr({ height: px(rowHeights[ri]) }) : "";
       const inner = (Array.isArray(row) ? row : [])
         .map((cell, ci) => {
+          const span = layout[ri]?.[ci];
+          // 덮인 자리는 내보내지 않는다 — 내보내면 colspan 합이 열 수를 넘어 표가 깨진다
+          if (span?.skip) return "";
           const style = styleAttr({
             "text-align": safeAlign(props.colAligns?.[ci]),
           });
-          return `<${tag}${style}>${escapeHtml(cell)}</${tag}>`;
+          const rowSpan =
+            span && span.rowSpan > 1 ? ` rowspan="${span.rowSpan}"` : "";
+          const colSpan =
+            span && span.colSpan > 1 ? ` colspan="${span.colSpan}"` : "";
+          return `<${tag}${style}${rowSpan}${colSpan}>${escapeHtml(cell)}</${tag}>`;
         })
         .join("");
-      return `<tr>${inner}</tr>`;
+      return `<tr${rowStyle}>${inner}</tr>`;
     })
     .join("");
-  return `<table class="blk-table blk-grid"><tbody>${rows}</tbody></table>`;
+  /*
+   * 열 폭도 화면과 같은 값을 쓴다 (`normalizeColWidths`).
+   * 저장된 값이 없으면 `<colgroup>` 을 내보내지 않아 예전처럼 자동 배분된다 —
+   * 여기서만 균등 분배하면 같은 표가 화면과 인쇄에서 다르게 나온다.
+   */
+  const colCount = cells[0]?.length ?? 0;
+  const colgroup =
+    props.colWidths && props.colWidths.length > 0 && colCount > 0
+      ? `<colgroup>${normalizeColWidths(props.colWidths, colCount)
+          .map((w) => `<col style="width:${w.toFixed(4)}%">`)
+          .join("")}</colgroup>`
+      : "";
+  return `<table class="blk-table blk-grid">${colgroup}<tbody>${rows}</tbody></table>`;
 }
 
 /**
@@ -334,7 +396,7 @@ function renderBlockContent(block: Block, branding: PdfBranding | null): string 
         block.props as BlockPropsMap["supplier"],
         "blk-supplier",
         branding?.companyName
-          ? [{ match: (l) => l.includes("상호"), value: branding.companyName }]
+          ? [{ role: "supplierName" as const, value: branding.companyName }]
           : [],
       );
     case "clientMeta":
@@ -356,14 +418,6 @@ function renderBlockContent(block: Block, branding: PdfBranding | null): string 
 }
 
 // ============================ 페이지 조립 ============================
-
-/** 해당 페이지에 걸치는 블록만 고른다 (editor-preview 와 동일한 판정) */
-function blocksOnPage(doc: EditorDoc, pageIndex: number): Block[] {
-  const h = doc.canvas.h;
-  return doc.blocks
-    .filter((b) => b.y < (pageIndex + 1) * h && b.y + b.h > pageIndex * h)
-    .sort((a, b) => a.z - b.z);
-}
 
 function renderPage(
   doc: EditorDoc,
@@ -390,18 +444,18 @@ function buildStyles(width: number, height: number, brand: string): string {
 :root{--brand:${brand};--border:${PRINT_COLORS.border};--muted:${PRINT_COLORS.muted};--muted-fg:${PRINT_COLORS.mutedForeground}}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:#fff}
-body{color:${PRINT_COLORS.text};font-family:${PRINT_FONT_STACKS.sans};-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{color:${PRINT_COLORS.text};font-family:${FONT_FAMILIES.sans};-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @page{size:${width}px ${height}px;margin:0}
-.page{position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#fff;break-after:page}
+.page{position:relative;isolation:isolate;width:${width}px;height:${height}px;overflow:hidden;background:#fff;break-after:page}
 .page:last-child{break-after:auto}
 .blk{position:absolute;overflow:hidden}
-.blk-title{display:flex;align-items:center;width:100%;height:100%;padding:0 8px;font-weight:700;letter-spacing:.1em}
-.blk-text{width:100%;height:100%;padding:4px 8px;line-height:1.625;white-space:pre-wrap;word-break:break-word}
-.blk-table{width:100%;height:100%;border-collapse:collapse;font-size:12px}
+.blk-title{display:flex;align-items:center;width:100%;height:100%;padding:0 8px;letter-spacing:.1em}
+.blk-text{width:100%;height:100%;padding:4px 8px;white-space:pre-wrap;word-break:break-word}
+.blk-table{width:100%;border-collapse:collapse;font-size:12px;line-height:${TEXT_XS_LEADING}}
 .blk-table th,.blk-table td{border:1px solid var(--border);padding:4px 8px;text-align:left;vertical-align:top}
 .blk-table th{background:var(--muted);font-weight:500}
 .blk-table .num{text-align:right;font-variant-numeric:tabular-nums}
-.blk-supplier{font-size:11px}
+.blk-supplier{font-size:11px;line-height:${BASE_LEADING}}
 .blk-supplier th,.blk-supplier td{padding:2px 4px}
 .blk-supplier th,.blk-meta th{color:var(--muted-fg)}
 .blk-items thead th{border-bottom:2px solid var(--brand)}

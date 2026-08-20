@@ -1835,6 +1835,37 @@ async function main() {
     }
   }
 
+  /*
+   * 10-3-1) 금액만 있는 문서에 **근거 품목**을 만든다.
+   *
+   * 문서 금액은 품목표에서 도출된다(`deriveAmount`). 금액 컬럼만 채우고 품목을 비워 두면
+   * 에디터가 그 문서를 열 때 합계 ₩0 인 빈 품목표를 그리고, 그 화면을 저장하는 순간
+   * 실제 금액이 0 으로 덮여 기회 예상 금액까지 따라 내려간다.
+   * 시드가 자기모순이면 개발자마다 이 사고를 다시 만나므로 여기서 금액과 근거를 맞춘다.
+   * (품목을 이미 가진 문서·표준 양식은 `items: { none: {} }` 로 걸러진다.)
+   */
+  const AMOUNT_ITEM_NAMES: Record<string, string> = {
+    QUOTE: "견적 금액",
+    CONTRACT: "계약 금액",
+    PROPOSAL: "제안 금액",
+    NDA: "계약 금액",
+  };
+  const amountOnlyDocuments = await prisma.document.findMany({
+    where: { orgId: org.id, amount: { gt: 0 }, items: { none: {} } },
+    select: { id: true, type: true, amount: true },
+  });
+  await prisma.documentItem.createMany({
+    data: amountOnlyDocuments.map((document) => ({
+      documentId: document.id,
+      name: AMOUNT_ITEM_NAMES[document.type] ?? "금액",
+      description: "품목 내역이 없어 총액 한 줄로 표시합니다.",
+      quantity: 1,
+      unitPrice: document.amount,
+      amount: document.amount,
+      sortOrder: 0,
+    })),
+  });
+
   // 10-4) 확정 문서 재판정 — 예상 금액을 문서에서 도출한다 (기회-6)
   //   런타임(`src/lib/opportunity-amount.ts`)이 하는 일을 시드에서도 **같은 순수 함수**로
   //   재현한다. 여기서 숫자를 손으로 적으면 화면이 계산한 값과 어긋난 시드가 만들어진다.

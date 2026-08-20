@@ -411,7 +411,8 @@ function ExpectedAmountValue({
 
       {confirmedDocument ? (
         <DocumentPreviewDialog
-          documentId={confirmedDocument.id}
+
+          id={confirmedDocument.id}
           title={confirmedDocument.title}
           open={isPreviewOpen}
           onOpenChange={setIsPreviewOpen}

@@ -38,11 +38,24 @@ export type ZOrderAction = "front" | "back" | "forward" | "backward";
 
 export type FontFamily = "sans" | "serif" | "mono";
 
-/** fontFamily 키 → 실제 CSS font-family */
+/**
+ * fontFamily 키 → 실제 CSS font-family.
+ *
+ * **화면과 인쇄가 같은 스택을 쓴다.** 예전에는 화면용(여기)과 인쇄용(`pdf-html.ts`)이
+ * 따로 있었는데, 그러면 같은 글에서 줄바꿈 지점이 달라져 화면에서 딱 맞춘 블록이
+ * PDF 에서 넘치거나 남는다. 한글 글꼴을 명시하는 이유·순서는 아래 주석 참고.
+ *
+ * 순서가 중요하다. 글꼴 대체는 글자 단위로 왼쪽부터 찾으므로, 계열에 맞는 **한글**
+ * 글꼴을 라틴 글꼴 바로 뒤에 두어야 한다. 고딕 글꼴을 앞에 두면 명조를 골라도 한글만
+ * 고딕으로 나온다. 맨 끝의 고딕은 어느 한글 글꼴도 없을 때 두부(□)를 피하려는 최후
+ * 수단이다 — 헤드리스 브라우저는 한글 글꼴이 없는 리눅스 컨테이너에서도 돌 수 있다.
+ * 실제로 어떤 글꼴이 쓰였는지는 `pdf.ts` 의 `checkKoreanFonts()` 로 확인한다.
+ */
 export const FONT_FAMILIES: Record<FontFamily, string> = {
-  sans: "ui-sans-serif, system-ui, sans-serif",
-  serif: "ui-serif, Georgia, 'Nanum Myeongjo', serif",
-  mono: "ui-monospace, 'SFMono-Regular', monospace",
+  sans: 'ui-sans-serif, system-ui, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Nanum Gothic", sans-serif',
+  serif:
+    'ui-serif, Georgia, "Nanum Myeongjo", "Noto Serif KR", AppleMyungjo, Batang, "Apple SD Gothic Neo", serif',
+  mono: 'ui-monospace, SFMono-Regular, "D2Coding ligature", D2Coding, "Noto Sans Mono CJK KR", "Nanum Gothic Coding", "Apple SD Gothic Neo", monospace',
 };
 
 export const FONT_FAMILY_LABELS: Record<FontFamily, string> = {
@@ -51,7 +64,13 @@ export const FONT_FAMILY_LABELS: Record<FontFamily, string> = {
   mono: "고정폭",
 };
 
-/** 텍스트 계열(title/text) 공통 스타일 */
+/**
+ * 텍스트 계열(title/text) 공통 스타일.
+ *
+ * 서식은 **블록 단위**다 — 한 블록 안에서 특정 단어만 굵게 하는 부분 서식(리치텍스트)은
+ * 문서 모델을 문자열에서 인라인 런(run) 배열로 바꿔야 해서 별도 과제로 둔다.
+ * 강조할 문구는 텍스트 블록을 나눠 표현한다.
+ */
 export type TextStyle = {
   text: string;
   align: Align;
@@ -60,7 +79,43 @@ export type TextStyle = {
   color: string;
   border: boolean;
   borderColor: string;
+  /**
+   * 아래 세 값은 나중에 추가됐다 — **기존 contentJson 에는 없다.**
+   * 그래서 옵셔널로 두고 읽는 쪽이 `textFormat()` 으로 기본값을 채운다.
+   * 필수로 만들면 예전 문서를 열 때마다 굵기·줄 높이가 통째로 초기화된다.
+   */
+  bold?: boolean;
+  italic?: boolean;
+  /** 줄 높이 배수 (1.625 = 기존 leading-relaxed) */
+  lineHeight?: number;
 };
+
+/** 제목 블록의 기본 굵기 — 제목은 굵게, 본문은 보통이 기존 모습이다 */
+const DEFAULT_BOLD: Record<"title" | "text", boolean> = {
+  title: true,
+  text: false,
+};
+
+/** 기존 문서에 없던 서식 값의 기본값 (화면·인쇄가 같은 기본값을 써야 한다) */
+export const DEFAULT_LINE_HEIGHT = 1.625;
+
+/**
+ * 텍스트 블록의 서식을 기본값까지 채워 돌려준다.
+ * 화면 렌더러·인쇄 렌더러·인스펙터가 **같은 기본값**을 써야 예전 문서가 서로 다르게 보이지 않는다.
+ */
+export function textFormat(
+  props: TextStyle,
+  type: "title" | "text",
+): { bold: boolean; italic: boolean; lineHeight: number } {
+  return {
+    bold: props.bold ?? DEFAULT_BOLD[type],
+    italic: props.italic ?? false,
+    lineHeight:
+      typeof props.lineHeight === "number" && props.lineHeight > 0
+        ? props.lineHeight
+        : DEFAULT_LINE_HEIGHT,
+  };
+}
 
 export type ItemRow = {
   id: string;
@@ -88,7 +143,107 @@ export type CatalogOption = {
   unit: string;
 };
 
-export type MetaField = { id: string; label: string; value: string };
+/**
+ * 라벨/값 정보 필드의 **역할** — 코드가 이 필드를 찾을 때 쓰는 안정된 식별자.
+ *
+ * 예전에는 라벨 문자열이 곧 키였다(`label.includes("고객사")` · `label === "상호"`).
+ * 그래서 사용자가 라벨을 `거래처명` 으로 바꾸면 조회가 끊겼고, `Document.clientName`
+ * 은 PATCH 에서 `undefined` 가 되어 **문서 목록에 옛 거래처명이 영구히 남았다**
+ * (본문과 목록이 서로 다른 거래처를 주장한다). 캔버스에서 라벨을 더블클릭 한 번으로
+ * 고칠 수 있게 된 뒤로는 걸리기 쉬운 함정이 됐다.
+ *
+ * 옵셔널이다 — 예전 `contentJson` 에는 없으므로 `parseContentJson` 이 라벨로 추정해
+ * 채워 주고(치유), 다음 저장에 함께 남는다. 필수로 만들면 예전 문서가 통째로 어긋난다.
+ */
+export type MetaFieldRole = "clientName" | "supplierName";
+
+export type MetaField = {
+  id: string;
+  label: string;
+  value: string;
+  /** 코드가 이 필드를 찾는 열쇠. 없으면 라벨로 추정한다(예전 문서) */
+  role?: MetaFieldRole;
+};
+
+/** 역할별로 예전 문서에서 라벨을 추정할 때 쓰는 조각 (치유·폴백 전용) */
+const ROLE_LABEL_HINT: Record<MetaFieldRole, string> = {
+  clientName: "고객사",
+  supplierName: "상호",
+};
+
+/**
+ * 역할에 해당하는 필드를 찾는다 — **역할이 먼저, 라벨은 폴백**이다.
+ *
+ * 라벨 폴백은 `role` 이 없는 예전 문서를 위한 것이고, 역할을 가진 필드가 하나라도
+ * 있으면 라벨은 보지 않는다(라벨을 바꿔도 조회가 유지되는 이유).
+ */
+export function findMetaField(
+  fields: MetaField[] | undefined,
+  role: MetaFieldRole,
+): MetaField | null {
+  if (!Array.isArray(fields)) return null;
+  const byRole = fields.find((f) => f?.role === role);
+  if (byRole) return byRole;
+  const hint = ROLE_LABEL_HINT[role];
+  return fields.find((f) => typeof f?.label === "string" && f.label.includes(hint)) ?? null;
+}
+
+/**
+ * 역할이 비어 있는 필드에 역할을 채운다.
+ *
+ * 두 가지 단서를 쓴다.
+ *  ① **라벨 조각** — 예전 `contentJson` 치유용 (`고객사명` → clientName).
+ *  ② **값 일치**(`valueHints`) — 라벨을 **모델이 정하는** AI 생성 경로용. 거래처명이
+ *     `수요기관`·`발주처` 같은 라벨로 오면 라벨 조각으로는 영영 못 찾는데, 그 값이
+ *     무엇인지는 호출측이 알고 있다(`spec.clientName` · 브랜딩 회사명).
+ *
+ * 이미 그 역할을 가진 필드가 있으면 더 만들지 않는다 — 역할은 블록당 하나여야
+ * 조회 결과가 흔들리지 않는다.
+ */
+export function healMetaFieldRoles(
+  fields: MetaField[],
+  valueHints?: Partial<Record<MetaFieldRole, string>>,
+): MetaField[] {
+  if (!Array.isArray(fields)) return fields;
+  const taken = new Set(fields.map((f) => f?.role).filter(Boolean));
+  const roles = Object.keys(ROLE_LABEL_HINT) as MetaFieldRole[];
+  const norm = (v: unknown) => String(v ?? "").trim();
+  let changed = false;
+
+  const claim = (f: MetaField, role: MetaFieldRole) => {
+    taken.add(role);
+    changed = true;
+    return { ...f, role };
+  };
+
+  // 1차: 라벨 조각 (예전 문서). 라벨이 관례를 따르는 경우가 대부분이다
+  let next = fields.map((f) => {
+    if (!f || f.role) return f;
+    const role = roles.find(
+      (r) => !taken.has(r) && typeof f.label === "string" && f.label.includes(ROLE_LABEL_HINT[r]),
+    );
+    return role ? claim(f, role) : f;
+  });
+
+  // 2차: 값 일치 (AI 가 라벨을 정한 경우). 빈 값은 단서가 되지 않는다
+  if (valueHints) {
+    next = next.map((f) => {
+      if (!f || f.role || !norm(f.value)) return f;
+      const role = roles.find(
+        (r) => !taken.has(r) && norm(valueHints[r]) !== "" && norm(valueHints[r]) === norm(f.value),
+      );
+      return role ? claim(f, role) : f;
+    });
+  }
+
+  return changed ? next : fields;
+}
+
+/**
+ * 표 병합 범위 — 시작 셀(r, c)에서 rs 행 × cs 열.
+ * 값은 시작 셀의 `cells[r][c]` 를 쓰고, 덮인 셀은 렌더에서 건너뛴다.
+ */
+export type TableMerge = { r: number; c: number; rs: number; cs: number };
 
 export type BlockPropsMap = {
   title: TextStyle;
@@ -101,7 +256,28 @@ export type BlockPropsMap = {
     extraColumns: TableColumn[];
     summaryRows: SummaryRow[];
   };
-  table: { hasHeader: boolean; cells: string[][]; colAligns: Align[] };
+  table: {
+    hasHeader: boolean;
+    cells: string[][];
+    colAligns: Align[];
+    /**
+     * 열 폭 (%). 없으면 브라우저 자동 배분 — 기존 문서가 그대로 보인다.
+     * px 가 아니라 **비율**로 두는 이유: 블록 폭을 줄이면 표도 같이 줄어야 하는데
+     * px 로 저장하면 합이 블록보다 커져 표가 넘치거나 마지막 열이 잘린다.
+     */
+    colWidths?: number[];
+    /**
+     * 행 높이 (px). 표 레이아웃에서 행 높이는 **최소값**으로 동작한다 —
+     * 내용이 더 크면 그만큼 늘어난다(줄여도 글자가 잘리지 않는다).
+     * 없으면 예전처럼 내용에 맞춰진다.
+     */
+    rowHeights?: number[];
+    /**
+     * 병합 범위 (진단 5) — 계약서 표에는 병합 셀이 필수다.
+     * `cells` 는 그대로 두고 병합만 얹는다 → 기존 문서와 호환된다(없으면 병합 없음).
+     */
+    merges?: TableMerge[];
+  };
   image: {
     dataUrl: string;
     alt: string;
@@ -144,6 +320,105 @@ export function pageCount(doc: EditorDoc): number {
   return Math.max(1, doc.canvas.pages ?? 1);
 }
 
+/**
+ * 해당 페이지에 **걸치는** 블록만 골라 z 오름차순으로 준다.
+ *
+ * 캔버스는 여러 페이지를 한 장으로 이어 그리지만 미리보기와 PDF 는 한 장씩 그리므로
+ * 페이지 경계에 걸친 블록은 양쪽에 모두 나와야 한다(각 페이지에서 잘려 이어진다).
+ * 미리보기(`editor-preview`)와 인쇄(`pdf-html`)가 이 판정을 각자 구현하고 있었다 —
+ * 한쪽만 손보면 화면과 PDF 의 쪽 나눔이 조용히 어긋난다.
+ */
+export function blocksOnPage(doc: EditorDoc, pageIndex: number): Block[] {
+  const h = doc.canvas.h;
+  return doc.blocks
+    .filter((b) => b.y < (pageIndex + 1) * h && b.y + b.h > pageIndex * h)
+    .sort((a, b) => a.z - b.z);
+}
+
+/**
+ * 겹침 순서(z)를 바꾸고 **전체를 1..n 으로 정규화**한다.
+ *
+ * 정규화가 핵심이다. 예전에는 "맨 뒤로" 가 `min - 1` 을 주어 z 가 음수까지 내려갔는데,
+ * 캔버스·페이지 컨테이너가 흰 배경을 가진 **stacking context 가 아닌** 요소라서
+ * 음수 z 자식은 부모 배경 **뒤로** 들어가 화면과 PDF 에서 통째로 사라졌다.
+ * (컨테이너에 `isolation: isolate` 도 함께 걸어 이미 저장된 음수 z 도 살려낸다.)
+ *
+ * 규칙을 컴포넌트가 아니라 여기 두는 이유: 캔버스·인스펙터·컨텍스트 메뉴가 같은 판정을
+ * 공유해야 하고, 순수 함수여야 테스트로 경계를 지킬 수 있다.
+ */
+export function reorderZ(
+  blocks: Block[],
+  id: string,
+  action: ZOrderAction,
+): Block[] {
+  return reorderZMany(blocks, [id], action);
+}
+
+/**
+ * 여러 블록의 겹침 순서를 **묶음째** 바꾼다 (다중선택).
+ *
+ * `reorderZ` 를 id 마다 차례로 부르면 안 된다 — 선택 내부의 상대 순서가 뒤집힌다.
+ * 예: A(1) B(2) C(3) 에서 B·C 를 "앞으로" 보내려고 높은 것부터 부르면 C 는 이미 맨 앞이라
+ * 제자리, 그다음 B 가 C 를 넘어가 **B 가 C 위**로 올라간다(원래 순서와 반대).
+ * 그래서 선택을 하나의 묶음으로 떼어 낸 뒤 통째로 끼워 넣는다.
+ *
+ * "앞으로"·"뒤로" 는 묶음 **바로 위/아래의 비선택 블록 하나**를 뛰어넘는 것으로 정의한다.
+ */
+export function reorderZMany(
+  blocks: Block[],
+  ids: readonly string[],
+  action: ZOrderAction,
+): Block[] {
+  const set = new Set(ids);
+
+  // 현재 순서(z 오름차순, 동순위는 기존 배열 순서)
+  const ordered = blocks
+    .map((block, index) => ({ block, index }))
+    .sort((a, b) => a.block.z - b.block.z || a.index - b.index)
+    .map((entry) => entry.block);
+
+  const selected = ordered.filter((b) => set.has(b.id));
+  const rest = ordered.filter((b) => !set.has(b.id));
+  // 아무것도 안 골랐거나 전부 골랐으면 상대 순서가 바뀔 수 없다
+  if (selected.length === 0 || rest.length === 0) return blocks;
+
+  /** 선택 묶음을 rest 의 `at` 위치에 끼운다 */
+  const insertAt = (at: number) => [
+    ...rest.slice(0, at),
+    ...selected,
+    ...rest.slice(at),
+  ];
+
+  let next: Block[];
+  if (action === "front") {
+    next = [...rest, ...selected];
+  } else if (action === "back") {
+    next = [...selected, ...rest];
+  } else if (action === "forward") {
+    // 가장 위 선택 블록보다 위에 있는 첫 비선택 블록을 넘는다 (없으면 이미 맨 앞)
+    let topSel = -1;
+    for (let i = 0; i < ordered.length; i++) if (set.has(ordered[i].id)) topSel = i;
+    const neighbor = ordered.slice(topSel + 1).find((b) => !set.has(b.id));
+    if (!neighbor) return blocks;
+    next = insertAt(rest.indexOf(neighbor) + 1);
+  } else {
+    // 가장 아래 선택 블록보다 아래에 있는 마지막 비선택 블록 앞으로 내린다
+    const botSel = ordered.findIndex((b) => set.has(b.id));
+    const below = ordered.slice(0, botSel).filter((b) => !set.has(b.id));
+    const neighbor = below[below.length - 1];
+    if (!neighbor) return blocks;
+    next = insertAt(rest.indexOf(neighbor));
+  }
+
+  // 1..n 으로 다시 매긴다 — 음수·0 이 생기지 않고 값이 무한정 커지지도 않는다
+  const zById = new Map(next.map((block, index) => [block.id, index + 1]));
+  if (blocks.every((block) => zById.get(block.id) === block.z)) return blocks;
+  return blocks.map((block) => {
+    const z = zById.get(block.id);
+    return z === undefined || z === block.z ? block : { ...block, z };
+  });
+}
+
 export function uid(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -184,7 +459,7 @@ export function defaultProps(type: BlockType): AnyBlockProps {
       return {
         labelWidth: 72,
         fields: [
-          { id: uid(), label: "상호", value: "" },
+          { id: uid(), label: "상호", value: "", role: "supplierName" as const },
           { id: uid(), label: "대표자", value: "" },
           { id: uid(), label: "등록번호", value: "" },
           { id: uid(), label: "주소", value: "" },
@@ -196,7 +471,7 @@ export function defaultProps(type: BlockType): AnyBlockProps {
       return {
         labelWidth: 96,
         fields: [
-          { id: uid(), label: "고객사명", value: "" },
+          { id: uid(), label: "고객사명", value: "", role: "clientName" as const },
           { id: uid(), label: "수신자", value: "" },
           { id: uid(), label: "견적일", value: "" },
           { id: uid(), label: "유효기간", value: "" },
@@ -331,13 +606,244 @@ export function itemTableGrandTotal(props: BlockPropsMap["itemTable"]): number {
   );
 }
 
+/**
+ * 문서 본문에서 금액을 도출한다. **품목표 블록이 하나도 없으면 `null`** 이다.
+ *
+ * "합계 0원"과 "이 문서는 금액을 품목표로 표현하지 않는다"는 **다른 사실**이다.
+ * 계약서·NDA 처럼 품목표 없이 금액만 가진 문서를 저장할 때 이 둘을 같게 취급하면,
+ * 본문을 한 글자도 고치지 않은 저장 한 번으로 `Document.amount` 가 0 이 되고
+ * 확정 문서를 통해 기회 예상 금액까지 0 으로 끌어내린다 (기회-6).
+ * `null` 은 "쓸 근거가 없으니 저장된 값을 그대로 두라"는 뜻이다.
+ */
+export function deriveAmount(doc: EditorDoc): number | null {
+  const tables = doc.blocks.filter((b) => b.type === "itemTable");
+  if (tables.length === 0) return null;
+  return tables.reduce(
+    (sum, b) => sum + itemTableGrandTotal(b.props as BlockPropsMap["itemTable"]),
+    0,
+  );
+}
+
+/** 화면 표시용 총액 — 근거가 없으면 0 으로 본다 (저장에는 `deriveAmount` 를 쓴다). */
 export function computeAmount(doc: EditorDoc): number {
-  return doc.blocks
-    .filter((b) => b.type === "itemTable")
-    .reduce(
-      (sum, b) => sum + itemTableGrandTotal(b.props as BlockPropsMap["itemTable"]),
-      0,
-    );
+  return deriveAmount(doc) ?? 0;
+}
+
+// ─────────────────────────── 표 셀 병합 (진단 5) ───────────────────────────
+
+/** 셀 하나를 어떻게 그릴지 — `skip` 이면 다른 셀에 덮였으므로 렌더하지 않는다 */
+export type TableCellLayout = {
+  skip: boolean;
+  rowSpan: number;
+  colSpan: number;
+};
+
+/**
+ * 병합 범위를 **유효한 것만** 남긴다.
+ *
+ * 셀 격자는 사용자가 행·열을 지우면서 계속 변하는데 병합 범위는 좌표로 저장된다.
+ * 그래서 그릴 때마다 걸러야 한다 — 범위 밖이거나 1×1 이거나 **이미 다른 병합에 덮인**
+ * 범위는 버린다. 겹친 병합을 그대로 렌더하면 colspan 합이 열 수를 넘어 표가 깨진다.
+ * 먼저 선언된 병합이 이긴다(사용자가 만든 순서를 존중한다).
+ */
+/** 열 폭 최소값(%) — 이보다 좁아지면 글자가 한 자도 안 들어가 다시 잡을 수 없다 */
+export const MIN_COL_PERCENT = 4;
+
+/**
+ * 열 폭 배열을 열 개수에 맞춰 정리한다 (합 100%).
+ *
+ * 행·열을 더하거나 지우면 길이가 어긋나는데, 그대로 `<colgroup>` 에 넣으면 마지막 열이
+ * 사라지거나 표가 통째로 찌그러진다. 저장된 값이 없거나 못 쓰면 **균등 분배**로 돌린다.
+ */
+export function normalizeColWidths(
+  widths: number[] | undefined,
+  colCount: number,
+): number[] {
+  if (colCount <= 0) return [];
+  const even = 100 / colCount;
+  if (!Array.isArray(widths) || widths.length !== colCount) {
+    return Array.from({ length: colCount }, () => even);
+  }
+  const clean = widths.map((w) =>
+    typeof w === "number" && Number.isFinite(w) && w > 0 ? w : even,
+  );
+  const sum = clean.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return Array.from({ length: colCount }, () => even);
+  // 합을 100 으로 맞춘다 — 저장된 값이 조금씩 어긋나도 표가 넘치지 않는다
+  return clean.map((w) => (w / sum) * 100);
+}
+
+/** 행 높이 최소값(px) — 한 줄이 들어갈 자리는 남긴다 */
+export const MIN_ROW_PX = 16;
+
+/**
+ * 행 높이 배열을 행 개수에 맞춰 정리한다.
+ *
+ * 열 폭과 달리 **합을 맞추지 않는다** — 행은 서로 독립이고, 표 전체 높이는 블록 높이가
+ * 정한다(넘치면 잘림 경고가 뜨고 "내용 높이에 맞추기"로 맞춘다).
+ * 길이가 어긋나거나 못 쓰는 값은 `0`(= 내용에 맞춤)으로 둔다.
+ */
+export function normalizeRowHeights(
+  heights: number[] | undefined,
+  rowCount: number,
+): number[] {
+  if (rowCount <= 0) return [];
+  return Array.from({ length: rowCount }, (_, i) => {
+    const value = Array.isArray(heights) ? heights[i] : undefined;
+    return typeof value === "number" && Number.isFinite(value) && value > 0
+      ? Math.max(MIN_ROW_PX, Math.round(value))
+      : 0;
+  });
+}
+
+/**
+ * 행 높이를 바꾼다 — `index` 행만 늘리거나 줄인다.
+ * 저장된 값이 없던 행은 `measured`(지금 그려진 높이)에서 이어 간다.
+ */
+export function resizeTableRow(
+  heights: number[],
+  index: number,
+  deltaPx: number,
+  measured: number,
+): number[] {
+  if (index < 0 || index >= heights.length) return heights;
+  const from = heights[index] > 0 ? heights[index] : measured;
+  const next = [...heights];
+  next[index] = Math.max(MIN_ROW_PX, Math.round(from + deltaPx));
+  return next;
+}
+
+/**
+ * 두 열 사이 경계를 옮긴다 — `index` 열이 커지면 **바로 오른쪽 열이 그만큼 작아진다**.
+ *
+ * 다른 열까지 건드리지 않는 이유: 경계 하나를 끌었는데 표 전체가 재배치되면 사용자가
+ * 방금 맞춘 다른 열이 다시 틀어진다. 합이 100 으로 유지되므로 표 폭도 그대로다.
+ */
+export function resizeTableColumn(
+  widths: number[],
+  index: number,
+  deltaPercent: number,
+): number[] {
+  if (index < 0 || index >= widths.length - 1) return widths;
+  const left = widths[index];
+  const right = widths[index + 1];
+  // 양쪽 모두 최소 폭을 지키는 범위로 이동량을 자른다
+  const move = Math.max(
+    MIN_COL_PERCENT - left,
+    Math.min(deltaPercent, right - MIN_COL_PERCENT),
+  );
+  if (move === 0) return widths;
+  const next = [...widths];
+  next[index] = left + move;
+  next[index + 1] = right - move;
+  return next;
+}
+
+export function normalizeMerges(
+  merges: readonly TableMerge[] | undefined,
+  rows: number,
+  cols: number,
+): TableMerge[] {
+  if (!merges?.length || rows <= 0 || cols <= 0) return [];
+  const taken = new Set<string>();
+  const kept: TableMerge[] = [];
+
+  for (const raw of merges) {
+    const r = Math.trunc(Number(raw?.r));
+    const c = Math.trunc(Number(raw?.c));
+    const rs = Math.trunc(Number(raw?.rs));
+    const cs = Math.trunc(Number(raw?.cs));
+    if (!Number.isFinite(r) || !Number.isFinite(c)) continue;
+    if (r < 0 || c < 0 || rs < 1 || cs < 1) continue;
+    if (rs === 1 && cs === 1) continue; // 1×1 은 병합이 아니다
+    if (r + rs > rows || c + cs > cols) continue; // 격자 밖으로 삐져나간다
+
+    const covered: string[] = [];
+    let overlaps = false;
+    for (let i = r; i < r + rs && !overlaps; i++) {
+      for (let j = c; j < c + cs; j++) {
+        const key = `${i}:${j}`;
+        if (taken.has(key)) {
+          overlaps = true;
+          break;
+        }
+        covered.push(key);
+      }
+    }
+    if (overlaps) continue;
+
+    for (const key of covered) taken.add(key);
+    kept.push({ r, c, rs, cs });
+  }
+  return kept;
+}
+
+/**
+ * 표를 그릴 때 필요한 셀별 span/skip 정보를 만든다.
+ * 화면 렌더러와 인쇄 렌더러가 **이 함수 하나**를 공유해야 병합 표가 같게 나온다.
+ */
+export function tableLayout(props: BlockPropsMap["table"]): {
+  cells: string[][];
+  layout: TableCellLayout[][];
+  merges: TableMerge[];
+} {
+  const cells = Array.isArray(props.cells) ? props.cells : [];
+  const rows = cells.length;
+  const cols = cells.reduce((max, row) => Math.max(max, row?.length ?? 0), 0);
+  const merges = normalizeMerges(props.merges, rows, cols);
+
+  const layout: TableCellLayout[][] = cells.map((row) =>
+    (Array.isArray(row) ? row : []).map(() => ({
+      skip: false,
+      rowSpan: 1,
+      colSpan: 1,
+    })),
+  );
+
+  for (const m of merges) {
+    for (let i = m.r; i < m.r + m.rs; i++) {
+      for (let j = m.c; j < m.c + m.cs; j++) {
+        const cell = layout[i]?.[j];
+        if (!cell) continue;
+        if (i === m.r && j === m.c) {
+          cell.rowSpan = m.rs;
+          cell.colSpan = m.cs;
+        } else {
+          cell.skip = true;
+        }
+      }
+    }
+  }
+  return { cells, layout, merges };
+}
+
+/**
+ * 행을 지웠을 때 병합 범위를 옮긴다 (지운 행에 걸친 병합은 한 행 줄어든다).
+ * 여기서 손보지 않으면 지운 뒤 남은 병합이 격자 밖을 가리켜 표가 어긋난다.
+ */
+export function shiftMergesOnRowDelete(
+  merges: readonly TableMerge[] | undefined,
+  index: number,
+): TableMerge[] {
+  return (merges ?? []).flatMap((m) => {
+    if (index < m.r) return [{ ...m, r: m.r - 1 }]; // 위쪽이 지워지면 위로 당겨진다
+    if (index >= m.r + m.rs) return [m]; // 범위 아래 — 영향 없음
+    const rs = m.rs - 1; // 범위에 걸침 → 한 행 줄어든다
+    return rs > 1 || m.cs > 1 ? [{ ...m, rs }] : [];
+  });
+}
+
+/** 열을 지웠을 때 병합 범위를 옮긴다 (행 삭제와 같은 규칙) */
+export function shiftMergesOnColDelete(
+  merges: readonly TableMerge[] | undefined,
+  index: number,
+): TableMerge[] {
+  return (merges ?? []).flatMap((m) => {
+    if (index < m.c) return [{ ...m, c: m.c - 1 }];
+    if (index >= m.c + m.cs) return [m];
+    const cs = m.cs - 1;
+    return cs > 1 || m.rs > 1 ? [{ ...m, cs }] : [];
+  });
 }
 
 /** 금액 수식 예시 프리셋 (#9) — 인스펙터에서 불러오기 */
@@ -377,6 +883,37 @@ function isValidBlock(b: unknown): b is Block {
 }
 
 /**
+ * 저장할 수 있는 `contentJson` 최대 바이트.
+ *
+ * 이미지는 `dataUrl` 로 본문 안에 들어간다(별도 저장소가 없다). 인스펙터가 1MB 로
+ * 막지만 그건 **화면 검사**이고 서버는 본문을 그대로 저장했다 — 프로젝트가 이미
+ * 겪은 교훈(문서 잠금)과 같은 구조다: 화면에서만 막으면 API 로 그대로 통한다.
+ * 본문 전체에 상한을 두면 이미지 몇 장이든 한 규칙으로 묶인다.
+ *
+ * 4MB 는 넉넉하다 — 현재 문서 53건의 contentJson 합계가 21KB 다.
+ */
+export const MAX_CONTENT_JSON_BYTES = 4 * 1024 * 1024;
+
+/** 본문이 상한을 넘으면 사용자에게 보일 이유, 넘지 않으면 null */
+export function contentJsonSizeError(raw: string): string | null {
+  const bytes = new TextEncoder().encode(raw).length;
+  if (bytes <= MAX_CONTENT_JSON_BYTES) return null;
+  const mb = (n: number) => (n / 1024 / 1024).toFixed(1);
+  return `문서 본문이 너무 큽니다 (${mb(bytes)}MB / 최대 ${mb(
+    MAX_CONTENT_JSON_BYTES,
+  )}MB). 이미지 크기를 줄여 주세요.`;
+}
+
+/** 정보 블록(공급자·거래처)의 필드 역할을 채운 props — 그 외 블록은 그대로 */
+function healBlockMetaRoles(block: Block): Block["props"] {
+  if (block.type !== "supplier" && block.type !== "clientMeta") return block.props;
+  const props = block.props as BlockPropsMap["clientMeta"];
+  if (!Array.isArray(props.fields)) return block.props;
+  const fields = healMetaFieldRoles(props.fields);
+  return fields === props.fields ? block.props : { ...props, fields };
+}
+
+/**
  * contentJson 문자열을 EditorDoc 으로 안전 파싱한다.
  * 형태가 어긋나거나 유효 블록이 없으면 null 을 반환하고,
  * 개별 블록도 최소 스키마를 검증해 렌더 크래시를 방지한다.
@@ -398,8 +935,17 @@ export function parseContentJson(
     const doc = obj as EditorDoc;
     const blocks: Block[] = doc.blocks.filter(isValidBlock).map((b) => ({
       ...b,
-      z: typeof b.z === "number" ? b.z : 1,
+      // 음수 z 는 흰 배경 뒤로 숨어 블록이 사라진다 — 이미 저장된 손상 값을 여기서 치유한다
+      // (예전 "맨 뒤로" 가 min-1 로 내려 음수를 만들었다. 지금은 reorderZ 가 1..n 을 지킨다.)
+      z: typeof b.z === "number" ? Math.max(1, Math.trunc(b.z)) : 1,
       locked: typeof b.locked === "boolean" ? b.locked : false,
+      /*
+       * 정보 필드의 **역할**을 여기서 채운다 (예전 contentJson 에는 없다).
+       * 지금 채워 두면 다음 저장에 함께 남으므로, 그 뒤로는 라벨을 고쳐도 거래처명·
+       * 공급자명 조회가 끊기지 않는다. 마이그레이션 없이 읽는 쪽에서 치유하는 방식은
+       * 음수 z 와 같은 선례다.
+       */
+      props: healBlockMetaRoles(b),
     }));
     return {
       version: 1,
@@ -415,14 +961,15 @@ export function parseContentJson(
   }
 }
 
-/** 거래처 메타 블록에서 "고객사명" 값을 추출한다 (Document.clientName 동기화용). */
+/**
+ * 거래처 메타 블록에서 거래처명을 추출한다 (`Document.clientName` 동기화용).
+ * 조회는 **역할**로 한다 — 라벨을 `거래처명` 으로 바꿔도 목록의 거래처명이 끊기지 않는다.
+ */
 export function extractClientName(doc: EditorDoc): string | null {
   const meta = doc.blocks.find((b) => b.type === "clientMeta");
   if (!meta) return null;
   const fields = (meta.props as BlockPropsMap["clientMeta"]).fields;
-  if (!Array.isArray(fields)) return null;
-  const field = fields.find((f) => f.label?.includes("고객사"));
-  const value = field?.value?.trim();
+  const value = findMetaField(fields, "clientName")?.value?.trim();
   return value ? value : null;
 }
 
@@ -438,6 +985,11 @@ export function seedTemplate(input: {
     quantity: number;
     unitPrice: number;
   }[];
+  /**
+   * 저장된 `Document.amount`. 품목(`items`)이 없을 때 품목표에 근거 1행을 만드는 데 쓴다.
+   * 넘기지 않으면 품목 없는 문서는 합계 ₩0 으로 열린다.
+   */
+  amount?: number;
   /** 하단 약관/안내 섹션 (기타사항·기술지원 안내·특이사항 등) */
   notes?: { heading: string; lines: string[] }[];
 }): EditorDoc {
@@ -458,29 +1010,46 @@ export function seedTemplate(input: {
 
   const supplier = createBlock("supplier", { x: 437, y: 130 });
   const supplierProps = supplier.props as BlockPropsMap["supplier"];
-  // 첫 필드(상호) 값에 공급자명을 시드한다.
+  // 공급자명은 **역할**로 찾는다 — 라벨 문자열 비교는 라벨을 고치는 순간 끊긴다
+  const supplierNameField = findMetaField(supplierProps.fields, "supplierName");
   supplierProps.fields = supplierProps.fields.map((f) =>
-    f.label === "상호" ? { ...f, value: input.supplierName } : f,
+    f.id === supplierNameField?.id ? { ...f, value: input.supplierName } : f,
   );
 
   const clientMeta = createBlock("clientMeta", { x: 40, y: 130 });
   (clientMeta.props as BlockPropsMap["clientMeta"]).fields = [
-    { id: uid(), label: "고객사명", value: input.clientName ?? "" },
+    { id: uid(), label: "고객사명", value: input.clientName ?? "", role: "clientName" },
     { id: uid(), label: "수신자", value: "" },
     { id: uid(), label: "견적일", value: "" },
     { id: uid(), label: "유효기간", value: "" },
   ];
 
   const itemTable = createBlock("itemTable", { x: 40, y: 320 });
-  (itemTable.props as BlockPropsMap["itemTable"]).rows = input.items.map(
-    (it) => ({
-      id: uid(),
-      name: it.name,
-      description: it.description ?? "",
-      quantity: it.quantity,
-      unitPrice: it.unitPrice,
-    }),
-  );
+  const itemRows: ItemRow[] = input.items.map((it) => ({
+    id: uid(),
+    name: it.name,
+    description: it.description ?? "",
+    quantity: it.quantity,
+    unitPrice: it.unitPrice,
+  }));
+  /*
+   * 품목은 없는데 금액만 있는 문서(수동 생성·구버전 데이터)에는 **근거 1행**을 만든다.
+   * 이 행이 없으면 문서를 열자마자 합계 ₩0 이 보이고, 그 화면을 저장하는 순간
+   * 실제 금액이 0 으로 덮여 기회 예상 금액까지 따라 내려간다.
+   * 캔버스가 곧 금액의 출처이므로, 출처를 비워 둔 채 열지 않는다.
+   */
+  (itemTable.props as BlockPropsMap["itemTable"]).rows =
+    itemRows.length > 0 || !input.amount || input.amount <= 0
+      ? itemRows
+      : [
+          {
+            id: uid(),
+            name: `${typeLabel} 금액`,
+            description: "품목 내역이 없어 총액으로 표시했습니다. 필요하면 항목을 나눠 주세요.",
+            quantity: 1,
+            unitPrice: input.amount,
+          },
+        ];
 
   const notice = createBlock("text", { x: 40, y: 636 });
   notice.w = 714;

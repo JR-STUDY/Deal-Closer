@@ -2,8 +2,9 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { parseContentJson, seedTemplate } from "@/lib/editor-schema";
-import { DocumentEditorLoader } from "./_components/document-editor-loader";
+import { DocumentEditorLoader } from "../_components/document-editor-loader";
 import { availableModels } from "@/lib/ai/model-access";
+import { documentEditLock } from "@/lib/document-edit";
 
 export default async function EditorPage({
   params,
@@ -15,8 +16,10 @@ export default async function EditorPage({
   // getCurrentOrg 는 React.cache 로 사실상 무비용 → 먼저 해소 후 document·branding·catalog 병렬 (async-parallel)
   const org = await getCurrentOrg();
   const [document, branding, catalog] = await Promise.all([
-    prisma.document.findUnique({
-      where: { id: documentId },
+    // 조직 범위로 좁혀 조회한다 — 다른 조직의 문서 id 는 404 로 끝나야 한다
+    // (양식 편집 페이지·발송 페이지와 같은 규칙)
+    prisma.document.findFirst({
+      where: { id: documentId, orgId: org.id },
       include: { items: { orderBy: { sortOrder: "asc" } } },
     }),
     prisma.branding.findUnique({ where: { orgId: org.id } }),
@@ -45,6 +48,9 @@ export default async function EditorPage({
       supplierName: branding?.companyName ?? org.name,
       logoUrl: branding?.logoUrl ?? null,
       items: document.items,
+      // 품목 없이 금액만 있는 문서(수동 생성·구버전)도 캔버스 합계가 저장된 금액과
+      // 맞아야 한다 — 어긋난 채로 열면 저장 한 번에 실제 금액이 0 으로 덮인다.
+      amount: document.amount,
     });
 
   // AI 부분 재작성(F-215)에 쓸 모델 선택 목록 (환경변수만 읽으므로 동기)
@@ -52,16 +58,22 @@ export default async function EditorPage({
 
   return (
     <DocumentEditorLoader
-      documentId={document.id}
+      target={{
+        kind: "document",
+        documentId: document.id,
+        initialStatus: document.status,
+        initialAmount: document.amount,
+        version: document.version,
+        isConfirmed: document.isConfirmed,
+        // 잠금 판정은 서버(PATCH)와 같은 순수 함수를 쓴다 — 화면과 API 가 갈라지지 않게
+        lock: documentEditLock(document),
+        models,
+        defaultModel,
+        mockProvider: mock,
+      }}
       initialTitle={document.title}
-      initialStatus={document.status}
       initialDoc={initialDoc}
       catalog={catalog}
-      version={document.version}
-      isConfirmed={document.isConfirmed}
-      models={models}
-      defaultModel={defaultModel}
-      mockProvider={mock}
     />
   );
 }

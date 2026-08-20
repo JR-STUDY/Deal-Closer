@@ -3,10 +3,11 @@ import { prisma } from "@/lib/db";
 import { getCurrentOrg, getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 import {
-  computeAmount,
+  deriveAmount,
   parseContentJson,
   type EditorDoc,
   type BlockPropsMap,
+  findMetaField,
 } from "@/lib/editor-schema";
 import {
   BATCH_BASE_TYPE,
@@ -77,14 +78,19 @@ function cloneBaseDoc(): EditorDoc | null {
   return BASE_DOC ? (JSON.parse(JSON.stringify(BASE_DOC)) as EditorDoc) : null;
 }
 
-/** clientMeta 블록의 "고객사명" 값을 치환한다. */
+/**
+ * clientMeta 블록의 거래처명 값을 치환한다.
+ * 대상은 **역할**로 찾는다 — 라벨 문자열로 찾으면 사용자가 라벨을 고친 문서에서 조용히 빗나간다.
+ */
 function applyClientName(doc: EditorDoc, clientName: string): void {
   const meta = doc.blocks.find((b) => b.type === "clientMeta");
   if (!meta) return;
   const props = meta.props as BlockPropsMap["clientMeta"];
   if (!Array.isArray(props.fields)) return;
+  const target = findMetaField(props.fields, "clientName");
+  if (!target) return;
   props.fields = props.fields.map((f) =>
-    f.label?.includes("고객사") ? { ...f, value: clientName } : f,
+    f.id === target.id ? { ...f, value: clientName } : f,
   );
 }
 
@@ -156,7 +162,9 @@ export async function POST(req: NextRequest) {
       randomizeAmounts(doc);
     }
     const contentJson = doc ? JSON.stringify(doc) : BATCH_BASE_CONTENT_JSON;
-    const amount = doc ? computeAmount(doc) : 0;
+    // 기준본에는 품목표가 있으므로 null 이 나오지 않지만, 저장 경로는 항상 deriveAmount 를
+    // 쓴다 — 품목표 없는 기준본으로 바뀌는 날 computeAmount 는 소리 없이 0 을 저장한다
+    const amount = (doc ? deriveAmount(doc) : null) ?? 0;
 
     const created = await prisma.document.create({
       data: {
