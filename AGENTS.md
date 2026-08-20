@@ -415,6 +415,13 @@ src/
 - **목록 페이지네이션은 `@/lib/pagination` + `@/components/list-pagination` 을 쓴다.** 페이지는 URL 쿼리(`?page=`)로만 주고받는 **서버 페이지네이션**이며, 페이지 크기는 `LIST_PAGE_SIZE` 상수 하나다. 페이지 UI 는 **1페이지뿐이어도 노출**한다(이전·다음 비활성) — 결과 수에 따라 나타났다 사라지면 표 아래가 들썩이고 이 목록이 페이지로 나뉘는 화면인지도 알 수 없다. **0건일 때만** 감추고 그 자리에 빈 상태 안내를 둔다. 검색·필터를 바꿀 때는 툴바가 `nextListSearch` 로 page 를 1로 되돌린다(3페이지에 머문 채 조건을 좁히면 빈 화면이 뜬다). 총 건수·합계는 **필터를 적용한 전체**를 기준으로 내고, 건수 조회는 목록 조회와 `Promise.all` 로 병렬화한다. 기회 **칸반 보기는 페이지네이션 대상이 아니다** — 전체가 보여야 파이프라인이 성립한다.
 - **목록 행 전체 클릭은 `@/components/list-row-link` 를 쓴다.** `onClick` + `router.push` 로 행을 이동시키지 않는다 — `RowLink` 의 `::after` 덮개가 행을 채우므로 JS 없이 동작하고 키보드 Tab·Enter·새 탭이 그대로 된다(정책 ACC_*). 행에 `ROW_LINK_ROW`, 행 안의 다른 링크·`⋯` 메뉴 칸에 `ROW_LINK_ABOVE` 를 함께 붙인다.
 - import alias 는 `@/*` = `src/*`.
+- **서버가 읽는 상수는 `"use client"` 파일에서 export 하지 않는다.** 클라이언트 모듈의
+  export 는 번들러가 **클라이언트 참조로 바꿔** 놓으므로, 서버 컴포넌트가 import 하면 값이
+  아니라 함수 같은 프록시를 받는다. 실제로 `OPPORTUNITY_PEEK_LIMIT` 을 팝오버 컴포넌트에
+  두었다가 거래처 목록이 `take: [object Function]` 으로 죽었다. **타입은 `number` 로 보여
+  `typecheck`·`lint`·`build` 가 모두 통과하고 런타임에만 터진다** — 그래서 규칙으로 막는다.
+  양쪽이 함께 보는 값은 `@/lib/constants` 같은 **순수 모듈**에 두고 각자 import 한다
+  (`LIST_PAGE_SIZE` 가 선례다). 클라이언트끼리만 쓰는 상수는 그 자리에 둬도 된다.
 - **UI 텍스트는 한국어 존댓말** (정책 COPY-TONE). 접근성·명도대비를 준수한다(ACC_*).
 - **영업 담당자(기회의 owner)와 거래처 담당자(Account.contactName)는 라벨을 구분한다.** 기회 화면에서는 `영업 담당자` 로 적는다 — 한 화면에 두 담당자가 등장하는 순간 그냥 `담당자` 는 어느 쪽인지 알 수 없다.
 - **성능**: React/Next 코드를 작성·리뷰·리팩터링할 때 `docs/REACT_BEST_PRACTICES.md`(Vercel 70규칙 정리)를 따른다. 특히 ① 독립 조회는 `Promise.all` 병렬화, ② 서버 조회 함수는 `React.cache`, ③ 클라이언트 컴포넌트에 함수·비직렬화 객체 전달 금지 — 는 필수.
