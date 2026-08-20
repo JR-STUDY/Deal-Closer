@@ -340,14 +340,19 @@ export default async function OpportunityDetailPage({
          * 라벨 위 · 값 아래의 2줄 구조다 (기회-7). `거래처 > 다올테크 > 인프라 증설 1차` 처럼
          * 세 칸을 나열하면 분류(거래처)와 값(회사명·기회명)이 같은 줄에 섞여 읽힌다.
          * 위 줄이 그 칸의 뜻, 아래 줄이 값이고 `>` 는 값끼리만 잇는다.
+         *
+         * 라벨(위 줄)이 갈 목록 경로는 **이 화면이 `captionHref` 로 넘긴다.** 공용 컴포넌트가
+         * `거래처`·`기회` 라는 낱말로 라우트를 추측하면 라벨 문구를 바꾸는 순간 링크가 조용히
+         * 죽는다 — 경로를 아는 쪽이 넘기는 것이 맞다.
          */
         breadcrumb={[
           {
             caption: "거래처",
+            captionHref: "/accounts",
             label: dto.accountName,
             href: `/accounts/${dto.accountId}`,
           },
-          { caption: "기회", label: dto.name },
+          { caption: "기회", captionHref: "/opportunities", label: dto.name },
         ]}
         /*
          * 등록·최근 수정 일시는 제목 아래(`description`)가 아니라 **헤더 우측 아래**에
