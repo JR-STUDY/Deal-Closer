@@ -168,9 +168,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             : typeof body.folderId === "string"
               ? body.folderId
               : undefined,
-        // isCommon: 팀 공통(공유) 베이스 문서 지정/해제
-        isCommon:
-          typeof body.isCommon === "boolean" ? body.isCommon : undefined,
+        // isCommon 은 받지 않는다 — 문서함이 하나뿐이라 옮길 곳이 없다(스키마 컬럼만 유지).
         // isConfirmed: 확정본 지정/해제 (F-214) — 같은 묶음에서 여러 버전을 동시에 지정 가능
         isConfirmed:
           typeof body.isConfirmed === "boolean" ? body.isConfirmed : undefined,

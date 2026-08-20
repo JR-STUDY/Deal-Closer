@@ -117,12 +117,8 @@ export function AppSidebar({
                 <div className="mt-1 ml-4 space-y-1 border-l pl-3">
                   {item.children!.map((child) => {
                     const childActive = pathname === child.href;
-                    const isCommonBox = child.href === "/library/common";
-                    const isLibraryBox =
-                      child.href === "/library" || isCommonBox;
-                    const boxFolders = folders.filter((f) =>
-                      isCommonBox ? f.isCommon : !f.isCommon,
-                    );
+                    // 폴더 트리가 붙는 문서함은 '내 문서함' 하나뿐이다.
+                    const isLibraryBox = child.href === "/library";
                     const collapsed = collapsedBoxes.has(child.href);
                     return (
                       <div key={child.label}>
@@ -160,8 +156,7 @@ export function AppSidebar({
                           <div className="ml-2">
                             <Suspense fallback={null}>
                               <SidebarFolders
-                                folders={boxFolders}
-                                isCommon={isCommonBox}
+                                folders={folders}
                                 basePath={child.href}
                               />
                             </Suspense>

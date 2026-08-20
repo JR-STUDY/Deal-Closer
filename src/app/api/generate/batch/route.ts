@@ -18,7 +18,7 @@ import {
 /**
  * POST /api/generate/batch — 폴더 업로드 데모 변환 (MVP 목업)
  *
- * body: { folderName, fileNames: string[], saveAsCommon? }
+ * body: { folderName, fileNames: string[] }
  *
  * 데모 시나리오: 업로드한 파일의 실제 내용과 무관하게, 파일 하나당 "더미 기준본"
  * (src/lib/batch-template.ts — 실제 견적서 문서의 저장 스냅샷)을 복제해 문서를
@@ -118,7 +118,6 @@ export async function POST(req: NextRequest) {
   let body: {
     folderName?: unknown;
     fileNames?: unknown;
-    saveAsCommon?: unknown;
   };
   try {
     body = await req.json();
@@ -138,11 +137,9 @@ export async function POST(req: NextRequest) {
   if (fileNames.length === 0) {
     return fail("변환할 파일이 없습니다.");
   }
-  const saveAsCommon = body.saveAsCommon === true;
-
-  // 업로드 폴더명으로 보관함 폴더 생성 (같은 문서함 맨 뒤 순서)
+  // 업로드 폴더명으로 보관함 폴더 생성 (최상위 맨 뒤 순서)
   const last = await prisma.folder.findFirst({
-    where: { orgId: org.id, isCommon: saveAsCommon, parentId: null },
+    where: { orgId: org.id, parentId: null },
     orderBy: { sortOrder: "desc" },
     select: { sortOrder: true },
   });
@@ -150,7 +147,6 @@ export async function POST(req: NextRequest) {
     data: {
       orgId: org.id,
       name: folderName,
-      isCommon: saveAsCommon,
       parentId: null,
       sortOrder: (last?.sortOrder ?? -1) + 1,
     },
@@ -177,7 +173,6 @@ export async function POST(req: NextRequest) {
         title: titleFromName(name),
         type: BATCH_BASE_TYPE,
         status: "DRAFT",
-        isCommon: saveAsCommon,
         folderId: folder.id,
         clientName,
         contentJson,
@@ -190,7 +185,7 @@ export async function POST(req: NextRequest) {
 
   return ok(
     {
-      folder: { id: folder.id, name: folder.name, isCommon: folder.isCommon },
+      folder: { id: folder.id, name: folder.name },
       documents,
     },
     { status: 201 },

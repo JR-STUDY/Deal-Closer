@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 /**
  * '폴더 추가' 버튼 (문서 보관함 옆).
- * 선택(활성)된 폴더가 있으면 그 하위에, 없으면 현재 문서함 최상위에
+ * 선택(활성)된 폴더가 있으면 그 하위에, 없으면 문서함 최상위에
  * "새 폴더"를 즉시 만들고, edit 파라미터로 이동해 바로 이름 편집 상태로 연다.
  * (팝업 없음)
  */
@@ -21,14 +21,13 @@ export function AddFolderButton() {
     if (busy) return;
     setBusy(true);
 
-    const onLibrary = pathname === "/library" || pathname === "/library/common";
-    const isCommonBox = pathname === "/library/common";
-    const basePath = isCommonBox ? "/library/common" : "/library";
+    const basePath = "/library";
+    const onLibrary = pathname === basePath;
     const activeFolder = onLibrary ? searchParams.get("folder") : null;
 
     const payload = activeFolder
       ? { name: "새 폴더", parentId: activeFolder }
-      : { name: "새 폴더", isCommon: isCommonBox };
+      : { name: "새 폴더" };
 
     try {
       const res = await fetch("/api/folders", {

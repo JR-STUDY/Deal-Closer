@@ -20,15 +20,14 @@ import {
 export type SidebarFolder = {
   id: string;
   name: string;
-  isCommon: boolean;
   parentId: string | null;
 };
 
 /**
- * 문서함(내/공용) 아래 폴더 트리 (다단계).
+ * 문서함 아래 폴더 트리 (다단계).
  * - 하위 폴더가 있으면 chevron 으로 접기/펼치기
  * - 이름 더블클릭 인라인 편집, 형제끼리 드래그 순서 변경, 호버 삭제
- * - 폴더 클릭 시 해당 문서함을 그 폴더로 필터(basePath?folder=id)
+ * - 폴더 클릭 시 문서함을 그 폴더로 필터(basePath?folder=id)
  * - URL 의 edit=<id> 가 있으면 그 폴더를 편집 상태로 열고 상위를 자동 펼침
  *   ('폴더 추가' 버튼이 새 폴더 생성 직후 이 파라미터로 이동해 바로 편집)
  */
@@ -37,7 +36,6 @@ export function SidebarFolders({
   basePath,
 }: {
   folders: SidebarFolder[];
-  isCommon: boolean;
   basePath: string;
 }) {
   const router = useRouter();

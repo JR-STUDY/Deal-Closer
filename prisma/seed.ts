@@ -787,39 +787,37 @@ async function main() {
     })),
   });
 
-  // 8-4) 문서함별 폴더 (다단계) — 내 문서함(isCommon=false) / 공용문서함(isCommon=true)
+  // 8-4) 보관함 폴더 (다단계) — 문서함은 하나뿐이라 팀/개인 파티션을 두지 않는다.
+  //      Folder.isCommon 컬럼은 스키마에 남아 있지만 기본값(false)으로만 쓴다.
   const folderClients = await prisma.folder.create({
-    data: { orgId: org.id, name: "주요 거래처", isCommon: false, sortOrder: 0 },
+    data: { orgId: org.id, name: "주요 거래처", sortOrder: 0 },
   });
   // 하위 폴더 예시 (주요 거래처 > 글로벌커머스(주))
   const folderClientsGlobal = await prisma.folder.create({
     data: {
       orgId: org.id,
       name: "글로벌커머스(주)",
-      isCommon: false,
       parentId: folderClients.id,
       sortOrder: 0,
     },
   });
   const folderProposals = await prisma.folder.create({
-    data: { orgId: org.id, name: "제안서", isCommon: false, sortOrder: 1 },
+    data: { orgId: org.id, name: "제안서", sortOrder: 1 },
   });
   await prisma.folder.create({
-    data: { orgId: org.id, name: "진행 중", isCommon: false, sortOrder: 2 },
+    data: { orgId: org.id, name: "진행 중", sortOrder: 2 },
   });
-  // 내 문서함에도 "표준 양식" 폴더 — 내 발신 정보(전화·이메일)가 채워진 개인 사본을 모아 둔다
-  const folderMyStandard = await prisma.folder.create({
-    data: { orgId: org.id, name: "표준 양식", isCommon: false, sortOrder: 3 },
-  });
-  // 공용문서함: 표준 양식(계약서·견적서 초안) + 공통 계약 문서(NDA·합의서)
+  // "표준 양식" 폴더는 하나다 — 문서함을 합치기 전에는 내/공용에 같은 이름이 하나씩
+  // 있었는데, 한 트리에 나란히 두면 어느 쪽이 어느 쪽인지 구분할 방법이 없다.
   const folderStandard = await prisma.folder.create({
-    data: { orgId: org.id, name: "표준 양식", isCommon: true, sortOrder: 0 },
+    data: { orgId: org.id, name: "표준 양식", sortOrder: 3 },
   });
+  const folderMyStandard = folderStandard;
   const folderCommonContracts = await prisma.folder.create({
-    data: { orgId: org.id, name: "공통 계약 문서", isCommon: true, sortOrder: 1 },
+    data: { orgId: org.id, name: "공통 계약 문서", sortOrder: 4 },
   });
 
-  // 8-5) 공용문서함(공유) 문서 지정 — 기존 NDA·합의서를 "공통 계약 문서"로 승격 (문서는 내/공용 중 하나)
+  // 8-5) 공통 계약 문서(NDA·합의서)를 해당 폴더로 모은다
   await prisma.document.updateMany({
     where: {
       orgId: org.id,
@@ -831,7 +829,7 @@ async function main() {
         ],
       },
     },
-    data: { isCommon: true, folderId: folderCommonContracts.id },
+    data: { folderId: folderCommonContracts.id },
   });
 
   // 8-6) 표준 양식(계약서·견적서 초안) — 공급자(우리 회사) 정보를 채운 블록 캔버스 문서
@@ -937,7 +935,7 @@ async function main() {
     },
   ];
 
-  // 공용 표준 양식 4종 (전화·이메일 비움 — 조직 공통 정보만) — 공용문서함 › 표준 양식
+  // 조직 공통 표준 양식 4종 (전화·이메일 비움 — 조직 공통 정보만) — 내 문서함 › 표준 양식
   //  데모 시나리오 1("양식화")의 산출물로 보여지는 표준 양식 세트.
   //  "기본 견적서"는 생성 데모에서 열리고, 두 번째 생성의 참고 양식으로도 쓰인다.
   const standardForms = [
@@ -978,7 +976,6 @@ async function main() {
         amount: itemsTotal(f.items),
         // 표준 양식은 상시 비치 문서 → 오래된 날짜로 대시보드 "최근 문서" 왜곡 방지
         createdAt: new Date(f.createdAt),
-        isCommon: true,
         folderId: folderStandard.id,
         contentJson: buildStandardForm({
           type: f.type,
@@ -1045,7 +1042,6 @@ async function main() {
       clientName: null,
       amount: itemsTotal(quoteItems),
       createdAt: new Date("2026-01-02T09:20:00+09:00"),
-      isCommon: false,
       folderId: folderMyStandard.id,
       contentJson: buildStandardForm({
         type: "QUOTE",
@@ -1065,7 +1061,6 @@ async function main() {
       clientName: null,
       amount: itemsTotal(contractItems),
       createdAt: new Date("2026-01-02T09:30:00+09:00"),
-      isCommon: false,
       folderId: folderMyStandard.id,
       contentJson: buildStandardForm({
         type: "CONTRACT",
@@ -1076,7 +1071,7 @@ async function main() {
     },
   });
 
-  // 8-7) 내 문서함 폴더 배치 (isCommon=false 문서만) — 대표 계약서는 하위 폴더에 배치
+  // 8-7) 폴더 배치 — 대표 계약서는 하위 폴더에 배치
   await prisma.document.update({
     where: { id: globalContract.id },
     data: { folderId: folderClientsGlobal.id },
@@ -1086,7 +1081,7 @@ async function main() {
     data: { folderId: folderClients.id },
   });
   await prisma.document.updateMany({
-    where: { orgId: org.id, type: "PROPOSAL", isCommon: false, folderId: null },
+    where: { orgId: org.id, type: "PROPOSAL", folderId: null },
     data: { folderId: folderProposals.id },
   });
 
@@ -1888,7 +1883,18 @@ async function main() {
       name: true,
       stage: true,
       documents: {
-        select: { id: true, title: true, status: true, amount: true, updatedAt: true },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          amount: true,
+          updatedAt: true,
+          // 버전 묶음 판정에 필요하다 (기회-6) — 런타임과 같은 입력을 넘겨야
+          // 시드가 만든 금액과 화면이 계산한 금액이 어긋나지 않는다.
+          rootId: true,
+          version: true,
+          isConfirmed: true,
+        },
       },
     },
   });

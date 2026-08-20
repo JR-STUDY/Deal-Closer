@@ -24,12 +24,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  EMPTY_CONTACT_FORM,
   resolveDeletion,
   sortContacts,
   toContactFormValues,
   type ContactDTO,
 } from "@/lib/contact";
+import { ContactAddDialog } from "./contact-add-dialog";
 import { ContactFormDialog, type PrimaryLock } from "./contact-form-dialog";
 
 /**
@@ -122,8 +122,6 @@ export function AccountContacts({
 
   /** 수정 다이얼로그의 대표 스위치 잠금 상태 (왜 못 바꾸는지까지 다이얼로그가 알린다) */
   const editingLock: PrimaryLock = editing?.isPrimary ? "current" : "none";
-  // 담당자가 아직 없으면 새로 넣는 사람이 자동으로 대표가 된다
-  const addingLock: PrimaryLock = sorted.length === 0 ? "first" : "none";
 
   // 삭제 확인창에서 미리 알릴 승격 대상 — 서버와 같은 순수 함수로 계산한다
   const successor = pendingDelete
@@ -244,12 +242,11 @@ export function AccountContacts({
       </CardContent>
 
       {isAdding ? (
-        <ContactFormDialog
+        // 추가는 **여러 명**을 한 번에 받는다 (4차 피드백 2) — 등록 팝업과 같은 입력 묶음이다
+        <ContactAddDialog
           accountId={accountId}
-          initial={EMPTY_CONTACT_FORM}
-          title="담당자 추가"
-          description={`"${companyName}" 에 담당자를 추가합니다.`}
-          primaryLock={addingLock}
+          companyName={companyName}
+          existingContactCount={sorted.length}
           onSaved={() => router.refresh()}
           onClose={() => setIsAdding(false)}
         />

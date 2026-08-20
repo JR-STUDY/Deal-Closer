@@ -9,11 +9,11 @@ export default async function UserLayout({
   children: React.ReactNode;
 }) {
   const user = await getCurrentUser();
-  // 사이드바 문서함별 폴더 (내 문서함/공용문서함 아래 표시)
+  // 사이드바 폴더 트리 (내 문서함 아래 표시)
   const folders = await prisma.folder.findMany({
     where: { orgId: user.orgId },
-    orderBy: [{ isCommon: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, isCommon: true, parentId: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, parentId: true },
   });
 
   return (

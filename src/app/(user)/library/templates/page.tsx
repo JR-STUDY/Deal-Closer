@@ -69,7 +69,7 @@ export default async function TemplatesPage() {
           { label: "문서 보관함", href: "/library" },
           { label: "표준 양식" },
         ]}
-        description="기존에 쓰던 양식을 올리면 AI 가 표준 양식으로 세팅하고 변수 항목을 정리합니다. 문서 생성 시 이 양식을 불러와 값만 채웁니다."
+        description="여기는 거래처별 문서를 만드는 곳이 아니라 그 바탕이 되는 양식을 만드는 곳입니다. 기존 양식을 올리면 AI 가 거래처별 값을 비운 재사용 양식으로 정리하고 변수 항목을 뽑습니다. 실제 문서는 영업 기회에서 이 양식을 불러와 만듭니다."
         actions={<TemplateUploadDialog {...modelProps} />}
       />
 
