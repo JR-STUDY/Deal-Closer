@@ -67,15 +67,8 @@ export function ListPagination({
         {unit} 중 {formatNumber(from)}–{formatNumber(to)}번째
       </p>
 
-      {/* 번호 이동과 직접 입력을 한 묶음으로 둔다 — 둘 다 "페이지를 옮기는 길"이다 */}
-      {/*
-        번호 줄과 이동 입력을 **아래위로** 쌓는다. 나란히 두면 번호가 많아질수록 묶음이
-        옆으로 길어져 가운데 정렬이 무너지고, 좁은 화면에서는 줄바꿈 위치가 그때그때 달라져
-        입력 칸이 번호 사이에 끼어 보였다. 위는 이웃 페이지로 가는 번호, 아래는 멀리
-        건너뛰는 입력 — 역할이 다르니 줄도 나눈다.
-      */}
-      <div className="flex flex-col items-center gap-2">
-      <ul className="flex flex-wrap items-center gap-1">
+      {/* 가운데 칸 — 이웃 페이지로 가는 번호. 그리드의 `auto` 열이라 좌우와 무관하게 정중앙이다 */}
+      <ul className="flex flex-wrap items-center justify-center gap-1">
         <li>
           {hasPrev ? (
             <Link
@@ -143,20 +136,21 @@ export function ListPagination({
         </li>
       </ul>
 
-        {/*
-          번호 목록 **아랫줄**이다 (대체가 아니다). 번호는 이웃 페이지로 가는 한 번의 클릭,
-          입력은 멀리 건너뛰는 길 — 역할이 달라 둘 다 남긴다. 1페이지뿐이어도 함께 그려
-          이 화면이 어떻게 나뉘는지(= "/ 1")를 그대로 보여준다.
-        */}
+      {/*
+        오른쪽 칸 — 멀리 건너뛰는 입력 (번호 목록의 대체가 아니다). 번호와 **같은 줄**이되
+        끝으로 밀어 둔다. 번호 옆에 붙이면 번호가 늘어날수록 묶음이 옆으로 길어져 가운데
+        정렬이 밀리고, 아래로 내리면 표 아래가 두 줄로 두꺼워진다. 좌측 건수 문구와 이 칸이
+        `1fr` 로 마주 보므로 번호는 어느 쪽 길이에도 흔들리지 않고 정중앙에 선다.
+        좁은 화면(`sm` 미만)에서는 그리드가 한 줄씩 쌓이므로 가운데로 되돌린다.
+        1페이지뿐이어도 그려 이 화면이 어떻게 나뉘는지(= "/ 1")를 그대로 보여준다.
+      */}
+      <div className="flex justify-center sm:justify-end">
         <ListPageJump
           basePath={basePath}
           query={query}
           totalPages={totalPages}
         />
       </div>
-
-      {/* 좌측 건수 문구와 균형을 맞춰 가운데 묶음을 정중앙에 세우는 빈 칸 */}
-      <span aria-hidden="true" className="hidden sm:block" />
     </nav>
   );
 }
