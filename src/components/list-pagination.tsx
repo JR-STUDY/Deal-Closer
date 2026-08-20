@@ -68,7 +68,13 @@ export function ListPagination({
       </p>
 
       {/* 번호 이동과 직접 입력을 한 묶음으로 둔다 — 둘 다 "페이지를 옮기는 길"이다 */}
-      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+      {/*
+        번호 줄과 이동 입력을 **아래위로** 쌓는다. 나란히 두면 번호가 많아질수록 묶음이
+        옆으로 길어져 가운데 정렬이 무너지고, 좁은 화면에서는 줄바꿈 위치가 그때그때 달라져
+        입력 칸이 번호 사이에 끼어 보였다. 위는 이웃 페이지로 가는 번호, 아래는 멀리
+        건너뛰는 입력 — 역할이 다르니 줄도 나눈다.
+      */}
+      <div className="flex flex-col items-center gap-2">
       <ul className="flex flex-wrap items-center gap-1">
         <li>
           {hasPrev ? (
@@ -138,7 +144,7 @@ export function ListPagination({
       </ul>
 
         {/*
-          번호 목록 **옆**이다 (대체가 아니다). 번호는 이웃 페이지로 가는 한 번의 클릭,
+          번호 목록 **아랫줄**이다 (대체가 아니다). 번호는 이웃 페이지로 가는 한 번의 클릭,
           입력은 멀리 건너뛰는 길 — 역할이 달라 둘 다 남긴다. 1페이지뿐이어도 함께 그려
           이 화면이 어떻게 나뉘는지(= "/ 1")를 그대로 보여준다.
         */}

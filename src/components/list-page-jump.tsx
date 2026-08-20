@@ -2,7 +2,6 @@
 
 import { useId, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { CornerDownLeft } from "lucide-react";
 import { PAGE_PARAM, pageHref, parsePageInput } from "@/lib/pagination";
 
 /**
@@ -96,12 +95,16 @@ export function ListPageJump({
         / {totalPages}
       </span>
 
+      {/*
+        버튼은 **글자**다. 앞서 쓰던 Enter(↵) 아이콘은 "Enter 를 누르라"는 안내인지
+        "눌러서 이동하라"는 버튼인지 읽는 사람마다 갈렸다 — 실제로는 둘 다 되지만,
+        아이콘 하나로 두 뜻을 겸하면 어느 쪽도 분명하지 않다. 글자는 오해가 없다.
+      */}
       <button
         type="submit"
-        aria-label="입력한 페이지로 이동"
-        className="flex h-8 min-w-8 items-center justify-center rounded-md border px-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        className="flex h-8 items-center justify-center rounded-md border px-2.5 text-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
-        <CornerDownLeft className="size-4" aria-hidden="true" />
+        이동
       </button>
 
       {error ? (
