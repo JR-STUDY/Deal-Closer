@@ -143,6 +143,7 @@ src/
     confirmed-document.ts # 확정 문서 판정 **규칙** 순수 함수 (기회-6) — 우선순위(계약완료>발송완료>초안)·
                          #   VOID 제외·동순위 최근 수정·수동 잠금. resolveConfirmedDocument /
                          #   pinConfirmedDocument / unpinConfirmedDocument
+                         #   버전 묶음마다 대표를 먼저 뽑는다 — representativeByVersionGroup (F-214)
     opportunity-amount.ts # 확정 문서 재판정 → 예상 금액 **저장** (server-only, 기회-6).
                          #   expectedAmount 를 쓰는 유일한 곳이다
     document-link.ts     # 보관함 문서를 기회에 연결 (server-only, 기회-5·17) — 후보 규칙·이력 기록
@@ -184,6 +185,23 @@ src/
   판정 규칙은 `@/lib/confirmed-document` **순수 함수가 단일 기준**이고(계약완료 > 발송완료 > 초안,
   폐기 제외, 동순위는 최근 수정, 그다음 id), 쓰기는 `@/lib/opportunity-amount` **한 곳뿐**이다.
   라우트·컴포넌트가 `expectedAmount` 를 직접 update 하지 않는다. 시드도 같은 순수 함수를 쓴다.
+- **판정은 버전 묶음 단위다 — 같은 문서의 v1·v2 가 서로 경쟁하지 않는다** (기회-6 × F-214).
+  버전은 별도 테이블이 아니라 Document 행을 하나 더 만드는 방식이라(`rootId` 로 묶이고 `version` 이
+  번호, v1 은 `rootId=null`), 아무 처리도 하지 않으면 같은 견적서의 두 버전이 다른 문서인 척 겨룬다.
+  그래서 `representativeByVersionGroup()` 이 **묶음마다 대표 1건**을 먼저 뽑고, 대표들끼리만
+  기존 우선순위로 겨룬다. 묶음 안의 순서는 ① 버전 확정본(`isConfirmed`) ② 상태 우선순위
+  ③ 높은 `version` 번호다 — 묶음 안에서는 `updatedAt` 이 아니라 버전 번호가 의도된 순서다.
+  **`latestVersionsOnly()` 를 쓰지 않는다.** 그 함수는 보관함 목록용이고, 금액 판정에 쓰면
+  "v1 로 계약이 체결된 뒤 누군가 v2 초안을 만들면 서명된 금액을 잃는다" — 최신이 곧 권위 있는
+  버전은 아니다. 판정에 문서를 넘기는 모든 조회의 `select` 에 `rootId`·`version`·`isConfirmed` 를
+  넣는다(빠지면 타입 오류가 난다 — 선택 필드로 만들지 말 것).
+  **수동 고정은 묶음이 아니라 그 버전을 고정한다** — "직접 지정"의 뜻이 그것이고, 묶음을 고정하면
+  나중에 만든 v3 초안이 서명된 v2 를 밀어낸다.
+- **"확정" 이 두 뜻으로 쓰인다 — 문구와 주석에서 섞지 않는다.**
+  `Document.isConfirmed` 는 **버전 확정본**(F-214, "이 버전이 확정본인가", 한 묶음에 여러 개 가능),
+  `Opportunity.confirmedDocumentId` 는 **확정 문서**(기회-6, "예상 금액을 어디서 가져오는가",
+  기회당 1건). 컬럼 이름을 바꾸는 건 범위 밖이므로 **낱말로 구분한다** — 화면에서 전자는
+  `버전 확정본`·`v2`, 후자는 `확정 문서`(툴팁 "예상 금액의 기준이 되는 문서입니다")로 적는다.
   **재판정 시점은 세 가지다 — 문서 연결(해제·삭제) · 문서 상태 변경 · 문서 금액 변경.**
   이 셋을 일으키는 라우트는 같은 트랜잭션에서 `syncOpportunityAmount()` 를 부른다(중간 상태 노출 방지).
   문서를 기회 A → B 로 옮길 때는 **놓아주는 쪽을 먼저** 재판정한다 — `confirmedDocumentId` 가

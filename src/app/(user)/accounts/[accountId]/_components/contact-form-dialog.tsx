@@ -29,14 +29,11 @@ import {
 export type PrimaryLock =
   /** 자유롭게 켜고 끌 수 있다 */
   | "none"
-  /** 첫 담당자다 — 담당자가 하나뿐인데 대표가 아니면 목록에서 사라진다 */
-  | "first"
   /** 이미 대표다 — 스스로 내려오면 대표 0명이 된다. 다른 담당자를 올려야 바뀐다 */
   | "current";
 
 const LOCK_HINT: Record<PrimaryLock, string> = {
   none: "대표 담당자는 거래처당 한 분이며, 목록에는 이분만 표시됩니다.",
-  first: "첫 담당자는 자동으로 대표가 됩니다.",
   current:
     "이미 대표 담당자입니다. 다른 담당자를 대표로 지정하시면 자동으로 해제됩니다.",
 };
@@ -85,12 +82,16 @@ function Field({
 }
 
 /**
- * 거래처 담당자 추가·수정 다이얼로그 (거래처-8).
+ * 거래처 담당자 **수정** 다이얼로그 (거래처-8).
  * 담당자명만 필수이고 나머지는 선택이다. 형식 검증은 서버(`parseContactInput`)가
  * 단일 기준이며, 실패 메시지를 toast 로 보여준다.
  *
- * 대표 지정은 **보내기만** 하고 판정하지 않는다 — 첫 담당자 자동 대표·기존 대표 해제는
- * 서버가 `@/lib/contact` 규칙으로 한 트랜잭션에 처리한다.
+ * 추가는 이 폼이 맡지 않는다 — 여러 명을 한 번에 받는 `ContactAddDialog` 가 따로 있다
+ * (4차 피드백 2). 한 명씩 받는 폼과 여러 명을 받는 폼이 둘 다 "추가" 로 남으면 어느 쪽이
+ * 실제 등록 경로인지 알 수 없어진다.
+ *
+ * 대표 지정은 **보내기만** 하고 판정하지 않는다 — 기존 대표 해제는 서버가
+ * `@/lib/contact` 규칙으로 한 트랜잭션에 처리한다.
  *
  * 부모는 열고 싶을 때만 이 컴포넌트를 마운트한다. `key` 를 함께 주면 열 때마다
  * initial 로 새로 초기화된다 (파생 state 없이 리마운트로 해결).
@@ -106,8 +107,8 @@ export function ContactFormDialog({
   onClose,
 }: {
   accountId: string;
-  /** 값이 있으면 수정(PATCH), 없으면 생성(POST) */
-  contactId?: string;
+  /** 수정할 담당자 id (이 폼은 수정 전용이다) */
+  contactId: string;
   initial: ContactFormValues;
   title: string;
   description?: string;
@@ -131,11 +132,9 @@ export function ContactFormDialog({
     setIsSaving(true);
     try {
       const res = await fetch(
-        contactId
-          ? `/api/accounts/${accountId}/contacts/${contactId}`
-          : `/api/accounts/${accountId}/contacts`,
+        `/api/accounts/${accountId}/contacts/${contactId}`,
         {
-          method: contactId ? "PATCH" : "POST",
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, position, phone, email, isPrimary }),
         },
@@ -145,9 +144,7 @@ export function ContactFormDialog({
         toast.error(json?.error ?? "저장에 실패했습니다.");
         return;
       }
-      toast.success(
-        contactId ? "담당자를 수정했습니다." : "담당자를 등록했습니다.",
-      );
+      toast.success("담당자를 수정했습니다.");
       onSaved();
       onClose();
     } catch {

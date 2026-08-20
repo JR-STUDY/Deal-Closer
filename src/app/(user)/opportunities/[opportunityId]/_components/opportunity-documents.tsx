@@ -68,6 +68,16 @@ export type OpportunityDocument = {
   createdAt: string;
   /** ISO 8601. 확정 문서 동순위를 가르는 기준이라 해제 미리보기에 필요하다. */
   updatedAt: string;
+  /*
+   * 버전 묶음 필드 — 해제 미리보기가 **서버와 같은 판정**을 하려면 반드시 함께 와야 한다.
+   * 같은 견적서의 v1·v2 는 한 묶음이라 서로 경쟁하지 않는다 (기회-6 × F-214).
+   */
+  /** 묶음 키. null 이면 이 문서가 v1 이다 */
+  rootId: string | null;
+  /** 버전 번호(1부터) */
+  version: number;
+  /** **버전 확정본** 플래그(F-214). 예상 금액의 기준 문서(확정 문서)와 다른 개념이다 */
+  isConfirmed: boolean;
 };
 
 /** 보관함 문서를 골라 이 기회에 연결한다 (기회-5 2번) */
@@ -391,6 +401,14 @@ export function OpportunityDocuments({
                     </button>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {formatDate(document.createdAt)} 생성
+                      {/*
+                        같은 화면에 "확정" 이 두 뜻으로 나온다. 여기는 **버전 확정본**
+                        (F-214 — 이 버전이 확정본인가)이고, 아래 배지는 **확정 문서**
+                        (기회-6 — 예상 금액의 기준)다. 낱말을 섞으면 사용자가 어느 쪽을
+                        바꾸는 조작인지 알 수 없다.
+                      */}
+                      {document.version > 1 ? ` · v${document.version}` : ""}
+                      {document.isConfirmed ? " · 버전 확정본" : ""}
                       {isConfirmed ? " · 이 문서가 예상 금액의 기준입니다" : ""}
                     </p>
                   </div>
@@ -405,7 +423,10 @@ export function OpportunityDocuments({
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {isConfirmed ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
+                      title="예상 금액의 기준이 되는 문서입니다 (버전 확정본과는 다릅니다)"
+                    >
                       <CircleCheckBig className="size-3" aria-hidden="true" />
                       확정 문서
                     </span>
