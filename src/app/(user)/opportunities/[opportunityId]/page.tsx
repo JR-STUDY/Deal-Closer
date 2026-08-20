@@ -8,6 +8,7 @@ import { parseDetail } from "@/lib/opportunity-stage";
 import {
   ACTIVITY_EVENT_LABELS,
   OPPORTUNITY_STAGE_LABELS,
+  isClosedOpportunityStage,
   isOpportunityStage,
   type ActivityEventType,
 } from "@/lib/constants";
@@ -252,6 +253,13 @@ export default async function OpportunityDetailPage({
     null;
 
   const newDocumentHref = `/generator?opportunityId=${encodeURIComponent(dto.id)}`;
+  /*
+   * 마감(수주·실주)한 기회에는 문서 생성 진입점을 노출하지 않는다 (F-211).
+   * 끝난 거래에 새 초안을 만들 이유가 없고, 생성 화면의 기회 후보도 진행 중만 담으므로
+   * 눌러 봐야 기회가 선택되지 않은 채 열린다 — 갈 수 없는 문을 그려 두지 않는다.
+   * 갱신 거래는 수주 시 자동 생성되는 "다음 기회"(F-115)에서 이어간다.
+   */
+  const canCreateDocument = !isClosedOpportunityStage(dto.stage);
 
   return (
     <>
@@ -275,13 +283,15 @@ export default async function OpportunityDetailPage({
         description={`${formatDate(opportunity.createdAt)} 등록 · ${formatDateTime(opportunity.updatedAt)} 최근 수정`}
         actions={
           <>
-            {/* 이 기회에 연결될 새 문서를 만들러 가는 동선 (기회-2) */}
-            <Button variant="outline" asChild>
-              <Link href={newDocumentHref}>
-                <FilePlus2 className="size-4" aria-hidden="true" />
-                문서 작성
-              </Link>
-            </Button>
+            {/* 이 기회에 연결될 새 문서를 만들러 가는 동선 (기회-2 · F-211) */}
+            {canCreateDocument ? (
+              <Button variant="outline" asChild>
+                <Link href={newDocumentHref}>
+                  <FilePlus2 className="size-4" aria-hidden="true" />
+                  문서 작성
+                </Link>
+              </Button>
+            ) : null}
             <OpportunityDetailActions
               opportunityId={dto.id}
               opportunityName={dto.name}
@@ -314,6 +324,7 @@ export default async function OpportunityDetailPage({
                 opportunityId={dto.id}
                 documents={linkedDocuments}
                 confirmedDocumentId={dto.confirmedDocumentId}
+                canCreateDocument={canCreateDocument}
               />
             ),
           },

@@ -258,11 +258,18 @@ export function OpportunityDocuments({
   opportunityId,
   documents,
   confirmedDocumentId,
+  canCreateDocument,
 }: {
   opportunityId: string;
   documents: OpportunityDocument[];
   /** 예상 금액의 근거가 된 문서 (없으면 null) */
   confirmedDocumentId: string | null;
+  /**
+   * 새 문서 생성 진입점을 보일지 (F-211). 마감(수주·실주)한 기회에서는 감춘다 —
+   * 판정은 상세 화면이 하고 여기서 다시 하지 않는다(같은 규칙이 두 곳에 있으면 갈라진다).
+   * **기존 문서 연결은 계속 열어 둔다** — 마감 뒤에 실물 계약서를 뒤늦게 붙이는 일은 있다.
+   */
+  canCreateDocument: boolean;
 }) {
   const router = useRouter();
   const { pin, notify, isSaving } = useConfirmedDocument(opportunityId);
@@ -333,11 +340,13 @@ export function OpportunityDocuments({
     <div className="space-y-3">
       {/* 문서를 붙이는 두 갈래를 나란히 둔다 (기회-5) */}
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" asChild>
-          <Link href={newDocumentHref}>
-            <FilePlus2 className="size-4" aria-hidden="true" />새 문서 생성
-          </Link>
-        </Button>
+        {canCreateDocument ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link href={newDocumentHref}>
+              <FilePlus2 className="size-4" aria-hidden="true" />새 문서 생성
+            </Link>
+          </Button>
+        ) : null}
         <Button variant="outline" size="sm" onClick={() => setIsLinking(true)}>
           <Link2 className="size-4" aria-hidden="true" />
           기존 문서 연결

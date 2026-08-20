@@ -30,6 +30,7 @@ export default async function CommonDocumentsPage({
         ...(activeFolder ? { folderId: activeFolder } : {}),
       },
       orderBy: { createdAt: "desc" },
+      include: { opportunity: { select: { name: true } } },
     }),
     // 공용문서함 폴더 (카드 '폴더 이동' 선택지 · 경로 표시)
     prisma.folder.findMany({

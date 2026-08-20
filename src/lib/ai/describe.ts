@@ -17,6 +17,68 @@ import {
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants";
 import { formatKRW } from "@/lib/format";
 
+/**
+ * 프롬프트에 넣을 기회·거래처 컨텍스트 (PRD F-212).
+ *
+ * 거래처 정보를 사용자가 손으로 입력받으면 오타·누락이 그대로 문서에 박힌다.
+ * CRM 의 Account·Contact 를 그대로 넘겨 **추측할 필요가 없게** 만드는 것이 목적이다.
+ *
+ * 담당자는 **대표 담당자 1명**만 싣는다 (거래처-8). 한 거래처에 여러 명이 있어도 문서의
+ * 수신자는 한 명이고, 누가 대표인지는 `@/lib/contact` 의 `primaryContact()` 가 단일 기준이다
+ * — 이 모듈은 순수 모듈이라 조회하지 않고 **이미 고른 담당자를 받는다**.
+ */
+export type OpportunityContext = {
+  /** 기회명 */
+  name: string;
+  /** 단계 라벨 (초기·제안·검토/협상 등) */
+  stageLabel: string;
+  /** 예상 금액 (KRW 정수). 0 이면 미정 — 확정 문서가 없다는 뜻이다 (기회-6) */
+  expectedAmount: number;
+  /** 예상 마감일 표시 문자열. 없으면 빈 문자열 */
+  expectedCloseDate: string;
+  account: {
+    companyName: string;
+    bizRegNo: string | null;
+    memo: string | null;
+  };
+  /** 대표 담당자. 담당자 0명인 거래처가 허용되므로 null 일 수 있다 (거래처-8) */
+  contact: {
+    name: string;
+    position: string | null;
+    phone: string | null;
+    email: string | null;
+  } | null;
+  /** 갱신 기회면 직전 기회명 (연속 거래임을 알려준다) */
+  previousOpportunityName?: string | null;
+  memo?: string | null;
+};
+
+/** 기회·거래처를 프롬프트용 텍스트로 */
+export function describeOpportunity(ctx: OpportunityContext): string {
+  const { account, contact } = ctx;
+  const lines = [
+    `기회명: ${ctx.name}`,
+    `단계: ${ctx.stageLabel}`,
+    ctx.expectedAmount > 0 ? `예상 금액: ${formatKRW(ctx.expectedAmount)}` : null,
+    ctx.expectedCloseDate ? `예상 마감일: ${ctx.expectedCloseDate}` : null,
+    ctx.previousOpportunityName
+      ? `직전 기회: ${ctx.previousOpportunityName} (갱신·연속 거래)`
+      : null,
+    ctx.memo ? `기회 메모: ${ctx.memo}` : null,
+    "",
+    "[거래처 정보 — CRM 등록값]",
+    `고객사명: ${account.companyName}`,
+    account.bizRegNo ? `사업자등록번호: ${account.bizRegNo}` : null,
+    account.memo ? `거래처 메모: ${account.memo}` : null,
+    contact
+      ? `담당자: ${contact.name}${contact.position ? ` (${contact.position})` : ""}`
+      : null,
+    contact?.email ? `담당자 이메일: ${contact.email}` : null,
+    contact?.phone ? `담당자 연락처: ${contact.phone}` : null,
+  ];
+  return lines.filter((line) => line !== null).join("\n");
+}
+
 /** 프롬프트에 넣을 문서 메타 */
 export type DocumentMeta = {
   title: string;
