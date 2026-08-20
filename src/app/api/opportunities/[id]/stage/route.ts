@@ -3,7 +3,10 @@ import { getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 import { OPPORTUNITY_STAGE_LABELS, isOpportunityStage } from "@/lib/constants";
 import { changeStage } from "@/lib/opportunity-stage";
-import type { StageSkipReason } from "@/lib/opportunity-transition";
+import {
+  parseLostReason,
+  type StageSkipReason,
+} from "@/lib/opportunity-transition";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -22,13 +25,19 @@ const SKIP_MESSAGES: Record<StageSkipReason, string> = {
  * `@/lib/opportunity-stage` 의 `changeStage()` 만 경유한다 (AGENTS.md 규칙).
  * 조직 스코프는 그 함수가 orgId 로 좁혀 조회하므로 다른 조직의 id 는 404 로 끝난다.
  *
- * 실주 사유(F-117)는 Phase 4 범위라 여기서 받지 않는다 — LOST 로 옮기면 사유는 비어 있고,
- * 사유 입력 UI 가 붙을 때 이 라우트에 필드를 더한다.
+ * 실주 사유(F-117)는 `lostReason`(라디오에서 고른 값)과 `lostReasonOther`(기타 직접 입력)로
+ * 받아 **순수 함수 `parseLostReason()` 한 곳**을 통과시킨다. 화면이 저장 문자열을 직접
+ * 조립하면 어느 화면에서 실주했는지에 따라 통계에 다른 값이 쌓인다.
+ * LOST 로 옮기는데 사유가 없으면 400 이다 — 분류 축이 빈 기회는 이탈률 집계(F-405) 밖에 남는다.
  */
 export async function POST(req: NextRequest, { params }: Params) {
   const [{ id }, user] = await Promise.all([params, getCurrentUser()]);
 
-  let body: { stage?: unknown };
+  let body: {
+    stage?: unknown;
+    lostReason?: unknown;
+    lostReasonOther?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -40,11 +49,20 @@ export async function POST(req: NextRequest, { params }: Params) {
     return fail("알 수 없는 단계입니다.");
   }
 
+  const reason = parseLostReason({
+    toStage: stage,
+    choice: typeof body.lostReason === "string" ? body.lostReason : null,
+    otherText:
+      typeof body.lostReasonOther === "string" ? body.lostReasonOther : null,
+  });
+  if ("error" in reason) return fail(reason.error);
+
   const result = await changeStage({
     opportunityId: id,
     orgId: user.orgId,
     actorId: user.id,
     toStage: stage,
+    lostReason: reason.lostReason,
   });
 
   if (result.status === "not-found") {

@@ -115,6 +115,45 @@ export function isOpportunityStage(value: string): value is OpportunityStage {
 }
 
 /**
+ * 실주 사유 보기 (F-117).
+ *
+ * PRD 는 "가격/경쟁사/일정 등" 예시만 두고 목록을 확정하지 않아 계획서가 Phase 4 블로커로
+ * 남겨 두었다. 팀 결정으로 **고정 6개 + 기타(직접 입력)** 를 쓴다.
+ *
+ * 고정 목록인 이유는 이 값이 표기가 아니라 **이탈률 통계(F-405)의 분류 축**이기 때문이다.
+ * 자유 입력만 받으면 "가격때문", "가격 이슈", "단가" 가 전부 다른 값으로 쌓여 집계가 되지
+ * 않는다. 그렇다고 목록만 두면 실제 사유가 목록에 없을 때 담당자가 아무거나 고르므로,
+ * `기타` 한 칸을 열어 **분류되지 않는다는 사실 자체를 기록**한다.
+ *
+ * 목록을 바꾸면 과거 데이터와 비교가 끊긴다 — 항목 삭제·문구 변경은 팀 합의 후에만 한다
+ * (F-404 확률 테이블을 코드 기본값으로 두지 않은 것과 같은 이유).
+ */
+export const LOST_REASON_PRESETS = [
+  "가격",
+  "경쟁사",
+  "일정",
+  "예산 부족",
+  "요구사항 불일치",
+  "내부 사정",
+] as const;
+
+export type LostReasonPreset = (typeof LOST_REASON_PRESETS)[number];
+
+/**
+ * "기타" 를 고른 사유에 붙는 접두사. 저장 값은 `기타: 담당자 교체로 보류` 꼴이다.
+ *
+ * 별도 컬럼을 두지 않고 한 문자열에 담는 이유는, 사유가 **하나의 값**이어야 통계에서
+ * 세는 방법이 하나로 유지되기 때문이다. 접두사가 있으면 집계는 `기타` 로 묶으면서도
+ * 원문을 잃지 않는다.
+ */
+export const LOST_REASON_OTHER_PREFIX = "기타: ";
+
+/** 고정 목록에 있는 사유인지 (통계에서 `기타` 와 가르는 기준) */
+export function isPresetLostReason(value: string): value is LostReasonPreset {
+  return (LOST_REASON_PRESETS as readonly string[]).includes(value);
+}
+
+/**
  * 마감 단계(수주·실주)인지. 목록 정의 바로 옆이라 판별도 여기 둔다.
  * 전이(opportunity-stage.ts — server-only)와 표시(opportunity-progress.ts — 클라이언트 공용)가
  * 같은 기준을 쓰려면 공용 모듈인 constants 에 있어야 한다.

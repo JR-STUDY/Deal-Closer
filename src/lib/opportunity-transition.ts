@@ -12,9 +12,11 @@
  */
 
 import {
+  LOST_REASON_OTHER_PREFIX,
   OPEN_OPPORTUNITY_STAGES,
   OPPORTUNITY_STAGE_LABELS,
   isClosedOpportunityStage,
+  isPresetLostReason,
   type DocumentType,
   type OpportunityStage,
 } from "./constants";
@@ -117,4 +119,46 @@ export function stageChangeWarning(
 ): string | null {
   if (!isStageReversal(from, to)) return null;
   return `‘${OPPORTUNITY_STAGE_LABELS[from]}’(으)로 마감된 기회를 ‘${OPPORTUNITY_STAGE_LABELS[to]}’ 단계로 되돌립니다. 마감 확정일과 실주 사유가 지워지며, 되돌린 기록은 이력에 남습니다.`;
+}
+
+/**
+ * 실주 사유 입력을 저장 값으로 정규화한다 (F-117).
+ *
+ * 화면은 라디오(고정 6개 · 기타)와 기타 입력칸을 따로 들고 있고, 저장은 **문자열 하나**다.
+ * 그 변환을 화면마다 하면 어떤 화면에서 실주했는지에 따라 통계에 다른 값이 쌓인다 —
+ * 그래서 규칙 옆에 순수 함수로 둔다(서버 라우트도 같은 함수를 통과시킨다).
+ *
+ * 규칙:
+ *  - LOST 가 아니면 사유는 **없다**. 다른 단계로 가면서 사유를 보내오면 무시하지 않고
+ *    거절한다 — 조용히 버리면 화면이 저장됐다고 믿는다.
+ *  - LOST 면 사유는 **필수**다. 통계(F-405)의 분류 축이 비면 그 기회는 영영 집계 밖이다.
+ *  - 고정 목록 값은 그대로, `기타` 는 직접 입력을 다듬어 접두사를 붙인다.
+ *  - `기타` 인데 입력이 비면 거절한다. "기타: " 만 저장하면 아무것도 기록하지 않은 것과 같다.
+ */
+export function parseLostReason(input: {
+  toStage: OpportunityStage;
+  /** 라디오에서 고른 값 — 고정 목록 중 하나 또는 `기타` */
+  choice?: string | null;
+  /** `기타` 를 골랐을 때의 직접 입력 */
+  otherText?: string | null;
+}): { lostReason: string | null } | { error: string } {
+  const choice = input.choice?.trim() ?? "";
+
+  if (input.toStage !== "LOST") {
+    if (choice) {
+      return { error: "실주 사유는 실주로 마감할 때만 기록할 수 있습니다." };
+    }
+    return { lostReason: null };
+  }
+
+  if (!choice) return { error: "실주 사유를 선택해주세요." };
+  if (isPresetLostReason(choice)) return { lostReason: choice };
+
+  if (choice !== "기타") {
+    return { error: "선택할 수 없는 실주 사유입니다." };
+  }
+
+  const other = input.otherText?.trim() ?? "";
+  if (!other) return { error: "기타 사유를 입력해주세요." };
+  return { lostReason: `${LOST_REASON_OTHER_PREFIX}${other}` };
 }

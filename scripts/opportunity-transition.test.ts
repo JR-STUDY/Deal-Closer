@@ -13,6 +13,8 @@
 import assert from "node:assert/strict";
 import {
   DOCUMENT_TYPES,
+  LOST_REASON_OTHER_PREFIX,
+  LOST_REASON_PRESETS,
   OPEN_OPPORTUNITY_STAGES,
   OPPORTUNITY_STAGES,
   OPPORTUNITY_STAGE_LABELS,
@@ -25,6 +27,7 @@ import {
   decideTransition,
   isClosedStage,
   isStageReversal,
+  parseLostReason,
   stageChangeWarning,
   stageForSentDocument,
   type StageSkipReason,
@@ -210,6 +213,52 @@ check(
   stageChangeWarning("WON", "LOST"),
   null,
   "마감끼리 옮기는 것은 되돌리기가 아니다",
+);
+
+// ⑥ 실주 사유 정규화 (F-117)
+//    화면은 라디오 + 기타 입력칸 둘로 받고 저장은 문자열 하나다. 그 변환이 여기서만
+//    일어나야 어느 화면에서 실주했든 통계에 같은 값이 쌓인다.
+const 실주 = (choice?: string | null, otherText?: string | null) =>
+  parseLostReason({ toStage: "LOST", choice, otherText });
+
+check(실주("가격"), { lostReason: "가격" }, "고정 목록 값은 그대로 저장한다");
+check(
+  실주("기타", "  담당자 교체로 보류  "),
+  { lostReason: `${LOST_REASON_OTHER_PREFIX}담당자 교체로 보류` },
+  "기타는 앞뒤 공백을 다듬고 접두사를 붙인다",
+);
+check(
+  "error" in 실주(),
+  true,
+  "실주인데 사유가 없으면 거절한다 (통계 분류 축이 비면 영영 집계 밖이다)",
+);
+check(
+  "error" in 실주("기타", "   "),
+  true,
+  "기타를 골라 놓고 입력이 비면 거절한다",
+);
+check("error" in 실주("아무거나"), true, "목록에 없는 값은 거절한다");
+for (const preset of LOST_REASON_PRESETS) {
+  check(
+    실주(preset),
+    { lostReason: preset },
+    `고정 사유 '${preset}' 를 그대로 받는다`,
+  );
+}
+check(
+  parseLostReason({ toStage: "WON", choice: null }),
+  { lostReason: null },
+  "수주에는 실주 사유가 없다",
+);
+check(
+  parseLostReason({ toStage: "PROPOSAL", choice: null }),
+  { lostReason: null },
+  "진행 단계로 되돌리면 사유를 비운다",
+);
+check(
+  "error" in parseLostReason({ toStage: "WON", choice: "가격" }),
+  true,
+  "실주가 아닌데 사유를 보내오면 조용히 버리지 않고 거절한다",
 );
 
 console.log(`opportunity-transition: ${checks}건 검증 통과`);
