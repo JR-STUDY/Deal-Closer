@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentOrg, getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 import { ACTIVE_DOCUMENT_STATUSES } from "@/lib/constants";
+import { rootIdOf } from "@/lib/document-version";
 
 /**
  * GET /api/documents?status=&type=&q=&linkable=1 — 문서 목록 (SQLite)
@@ -10,6 +11,9 @@ import { ACTIVE_DOCUMENT_STATUSES } from "@/lib/constants";
  * `linkable=1` 은 **기회에 연결할 수 있는 문서만** 돌려준다 (기회-5 · 기회-17).
  *  - 이미 다른 기회에 붙은 문서는 뺀다 — 한 문서가 두 기회의 예상 금액을 동시에 좌우할 수 없다.
  *  - 폐기(VOID) 문서도 뺀다 — 붙여도 확정 문서 후보가 되지 못해 금액이 0 인 채로 남는다.
+ *  - **형제 버전이 붙은 묶음도 통째로 뺀다** — 연결은 버전 묶음 단위라(`@/lib/document-link`),
+ *    v1 이 기회 A 에 붙어 있으면 v2 도 후보가 아니다. 이걸 빼먹으면 목록에는 뜨는데 저장에서
+ *    거부당해, 사용자는 왜 안 되는지 모른 채 같은 시도를 반복한다.
  */
 export async function GET(req: NextRequest) {
   const org = await getCurrentOrg();
@@ -19,6 +23,17 @@ export async function GET(req: NextRequest) {
   const q = searchParams.get("q") ?? undefined;
   const linkableOnly = searchParams.get("linkable") === "1";
 
+  // 어느 기회엔가 붙어 있는 문서들의 묶음 키 — 후보에서 통째로 제외할 대상이다.
+  // `linkable=1` 일 때만 조회한다 (보관함 목록은 이 제약과 무관하다).
+  const linkedRootIds = linkableOnly
+    ? await prisma.document
+        .findMany({
+          where: { orgId: org.id, opportunityId: { not: null } },
+          select: { id: true, rootId: true },
+        })
+        .then((docs) => [...new Set(docs.map(rootIdOf))])
+    : [];
+
   const documents = await prisma.document.findMany({
     where: {
       orgId: org.id,
@@ -26,7 +41,15 @@ export async function GET(req: NextRequest) {
       ...(type ? { type } : {}),
       ...(q ? { title: { contains: q } } : {}),
       ...(linkableOnly
-        ? { opportunityId: null, status: { in: [...ACTIVE_DOCUMENT_STATUSES] } }
+        ? {
+            opportunityId: null,
+            status: { in: [...ACTIVE_DOCUMENT_STATUSES] },
+            // 뿌리 문서(v1, rootId=null)는 자기 id 로, 후속 버전은 rootId 로 걸린다.
+            NOT: [
+              { id: { in: linkedRootIds } },
+              { rootId: { in: linkedRootIds } },
+            ],
+          }
         : {}),
     },
     orderBy: { createdAt: "desc" },

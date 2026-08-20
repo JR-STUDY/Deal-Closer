@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
       opportunityId: created.id,
       orgId: user.orgId,
       actorId: user.id,
-      documents: linkable.documents,
+      groups: linkable.groups,
     });
 
     // 붙인 문서로 예상 금액을 정한다. 문서가 없으면 확정 문서 없음 → 0 원 (기회-6 ④).

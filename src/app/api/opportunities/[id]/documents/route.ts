@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       opportunityId: opportunity.id,
       orgId: user.orgId,
       actorId: user.id,
-      documents: linkable.documents,
+      groups: linkable.groups,
     });
     return syncOpportunityAmount(
       { opportunityId: opportunity.id, orgId: user.orgId },
@@ -58,8 +58,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     );
   });
 
-  return ok(
-    { linkedCount: linkable.documents.length, amountSync },
-    { status: 201 },
-  );
+  // 건수는 **묶음 수**다 — 버전이 3개인 견적서 하나를 붙였는데 "3건" 이라고 알리면
+  // 사용자는 문서 세 건을 붙인 줄 안다.
+  return ok({ linkedCount: linkable.groups.length, amountSync }, { status: 201 });
 }
