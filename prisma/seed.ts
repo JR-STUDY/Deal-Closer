@@ -285,10 +285,26 @@ const SUPPLIER = {
   대표자: "박승애",
   등록번호: "111-11-11111",
   주소: "대전광역시 유성구 테크노중앙로 74, 201호 (관평동, 신영빌딩)",
+  대표번호: "042-000-0000",
 } as const;
 
 /** 지란지교 BI(로고) 이미지 — 표준 양식 상단 로고 블록에 사용 */
 const SUPPLIER_LOGO = "https://design.jirandata.co.kr/mail/2026/ci.png";
+
+/**
+ * 데모 인감(직인) 이미지 — `Branding.stampUrl` 의 시드 값.
+ *
+ * 파일 저장소가 없어 이미지는 dataUrl 로 컬럼에 담기므로(로고와 같은 방식), 외부 자산에
+ * 의존하지 않는 작은 SVG 를 그대로 심는다. 회사 정보 화면이 **비어 보이지 않아야** 인감 칸이
+ * 무엇을 받는 자리인지 한눈에 보인다.
+ */
+const SUPPLIER_STAMP = `data:image/svg+xml;base64,${Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">' +
+    '<circle cx="60" cy="60" r="54" fill="none" stroke="#c0392b" stroke-width="5"/>' +
+    '<text x="60" y="52" font-family="serif" font-size="26" fill="#c0392b" text-anchor="middle">지란지교</text>' +
+    '<text x="60" y="84" font-family="serif" font-size="26" fill="#c0392b" text-anchor="middle">소프트</text>' +
+    "</svg>",
+).toString("base64")}`;
 
 /**
  * 견적서 표준 양식 하단 약관/안내 (일반화한 데모 문구).
@@ -425,22 +441,33 @@ async function main() {
   //    companyName·logoUrl 은 contentJson 이 없는 문서(예: AI 생성 초안)의
   //    공급자 기본값으로도 쓰이므로, 표준 양식과 동일한 회사 정보로 통일한다.
   //    (사이드바의 "RAINMAKER" 는 제품 브랜드로 별도 하드코딩되어 영향 없음)
+  //    대표자·등록번호·주소·대표번호·인감은 `회사·프로필 설정`(설정 7)의 회사 정보 탭이
+  //    읽는 값이다 — 비워 두면 화면이 무엇을 받는 자리인지 보이지 않는다.
   await prisma.branding.create({
     data: {
       orgId: org.id,
       companyName: SUPPLIER.상호,
       logoUrl: SUPPLIER_LOGO,
+      stampUrl: SUPPLIER_STAMP,
+      ceoName: SUPPLIER.대표자,
+      bizRegNo: SUPPLIER.등록번호,
+      address: SUPPLIER.주소,
+      phone: SUPPLIER.대표번호,
       primaryColor: "#4F46E5",
     },
   });
 
   // 4) 사용자
+  //    직함·연락처는 **개인** 값이다 (회사 대표 연락처는 Branding) — 프로필 설정의
+  //    계정 정보 탭이 읽는다.
   await prisma.user.create({
     data: {
       orgId: org.id,
       email: "admin@rainmaker.ai",
       name: "김관리",
       role: "ADMIN",
+      position: "경영지원팀 팀장",
+      phone: "010-1234-5678",
     },
   });
   const leader = await prisma.user.create({
@@ -449,6 +476,8 @@ async function main() {
       email: "leader@rainmaker.ai",
       name: "박리더",
       role: "LEADER",
+      position: "영업1팀 팀장",
+      phone: "010-2345-6789",
     },
   });
   const rep = await prisma.user.create({
@@ -457,6 +486,8 @@ async function main() {
       email: "rain.kim@rainmaker.ai",
       name: "김레인",
       role: "SALES_REP",
+      position: "영업1팀 대리",
+      phone: "010-3456-7890",
       signature: REP_SIGNATURE_HTML,
     },
   });

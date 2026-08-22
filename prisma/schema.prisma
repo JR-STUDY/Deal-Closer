@@ -51,6 +51,10 @@ model User {
   name      String
   role      String   @default("SALES_REP") // SALES_REP | LEADER | ADMIN
   avatarUrl String?
+  // 직함·연락처는 **개인**의 정보다 (회사 정보는 Branding). 사람마다 다른 값이라
+  // 조직 단위로 묶으면 팀원이 늘 때 서로의 값을 덮어쓴다.
+  position  String?  // 직함 (예: 팀장, Sales Director)
+  phone     String?  // 담당자 연락처 (normalizePhone 으로 정규화해 저장)
   signature String?  // 메일 서명 (발송 시 본문 하단에 추가)
   orgId     String
   org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -583,6 +587,14 @@ model Branding {
   org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   companyName  String?
   logoUrl      String?
+  // 인감(직인) 이미지. 로고와 같은 방식으로 dataUrl 을 그대로 담는다 — 별도 파일 저장소가
+  // 없고, 에디터 이미지 블록도 dataUrl 로 본문에 넣는다 (상한: MAX_BRANDING_IMAGE_BYTES).
+  stampUrl     String?
+  // 문서 공급자 정보로 쓰이는 **회사** 값들 (담당자 개인 값은 User.position·User.phone).
+  ceoName      String?  // 대표자명
+  bizRegNo     String?  // 사업자등록번호 (normalizeBizRegNo 로 000-00-00000 정규화)
+  address      String?  // 회사 주소
+  phone        String?  // 대표 연락처 (normalizePhone 으로 정규화)
   primaryColor String   @default("#4F46E5")
   updatedAt    DateTime @updatedAt
 

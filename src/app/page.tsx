@@ -25,20 +25,23 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="flex flex-col justify-center gap-3 sm:flex-row">
+        {/*
+          진입점은 **영업 포털 하나**다 (2.0.0). 관리자 콘솔 링크는 걷어냈다 —
+          팀원 관리·요금·크레딧·메일 도메인·통계는 라우트가 그대로 살아 있고 주소를 아는
+          사람만 들어간다. 담당자가 실제로 쓰는 품목 카탈로그·회사 정보는 포털의
+          `설정` 으로 옮겼으므로, 여기서 콘솔을 나란히 권할 이유가 없다.
+        */}
+        <div className="flex justify-center">
           <Button asChild size="lg">
             <Link href="/dashboard">
               영업 포털 열기
               <ArrowRight className="size-4" />
             </Link>
           </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link href="/analytics">관리자 콘솔 열기</Link>
-          </Button>
         </div>
 
         <p className="text-xs text-muted-foreground">
-          MVP 데모 · 인증 없이 두 콘솔을 바로 확인할 수 있습니다
+          MVP 데모 · 인증 없이 바로 확인할 수 있습니다
         </p>
       </div>
     </main>
