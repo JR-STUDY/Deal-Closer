@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { Prisma } from "@/generated/prisma/client";
 import {
   EMAIL_LOG_ROW_SELECT,
+  EMAIL_OPEN_COLUMN_LABEL,
+  EMAIL_OPEN_HINT,
   emailLogSortHref,
   emailLogSortStateOf,
   nextEmailLogSort,
@@ -96,7 +98,7 @@ export function SentMailTable({
               {...sortHead("document")}
             />
             {/*
-              기회·받는 사람·상태·열람 여부는 정렬하지 않는다 (`EMAIL_LOG_SORT_KEYS` 주석) —
+              기회·받는 사람·상태·열람 확인은 정렬하지 않는다 (`EMAIL_LOG_SORT_KEYS` 주석) —
               값이 두세 가지뿐이거나 다중 값이라 정렬해도 뭉치가 생길 뿐이고, 찾는 목적은
               툴바 필터·검색이 더 정확히 해결한다.
             */}
@@ -105,17 +107,15 @@ export function SentMailTable({
             <TableHead className="w-[96px]">상태</TableHead>
             <TableHead className="w-[132px]">
               <span className="inline-flex items-center gap-1">
-                열람 여부
+                {EMAIL_OPEN_COLUMN_LABEL}
                 {/*
-                  있는 척하지 않는다 — 열람 기록은 추적 이미지를 불러온 메일에만 남는다.
-                  현재 발송 라우트는 추적 픽셀을 본문에 넣지 않으므로(스키마의 trackingId 는
-                  아직 비어 있다) 대부분 "미열람" 으로 보인다. 그 사실을 여기서 밝힌다.
+                  **확인된 것만 주장한다.** 오픈 트래킹은 원리적으로 부정확하다 —
+                  이미지 차단으로 읽었는데 기록이 없고(거짓 음성), 메일 앱·프록시의
+                  프리페치로 안 읽었는데 잡힌다(거짓 양성). 그래서 머리글도 "열람 여부"
+                  가 아니라 "열람 확인" 이고, 왜 그런지를 ⓘ 로 밝힌다.
+                  문구는 `@/lib/email-log` 한 곳에서 온다 (상세 화면과 같은 말을 쓴다).
                 */}
-                <InfoHint label="열람 여부 기준 안내">
-                  수신자가 메일 본문의 추적 이미지를 불러오면 열람 시각이
-                  기록됩니다. 현재는 추적 이미지 삽입이 연동되지 않아 대부분
-                  ‘미열람’ 으로 표시됩니다.
-                </InfoHint>
+                <InfoHint label="열람 확인 기준 안내">{EMAIL_OPEN_HINT}</InfoHint>
               </span>
             </TableHead>
           </TableRow>

@@ -54,6 +54,7 @@ pnpm test:opportunity-renewal   # 갱신 기회 판정·이름·마감일 순수
 pnpm test:pagination # 목록 페이지네이션 순수 함수 검증 (DB 없이 실행)
 pnpm test:calendar  # 대시보드 월 캘린더(그리드·일정 배치·월 합계) 순수 함수 검증 (DB 없이 실행)
 pnpm test:email-log # 발송 이력 목록 조회 조건·정렬 순수 함수 검증 (DB 없이 실행)
+pnpm test:email-tracking # 오픈 트래킹(추적 픽셀 주소·태그·기본 주소·최초 열람) 순수 함수 검증
 pnpm test:contact   # 거래처 담당자 대표 규칙 순수 함수 검증 (DB 없이 실행)
 pnpm test:confirmed-document # 확정 문서 판정 순수 함수 검증 (DB 없이 실행)
 pnpm test:amount-breakdown   # 확정 문서 금액 내역(요약행) 표기 순수 함수 검증 (DB 없이 실행)
@@ -92,6 +93,8 @@ src/
                      #  이전 완료(리다이렉트만 남음): settings/branding · account/profile → /settings/profile
     (auth)/            # 로그인 등 인증 화면 (사이드바 없음)
     api/               # REST API Route Handlers (SQLite 조회 / LLM 호출 / 일부 목업)
+                     #  mail/track/[trackingId] 는 **인증 없이 열린 유일한 라우트**다
+                     #  (수신자의 메일 앱이 부른다 — 아래 오픈 트래킹 규칙 참고)
                      #  generate · templates · documents/[id]/{versions,revise} 는 실제 LLM 호출
                      #  (모델은 사용자가 화면에서 선택 — 서버가 카탈로그로 검증)
     layout.tsx         # 루트 레이아웃 (폰트·Toaster)
@@ -174,6 +177,10 @@ src/
                          #   emailLogsWhere(조직 범위는 document.orgId 경유) ·
                          #   parseEmailLogFilters/Sort · emailLogOrderBy(마지막 기준 id) ·
                          #   emailOpenState(실패 건은 "미열람" 이 아니다) · recipientList
+    email-tracking.ts    # 오픈 트래킹 **기록 장치** 순수 함수 (F-234) — newTrackingId(UUID v4) ·
+                         #   readAppBaseUrl/parseAppBaseUrl(APP_BASE_URL 검증) ·
+                         #   trackingPixelUrl/Tag · withTrackingPixel(본문 맨 끝 · 주소 없으면 그대로) ·
+                         #   trackingPixelBytes/TRACKING_PIXEL_HEADERS(캐시 금지) · firstOpenAt
     email-template.ts    # 메일 템플릿 치환 변수·검증·DTO
     signature.ts         # 메일 서명 HTML 판별·미리보기 문서·검증
     mail-domain.ts       # 팀 발신 도메인 검증·팀 주소 조합·발신 신원 해석
@@ -544,14 +551,47 @@ src/
   범위를 써야 한다). 단건 조회도 `findFirst({ where: { id, document: { orgId } } })` 이며
   없는 이력과 남의 이력은 **같은 404** 다. 상태·열람 여부는 **정렬이 아니라 필터**로 준다
   (값이 두세 가지뿐이라 정렬하면 뭉치만 생긴다 — 단계·담당자와 같은 판단).
-  **발송 실패 건에 "미열람" 을 적지 않는다**(`emailOpenState`) — 나가지 않은 메일의 미열람은
-  "보냈는데 아직 안 봤다" 로 읽힌다. 목록 select 에 본문(`body`)을 넣지 않고 상세에서만 읽는다.
+  **발송 실패 건에는 열람을 적지 않는다**(`emailOpenState` → `—`) — 나가지 않은 메일의
+  "기록 없음" 은 "보냈는데 아직 안 봤다" 로 읽힌다. 목록 select 에 본문(`body`)을 넣지 않고 상세에서만 읽는다.
   발송 상세는 **다이얼로그가 아니라 라우트**(`/mail/sent/:id`)다 — 행 전체 클릭 덮개
   (`RowLink`)의 목적지가 주소여야 새 탭·주소 복사·키보드 이동이 그대로 되고, 목록 10건의
   본문을 미리 클라이언트로 내려보내지 않는다.
-- **열람 여부·수신함은 "아직 없다"고 화면에 적는다.** `EmailLog.trackingId`·`openedAt` 은
-  컬럼만 있고 값을 쓰는 코드가 없으므로(추적 픽셀 미삽입) 열람 칸에 ⓘ 로 그 사실을 밝힌다.
-  수신함(`/mail/inbox`)은 골격뿐이며 **목업 수신 메일을 만들지 않는다** — 가짜 스레드를 채우면
+- **오픈 트래킹은 "확인된 것만" 주장한다 — 화면에 `미열람` 이라고 쓰지 않는다** (F-234).
+  기록은 수신자의 메일 앱이 본문의 1×1 픽셀을 불러왔을 때만 남으므로 **양방향으로 부정확**
+  하다: 이미지 차단(대부분의 앱 기본값)이면 읽었는데 기록이 없고, 앱·보안 프록시의
+  프리페치(Gmail 이미지 프록시)면 안 읽었는데 잡힌다. 그래서 낱말이 `열람 여부`(있음/없음의
+  단정)가 아니라 **`열람 확인`** 이고, 기록이 없는 칸은 **`기록 없음`** 이다 — 금액에 관해
+  지키는 태도("틀린 말이 아무 말도 하지 않는 것보다 나쁘다")를 열람에도 적용한다.
+  라벨·ⓘ 문구는 `@/lib/email-log` 한 곳에 두고(`EMAIL_OPEN_*`) 목록·상세·필터가 같은 말을
+  쓴다. **판정은 두 모듈로 나뉜다** — "어떻게 기록되는가" 는 `@/lib/email-tracking`,
+  "무엇으로 보여줄 것인가" 는 `@/lib/email-log` 의 `emailOpenState` 다.
+- **추적 식별자는 추측 불가능한 난수(UUID v4)여야 한다.** `GET /api/mail/track/:trackingId` 는
+  **인증 없이** 열려 있다(부르는 쪽은 수신자의 메일 앱이라 세션이 없다) — 그래서 조직 범위로
+  좁힐 수가 없고 `trackingId` 의 무작위성이 유일한 방어선이다. 라우트는 성공·실패에 상관없이
+  **같은 이미지 한 장**만 돌려준다: 모르는 id 도 200 + 픽셀이다(404 로 갈리면 유효한 id 를
+  찾는 탐색 도구가 되고, 고객 메일에 깨진 이미지가 뜬다). 캐시 금지 헤더는 필수다 —
+  캐시되면 두 번째 열람이 서버에 오지 않아 `openCount` 가 1 에서 멈춘다.
+  갱신은 **원자적으로** 한다: `openedAt: null` 인 행만 골라 시각+횟수를 함께 올리고
+  (`updateMany`), **그 결과가 0건일 때만** 횟수를 따로 올린다. 조건 없이 두 번 부르면 첫
+  열람이 2회로 잡히고, `findFirst` 로 읽어 `openCount + 1` 을 쓰면 동시 요청에서 증가가
+  유실된다(실측: 5개 동시 요청 → 5, `openedAt` 은 가장 먼저 도착한 시각 하나).
+- **픽셀 주소는 절대 주소여야 하고, 주소가 없으면 픽셀을 넣지 않는다.** 픽셀은 수신자의 메일
+  앱이 불러오므로 상대 경로는 아무 곳도 가리키지 않는다 — 기본 주소는 `.env` 의
+  `APP_BASE_URL` 이고 검증은 `parseAppBaseUrl()` 하나다. 없으면 `withTrackingPixel` 이
+  **본문을 그대로 돌려준다**(깨진 이미지가 고객 메일에 박히는 것이 열람 기록을 잃는 것보다
+  나쁘다) 대신 발송 라우트가 그 사실을 로그로 남긴다 — `mailer.ts` 가 자격증명 없을 때 이유를
+  남기는 것과 같은 판단. 픽셀은 본문 **맨 끝(닫는 `</body>` 직전 · 서명 뒤)** 이다: 서명은
+  사용자가 붙여 넣은 HTML 조각이라 닫히지 않은 태그가 있을 수 있고, 그 앞에 두면 서명
+  마크업에 빨려 들어가 클라이언트가 통째로 지운다. **텍스트 파트에는 넣지 않는다**(태그가
+  글자로 보인다).
+- **아직 남은 것: 픽셀을 실제로 실어 보내는 일.** `POST /api/documents/:id/send` 는 이력만
+  남기고 **메일을 내보내지 않는다**(F-232 PDF 첨부 · F-233 실전송이 미구현 — `sendMail` 을
+  부르는 곳이 저장소 전체에 없다). 그래서 발송마다 `trackingId` 는 저장되지만 픽셀이 나가지
+  않아 열람이 쌓이지 않으며, ⓘ 문구가 그 사실도 함께 밝힌다. 전송이 붙는 자리는 한 줄이다 —
+  `sendMail({ text: 본문, html: withTrackingPixel(본문HTML, baseUrl, log.trackingId) })`
+  (`scripts/mailer.test.mts` §10 이 그 계약을 fetch 스텁으로 고정해 두었다).
+  **본문이 텍스트뿐인 발송에 픽셀을 억지로 끼우지 않는다.**
+- **수신함(`/mail/inbox`)은 골격뿐이며 목업 수신 메일을 만들지 않는다** — 가짜 스레드를 채우면
   나중에 진짜와 구분할 수 없다(`/api/generate/batch` 목업이 남긴 교훈). 실구현에 필요한
   연동 방식·스키마·토큰 저장은 `docs/MAIL-INBOX.md` 에 정리했다.
 - **목록 행 전체 클릭은 `@/components/list-row-link` 를 쓴다.** `onClick` + `router.push` 로 행을 이동시키지 않는다 — `RowLink` 의 `::after` 덮개가 행을 채우므로 JS 없이 동작하고 키보드 Tab·Enter·새 탭이 그대로 된다(정책 ACC_*). 행에 `ROW_LINK_ROW`, 행 안의 다른 링크·`⋯` 메뉴 칸에 `ROW_LINK_ABOVE` 를 함께 붙인다.
@@ -693,6 +733,13 @@ Claude(Anthropic Messages API) · GPT(OpenAI Responses API) · Gemini(Google gen
 - **인증 없음**: `src/lib/session.ts` 가 데모 고정 사용자/조직을 반환한다. 실제 인증(NextAuth 등) 도입 시 이 모듈만 교체하면 된다.
 - 일부 쓰기 액션(폼 제출 등)은 `sonner` toast 목업이다. 실제 저장이 필요하면 `/api/*` 를 확장한다.
 - `/api/generate/batch`(폴더 일괄 변환)는 **여전히 데모 목업**이다 — 파일명만 받아 기준본을 복제한다.
+- **메일은 실제로 나가지 않는다** (F-232 · F-233). `src/lib/mailer.ts`(Resend 어댑터)는 완성돼
+  있고 테스트도 있지만 **부르는 곳이 없다** — 발송 화면은 `EmailLog` 기록·문서 상태 전환·기회
+  단계 전이까지만 한다(toast 도 "실제 메일 전송은 준비 중입니다" 로 그렇게 안내한다).
+  전송을 붙일 때는 **PDF 첨부(F-232)를 함께** 붙인다 — 기본 본문이 "첨부된 문서를
+  확인해주시기 바랍니다" 라고 적고 화면이 첨부 파일 카드를 보여주므로, 첨부 없이 내보내면
+  약속한 파일이 빠진 메일이 고객에게 간다. 참조(CC)·서명도 아직 발송 요청 본문에 실리지
+  않으므로(발송 화면이 보내지 않는다) 함께 맞춰야 한다.
 - 품목 카탈로그의 `엑셀 업로드`·`품목 추가` 버튼은 아직 목업이다 (조회·정렬·페이지는 실제 DB).
 - **로고·인감을 PDF·에디터에 반영하는 것은 아직 하지 않았다.** 꽂을 자리는 두 곳이다 —
   `src/lib/pdf-html.ts` 의 `PdfBranding`(로고는 이미 빈 이미지 블록의 대체값으로 쓰인다. 인감은
