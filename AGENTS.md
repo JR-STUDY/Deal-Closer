@@ -52,6 +52,7 @@ pnpm test:opportunity-patch     # 기회 부분 수정(인라인) 병합 순수 
 pnpm test:opportunity-sort      # 기회 목록 정렬 순수 함수 검증 (DB 없이 실행)
 pnpm test:pagination # 목록 페이지네이션 순수 함수 검증 (DB 없이 실행)
 pnpm test:calendar  # 대시보드 월 캘린더(그리드·일정 배치·월 합계) 순수 함수 검증 (DB 없이 실행)
+pnpm test:email-log # 발송 이력 목록 조회 조건·정렬 순수 함수 검증 (DB 없이 실행)
 pnpm test:contact   # 거래처 담당자 대표 규칙 순수 함수 검증 (DB 없이 실행)
 pnpm test:confirmed-document # 확정 문서 판정 순수 함수 검증 (DB 없이 실행)
 pnpm test:editor-schema      # 블록 캔버스 문서 모델 파싱·직렬화 검증 (DB 없이 실행)
@@ -155,6 +156,10 @@ src/
       content.ts       #  파일 → 중립 블록 (PDF·이미지 원본 전달)
       generate-document.ts / setup-template.ts / revise-document.ts  # 서비스 진입점
       http.ts          #  AI 예외 → 503/502 응답 매핑
+    email-log.ts         # 발송 이력 목록 **조회 조건·정렬·표시 판정** 순수 함수 (메일-1) —
+                         #   emailLogsWhere(조직 범위는 document.orgId 경유) ·
+                         #   parseEmailLogFilters/Sort · emailLogOrderBy(마지막 기준 id) ·
+                         #   emailOpenState(실패 건은 "미열람" 이 아니다) · recipientList
     email-template.ts    # 메일 템플릿 치환 변수·검증·DTO
     signature.ts         # 메일 서명 HTML 판별·미리보기 문서·검증
     mail-domain.ts       # 팀 발신 도메인 검증·팀 주소 조합·발신 신원 해석
@@ -441,6 +446,22 @@ src/
 - **단계 진행 표시(스테퍼·흐름 안내)는 `@/lib/opportunity-progress` 의 순수 함수를 쓴다.** 목록과 상세가 같은 계산을 공유해야 표현이 어긋나지 않는다. 이 모듈은 읽기 전용이며 단계를 바꾸지 않는다. 트랙 끝의 **마감 노드는 항상 1개**다 — 진행 중이면 회색 `수주/실주`(앞으로 갈 곳), 마감되면 실제 결과 하나가 채워진다. 수주·실주를 **갈래(2step)로 벌리지 않는다** — 둘을 나란히 띄우면 화면이 "둘 중 하나를 고르는 단계"처럼 읽힌다.
 - **지나온 구간은 `stage` 하나로 단정하지 않는다.** 마감된 기회는 어느 단계에서 마감했는지가 활동 이력(ActivityLog)에만 남으므로, `opportunityProgress(stage, history)` 에 이력의 `from`/`to` 를 넘겨 도달 지점을 도출한다(`reachedOpenStage`). 상단(진행 단계)과 하단(이력)이 같은 출처를 봐야 "제안에서 실주했는데 검토/협상까지 지나온 것으로 보이는" 어긋남이 생기지 않는다. 이력을 **새로 조회하지 말고** 화면이 이미 읽은 것을 재사용한다. 이력이 없으면 초기까지만 지나온 것으로 본다(모르면 덜 주장한다).
 - **목록 페이지네이션은 `@/lib/pagination` + `@/components/list-pagination` 을 쓴다.** 페이지는 URL 쿼리(`?page=`)로만 주고받는 **서버 페이지네이션**이며, 페이지 크기는 `LIST_PAGE_SIZE` 상수 하나다. 페이지 UI 는 **1페이지뿐이어도 노출**한다(이전·다음 비활성) — 결과 수에 따라 나타났다 사라지면 표 아래가 들썩이고 이 목록이 페이지로 나뉘는 화면인지도 알 수 없다. **0건일 때만** 감추고 그 자리에 빈 상태 안내를 둔다. 검색·필터를 바꿀 때는 툴바가 `nextListSearch` 로 page 를 1로 되돌린다(3페이지에 머문 채 조건을 좁히면 빈 화면이 뜬다). 총 건수·합계는 **필터를 적용한 전체**를 기준으로 내고, 건수 조회는 목록 조회와 `Promise.all` 로 병렬화한다. 기회 **칸반 보기는 페이지네이션 대상이 아니다** — 전체가 보여야 파이프라인이 성립한다.
+- **메일 발송 이력(`/mail/sent`)의 조회 조건·정렬은 `@/lib/email-log` 순수 함수가 단일 기준이다.**
+  `EmailLog` 에는 `orgId` 컬럼이 **없다** — 조직 범위를 `{ document: { orgId } }` 관계 필터로
+  걸고, 그 조건을 화면이 아니라 `emailLogsWhere()` 한 곳에 둔다(목록 조회와 건수 조회가 같은
+  범위를 써야 한다). 단건 조회도 `findFirst({ where: { id, document: { orgId } } })` 이며
+  없는 이력과 남의 이력은 **같은 404** 다. 상태·열람 여부는 **정렬이 아니라 필터**로 준다
+  (값이 두세 가지뿐이라 정렬하면 뭉치만 생긴다 — 단계·담당자와 같은 판단).
+  **발송 실패 건에 "미열람" 을 적지 않는다**(`emailOpenState`) — 나가지 않은 메일의 미열람은
+  "보냈는데 아직 안 봤다" 로 읽힌다. 목록 select 에 본문(`body`)을 넣지 않고 상세에서만 읽는다.
+  발송 상세는 **다이얼로그가 아니라 라우트**(`/mail/sent/:id`)다 — 행 전체 클릭 덮개
+  (`RowLink`)의 목적지가 주소여야 새 탭·주소 복사·키보드 이동이 그대로 되고, 목록 10건의
+  본문을 미리 클라이언트로 내려보내지 않는다.
+- **열람 여부·수신함은 "아직 없다"고 화면에 적는다.** `EmailLog.trackingId`·`openedAt` 은
+  컬럼만 있고 값을 쓰는 코드가 없으므로(추적 픽셀 미삽입) 열람 칸에 ⓘ 로 그 사실을 밝힌다.
+  수신함(`/mail/inbox`)은 골격뿐이며 **목업 수신 메일을 만들지 않는다** — 가짜 스레드를 채우면
+  나중에 진짜와 구분할 수 없다(`/api/generate/batch` 목업이 남긴 교훈). 실구현에 필요한
+  연동 방식·스키마·토큰 저장은 `docs/MAIL-INBOX.md` 에 정리했다.
 - **목록 행 전체 클릭은 `@/components/list-row-link` 를 쓴다.** `onClick` + `router.push` 로 행을 이동시키지 않는다 — `RowLink` 의 `::after` 덮개가 행을 채우므로 JS 없이 동작하고 키보드 Tab·Enter·새 탭이 그대로 된다(정책 ACC_*). 행에 `ROW_LINK_ROW`, 행 안의 다른 링크·`⋯` 메뉴 칸에 `ROW_LINK_ABOVE` 를 함께 붙인다.
 - import alias 는 `@/*` = `src/*`.
 - **서버가 읽는 상수는 `"use client"` 파일에서 export 하지 않는다.** 클라이언트 모듈의

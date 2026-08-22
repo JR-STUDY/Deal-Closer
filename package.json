@@ -20,6 +20,7 @@
     "test:opportunity-sort": "tsx --tsconfig tsconfig.scripts.json scripts/opportunity-sort.test.ts",
     "test:pagination": "tsx --tsconfig tsconfig.scripts.json scripts/pagination.test.ts",
     "test:calendar": "tsx --tsconfig tsconfig.scripts.json scripts/calendar.test.ts",
+    "test:email-log": "tsx --tsconfig tsconfig.scripts.json scripts/email-log.test.ts",
     "test:contact": "tsx --tsconfig tsconfig.scripts.json scripts/contact.test.ts",
     "test:confirmed-document": "tsx --tsconfig tsconfig.scripts.json scripts/confirmed-document.test.ts",
     "test:amount-breakdown": "tsx --tsconfig tsconfig.scripts.json scripts/amount-breakdown.test.ts",
