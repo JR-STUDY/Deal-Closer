@@ -15,7 +15,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -31,16 +30,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DocTypeBadge } from "@/components/status-badge";
-import {
-  DOCUMENT_TYPES,
-  DOCUMENT_TYPE_LABELS,
-} from "@/lib/constants";
 import { formatKRW } from "@/lib/format";
 import { DocumentPicker, type LibraryDoc } from "./document-picker";
 import { AiModelSelect } from "@/components/ai-model-select";
 import type { AiModelOption } from "@/lib/ai/models";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TemplatePicker } from "./template-picker";
 import type {
   ConfirmedQuote,
   GenerateMode,
@@ -48,6 +41,9 @@ import type {
   TemplateChoice,
 } from "./types";
 import { AttachmentFields } from "./attachment-fields";
+import { DocumentKindFields } from "./document-kind-fields";
+import { FormSection } from "./form-section";
+import { TargetFields } from "./target-fields";
 
 export type { ConfirmedQuote, OpportunityChoice, TemplateChoice } from "./types";
 
@@ -291,103 +287,56 @@ export function GeneratorForm({
             자연어로 필요하신 내용을 자유롭게 적어주세요.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {/* 어떤 방식으로 만들지 먼저 고른다 — 두 플로우의 입력이 다르다 */}
-          <Tabs value={mode} onValueChange={(v) => changeMode(v as GenerateMode)}>
-            <TabsList className="w-full">
-              <TabsTrigger value="blank" disabled={isSubmitting} className="flex-1">
-                새로 작성
-              </TabsTrigger>
-              <TabsTrigger
-                value="template"
-                disabled={isSubmitting || templates.length === 0}
-                className="flex-1"
-              >
-                표준 양식으로
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {mode === "template" ? (
-            <TemplatePicker
+        {/*
+          * 한 화면 · 네 섹션이다 (위저드로 나누지 않는다 — 네 값이 서로를 바꾼다:
+          * 양식 → 문서 종류 → 확정 견적서 노출까지 이어진다).
+          * 묶음의 뜻은 `form-section.tsx` 주석에 적어 두었다.
+          */}
+        <CardContent className="space-y-5">
+          <FormSection
+            step={1}
+            title="무엇을 만드는가"
+            description="새로 작성하거나, 우리 팀의 표준 양식을 불러와 채웁니다."
+          >
+            <DocumentKindFields
+              mode={mode}
+              onModeChange={changeMode}
               templates={templates}
-              value={templateId === NO_TEMPLATE ? null : templateId}
-              onChange={setTemplateId}
+              templateId={templateId === NO_TEMPLATE ? null : templateId}
+              onTemplateChange={setTemplateId}
+              documentType={documentType}
+              onDocumentTypeChange={setDocumentType}
+              autoType={AUTO_TYPE}
               disabled={isSubmitting}
             />
-          ) : (
-            <div className="space-y-1.5">
-              <Label htmlFor="type-select" className="text-xs">
-                문서 종류
-              </Label>
-              <Select
-                value={documentType}
-                onValueChange={setDocumentType}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger id="type-select" className="w-full">
-                  <SelectValue placeholder="AI 가 판단" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={AUTO_TYPE}>AI 가 판단</SelectItem>
-                  {DOCUMENT_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {DOCUMENT_TYPE_LABELS[type]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          </FormSection>
 
-          <Textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value.slice(0, MAX_LENGTH))}
-            maxLength={MAX_LENGTH}
-            disabled={isSubmitting}
-            placeholder={
-              mode === "template"
-                ? "예: 라이선스 30명, 1년 계약으로 채워줘 (이번 건에서 달라지는 점만 적으면 됩니다)"
-                : "예: 협력사에게 받은 견적서에 마진 20%를 붙여서 견적서를 만들어줘"
-            }
-            className="min-h-40 resize-none text-base"
-          />
+          <FormSection
+            step={2}
+            title="누구에게 보내는 문서인가"
+            description="영업 기회를 고르면 거래처 정보를 CRM 에서 그대로 가져옵니다."
+          >
+            <TargetFields
+              opportunities={opportunities}
+              opportunityId={opportunityId}
+              onOpportunityChange={setOpportunityId}
+              selectedOpportunity={selectedOpportunity}
+              noOpportunityValue={NO_TEMPLATE}
+              clientName={clientName}
+              onClientNameChange={setClientName}
+              clientContact={clientContact}
+              onClientContactChange={setClientContact}
+              clientEmail={clientEmail}
+              onClientEmailChange={setClientEmail}
+              disabled={isSubmitting}
+            />
+          </FormSection>
 
-          {/* 추가 설정 — 기회 연결 · 근거 문서 · 거래처 · AI 모델 */}
-          <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-            <p className="text-xs font-medium text-muted-foreground">추가 설정</p>
-            <div className="space-y-1.5">
-              <Label htmlFor="opportunity-select" className="text-xs">
-                영업 기회 연결
-              </Label>
-              <Select
-                value={opportunityId}
-                onValueChange={setOpportunityId}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger id="opportunity-select" className="w-full">
-                  <SelectValue placeholder="기회 없이 생성" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_TEMPLATE}>기회 없이 생성</SelectItem>
-                  {opportunities.map((opportunity) => (
-                    <SelectItem key={opportunity.id} value={opportunity.id}>
-                      {opportunity.accountName} · {opportunity.name}
-                      {opportunity.expectedAmount > 0
-                        ? ` · ${formatKRW(opportunity.expectedAmount)}`
-                        : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {selectedOpportunity
-                  ? `${selectedOpportunity.accountName} 의 거래처 정보를 AI 에 그대로 전달하고, 생성된 문서를 이 기회에 연결합니다.`
-                  : "기회를 고르면 거래처 정보를 CRM 에서 가져와 채웁니다. 고르지 않으면 기회 미연결 문서가 됩니다."}
-              </p>
-            </div>
-
-
+          <FormSection
+            step={3}
+            title="무엇을 보고 만드는가"
+            description="근거가 되는 문서·파일을 주면 그 값을 최우선으로 씁니다. 없어도 됩니다."
+          >
             {/* 계약서: 확정된 견적서를 소스로 지정 (F-213) */}
             {showQuoteSource && (
               <div className="space-y-1.5">
@@ -417,53 +366,80 @@ export function GeneratorForm({
               </div>
             )}
 
-            {selectedOpportunity ? (
-              <p className="rounded-md border border-dashed bg-background px-3 py-2 text-xs text-muted-foreground">
-                거래처 정보는 <strong className="font-medium">{selectedOpportunity.accountName}</strong>{" "}
-                의 CRM 등록값을 사용합니다. 직접 입력할 필요가 없습니다.
-              </p>
-            ) : (
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="client-name" className="text-xs">
-                  고객사명
-                </Label>
-                <Input
-                  id="client-name"
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  disabled={isSubmitting}
-                  placeholder="(주)글로벌커머스"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="client-contact" className="text-xs">
-                  수신 담당자
-                </Label>
-                <Input
-                  id="client-contact"
-                  value={clientContact}
-                  onChange={(e) => setClientContact(e.target.value)}
-                  disabled={isSubmitting}
-                  placeholder="김레인 책임"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="client-email" className="text-xs">
-                  담당자 이메일
-                </Label>
-                <Input
-                  id="client-email"
-                  type="email"
-                  value={clientEmail}
-                  onChange={(e) => setClientEmail(e.target.value)}
-                  disabled={isSubmitting}
-                  placeholder="rain@example.com"
-                />
-              </div>
-            </div>
-            )}
+            <AttachmentFields
+              files={files}
+              setFiles={setFiles}
+              folderAttach={folderAttach}
+              setFolderAttach={setFolderAttach}
+              isSubmitting={isSubmitting}
+            />
 
+            {/* 문서 보관함 참고 문서 (기존 견적서 등) */}
+            <DocumentPicker
+              documents={libraryDocuments}
+              selectedIds={refIds}
+              onConfirm={setRefIds}
+              disabled={isSubmitting}
+            />
+
+            {selectedRefs.length > 0 && (
+              <ul className="space-y-1.5">
+                {selectedRefs.map((doc) => (
+                  <li
+                    key={doc.id}
+                    className="flex min-h-11 items-center gap-2 rounded-md border bg-muted/30 px-3 py-1.5 text-sm"
+                  >
+                    <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="flex-1 truncate" title={doc.title}>
+                      {doc.title}
+                    </span>
+                    <DocTypeBadge type={doc.type} />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-9 shrink-0"
+                      disabled={isSubmitting}
+                      aria-label={`${doc.title} 참고 해제`}
+                      onClick={() =>
+                        setRefIds((prev) => prev.filter((x) => x !== doc.id))
+                      }
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </FormSection>
+
+          {/*
+            * ④ 지시문은 **마지막**이다 — 위 세 섹션이 정해진 뒤에 "이번 건에서 달라지는
+            * 점"을 적는 자리이고(양식 모드의 안내 문구가 그렇게 말한다), 생성 버튼이
+            * 바로 아래 있어야 마지막으로 읽은 것과 누르는 것이 이어진다.
+            */}
+          <FormSection
+            step={4}
+            title="무엇을 지시하는가"
+            description="자연어로 적어 주세요. 모델을 고른 뒤 생성을 시작합니다."
+          >
+            <Textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value.slice(0, MAX_LENGTH))}
+              maxLength={MAX_LENGTH}
+              disabled={isSubmitting}
+              aria-label="문서 생성 지시문"
+              placeholder={
+                mode === "template"
+                  ? "예: 라이선스 30명, 1년 계약으로 채워줘 (이번 건에서 달라지는 점만 적으면 됩니다)"
+                  : "예: 협력사에게 받은 견적서에 마진 20%를 붙여서 견적서를 만들어줘"
+              }
+              className="min-h-40 resize-none text-base"
+            />
+            <span className="block text-right text-xs tabular-nums text-muted-foreground">
+              {prompt.length.toLocaleString("ko-KR")} /{" "}
+              {MAX_LENGTH.toLocaleString("ko-KR")}
+            </span>
 
             <AiModelSelect
               models={models}
@@ -472,60 +448,9 @@ export function GeneratorForm({
               disabled={isSubmitting}
               mock={mockProvider}
             />
-          </div>
 
-          <AttachmentFields
-            files={files}
-            setFiles={setFiles}
-            folderAttach={folderAttach}
-            setFolderAttach={setFolderAttach}
-            isSubmitting={isSubmitting}
-          />
-
-          {/* 문서 보관함 참고 문서 (기존 견적서 등) */}
-          <DocumentPicker
-            documents={libraryDocuments}
-            selectedIds={refIds}
-            onConfirm={setRefIds}
-            disabled={isSubmitting}
-          />
-
-          {selectedRefs.length > 0 && (
-            <ul className="space-y-1.5">
-              {selectedRefs.map((doc) => (
-                <li
-                  key={doc.id}
-                  className="flex min-h-11 items-center gap-2 rounded-md border bg-muted/30 px-3 py-1.5 text-sm"
-                >
-                  <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="flex-1 truncate" title={doc.title}>
-                    {doc.title}
-                  </span>
-                  <DocTypeBadge type={doc.type} />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-9 shrink-0"
-                    disabled={isSubmitting}
-                    aria-label={`${doc.title} 참고 해제`}
-                    onClick={() =>
-                      setRefIds((prev) => prev.filter((x) => x !== doc.id))
-                    }
-                  >
-                    <X className="size-4" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {prompt.length.toLocaleString("ko-KR")} /{" "}
-              {MAX_LENGTH.toLocaleString("ko-KR")}
-            </span>
             <Button
+              className="w-full"
               onClick={handleGenerate}
               disabled={!prompt.trim() || isSubmitting}
             >
@@ -536,7 +461,7 @@ export function GeneratorForm({
               )}
               {isSubmitting ? "생성 중…" : "AI 초안 생성 시작"}
             </Button>
-          </div>
+          </FormSection>
         </CardContent>
       </Card>
 
