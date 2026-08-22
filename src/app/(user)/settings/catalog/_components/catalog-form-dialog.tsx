@@ -162,6 +162,11 @@ export function CatalogFormDialog({
         return;
       }
       const saved = json.data as CatalogSaveResult;
+      /*
+        `onSaved` 가 **닫기까지 맡는다.** 여기서 `onClose()` 를 이어서 부르면 그 동기 state
+        업데이트가 부모의 `router.refresh()` 트랜지션을 끊어, 저장은 됐는데 목록 행이
+        옛 값을 그대로 보여준다(호출측 주석에 실측을 적어 두었다).
+      */
       onSaved(saved);
       toast.success(itemId ? "품목을 수정했습니다." : "품목을 등록했습니다.");
       // SKU 중복은 막지 않는다 — 대신 그 사실을 알린다 (라우트 주석에 근거를 적어 두었다)
@@ -170,7 +175,6 @@ export function CatalogFormDialog({
           `SKU "${saved.sku}" 를 쓰는 품목이 이미 ${saved.duplicateSkuCount}개 있습니다. 의도한 것이 아니면 SKU 를 확인해 주세요.`,
         );
       }
-      onClose();
     } catch {
       toast.error("저장에 실패했습니다.");
     } finally {

@@ -6,7 +6,6 @@ import {
   Sparkles,
   FolderClosed,
   Mail,
-  Settings,
   BarChart3,
   Users,
   CreditCard,
@@ -49,6 +48,18 @@ export const userNav: NavItem[] = [
     icon: FolderClosed,
     children: [
       { href: "/library/templates", label: "표준 양식" },
+      /*
+        품목 카탈로그는 **문서함의 설정**이다 — 견적서 품목표의 자동완성이 보는 데이터이고,
+        고치는 사람도 견적서를 쓰는 담당자다. 그래서 `설정` 묶음을 따로 두지 않고 여기 넣는다.
+
+        `내 문서함` **앞**에 둔다: 폴더 트리가 `내 문서함` 의 자식으로 그려지므로, 그 뒤에
+        오는 항목은 트리의 일부로 읽힌다(들여쓰기 한 단계 차이뿐이다). 앞의 둘은 문서를
+        만들 때 쓰는 재료(양식·품목)이고 뒤가 결과물(내 문서함)이라는 순서도 된다.
+
+        주소는 `/settings/catalog` 그대로다 — 사이드바에서 어디에 놓이는지와 라우트 경로는
+        같아야 할 이유가 없고, 옮기면 리다이렉트를 하나 더 지고 가야 한다.
+      */
+      { href: "/settings/catalog", label: "품목 카탈로그" },
       { href: "/library", label: "내 문서함" },
     ],
   },
@@ -63,16 +74,19 @@ export const userNav: NavItem[] = [
       { href: "/settings/templates", label: "메일 템플릿" },
     ],
   },
-  {
-    href: "/settings/profile",
-    label: "설정",
-    icon: Settings,
-    children: [
-      { href: "/settings/profile", label: "회사·프로필" },
-      { href: "/settings/catalog", label: "품목 카탈로그" },
-    ],
-  },
 ];
+
+/*
+  `설정` 묶음은 없다 (2.0.0 이후).
+
+  담긴 것이 둘뿐이었고 둘 다 제 집이 생겼다 — **품목 카탈로그는 문서 보관함의 설정**이므로
+  그 묶음으로 들어갔고, **회사 정보는 사이드바 맨 아래 프로필 줄**로 들어갔다(계정 정보·
+  보안과 같은 화면의 탭이라 한자리에 모이는 것이 맞다). 남지 않은 묶음을 껍데기로 두면
+  누르면 하위가 하나뿐인 서랍이 된다.
+
+  `메일 연동`·`메일 템플릿` 처럼 주소가 `/settings/*` 인 화면이 아직 있지만, 그것들은
+  `메일` 묶음에 있다 — **주소의 접두사와 사이드바의 자리는 같아야 할 이유가 없다.**
+*/
 
 /**
  * 관리자 콘솔 (admin-web) 네비게이션 — **사이드바에서 진입점을 지운 잔존 화면들**이다.

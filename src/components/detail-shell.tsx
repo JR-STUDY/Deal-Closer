@@ -33,19 +33,33 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
  * ③ 스크롤을 잠근다. 게다가 `document.body` 로 portal 되어 `fixed inset-y-0` 로 뜨므로
  * 페이지 헤더까지 덮는다. 여기서 필요한 것은 **본문 영역 안에서** 미끄러져 나오는 트레이다.
  *
- * ## 바탕색
+ * ## 떠 있다는 것은 **그림자**로 알린다 — 바탕색을 바꾸지 않는다
  *
- * 열리면 바탕(스크롤 영역)이 `bg-foreground/5` 가 된다 — 리터럴 색이 아니라 **`--foreground`
- * 토큰에서 파생**한 5% 톤이다. 글자색은 라이트에서 어둡고 다크에서 밝으므로, 같은 한 줄이
- * 라이트에서는 바탕을 아주 조금 어둡게(≈`--muted` 수준), 다크에서는 아주 조금 밝게 만든다 —
- * **한쪽 테마에서만 보이는 일이 구조적으로 생기지 않는다.**
+ * 한때 열리면 바탕(스크롤 영역)이 `bg-foreground/5` 로 어두워졌다. 걷어낸 이유는 둘이다.
  *
- * `bg-muted/50` 을 쓰지 않은 이유: 다크의 `--muted`(0.269)를 바탕(0.145)에 반투명으로 얹으면
- * 합성값이 `--card`(0.205)와 거의 같아져 **카드와 드로어가 바탕에 묻힌다**. 지금 방식은
- * 카드(`bg-card`)와 드로어가 어느 테마에서도 바탕보다 한 단계 위에 남는다.
+ * ① **머리글에 이음선이 생긴다.** 이 컴포넌트가 칠할 수 있는 것은 스크롤 영역뿐이고
+ *    `PageHeader` 는 **형제**라 손이 닿지 않는다. 그래서 실측(1440×900) 스크롤 영역이
+ *    `y=77` 에서 시작하는 만큼, 드로어를 열면 머리글 바로 아래에 폭 전체를 가로지르는
+ *    **각진 회색 띠**가 생겼다 — 머리글(흰색)과 드로어(흰색)가 한 덩어리로 붙어 보이고
+ *    본문만 다른 판으로 떨어져 나갔다.
+ * ② **강조가 뒤집힌다.** 라이트에서 `--card` 와 `--background` 은 둘 다 흰색이라, 바탕만
+ *    어두워지면 **카드가 흰 판으로 도드라지고** 정작 새로 나타난 드로어는 그 카드들과
+ *    같은 흰색으로 남는다. 국소적인 조작 하나에 화면 전체가 다시 칠해지는데, 그 결과로
+ *    가장 눈에 덜 드는 것이 드로어다.
  *
- * 딤이 아니라 표면색이라 본문 글자색은 그대로이고, 바탕이 5% 움직여도 본문 명도대비는
- * AA 기준 안에 그대로 있다 (정책 ACC_*).
+ * 지금은 드로어가 **자기 왼쪽 그림자**로 스스로를 들어올린다. 겹쳐 뜬 것이 바탕에
+ * 그림자를 떨어뜨리는 것은 현실의 이치라 설명이 필요 없고, **국소적**이라 이음선이
+ * 생기지 않으며, 그림자가 드로어와 함께 움직이므로 바탕 전환(200ms)과 드로어 이동
+ * (300ms)이 어긋나 **색이 먼저 끝나 버리는 일**도 구조적으로 없다.
+ *
+ * `shadow-2xl` 로는 안 된다 — `0 25px 50px -12px` 는 **아래로** 떨어지는 그림자여서
+ * 왼쪽 모서리에는 거의 아무것도 그리지 않는다(실측: 열어도 드로어 왼쪽에 그라데이션이
+ * 보이지 않았다). 그래서 바탕 틴트가 그 몫을 대신하고 있었던 것이다. 지금은 x 오프셋을
+ * 왼쪽으로 준 그림자를 직접 적는다.
+ *
+ * 다크에서는 그림자가 거의 보이지 않지만 대신 **표면색이 이미 갈린다**(바탕 0.145 <
+ * 드로어 `--card` 0.205). 라이트는 둘 다 흰색이라 그림자가, 다크는 표면색이 맡는다 —
+ * 두 테마에서 각각 제 몫을 하는 단서가 있다. `border-l` 은 양쪽 공통이다.
  */
 
 export type DetailPanel = {
@@ -151,13 +165,11 @@ export function DetailShell({
         바탕 — 스크롤·`[scrollbar-gutter:stable]` 은 여기 그대로 남는다. 드로어는 이 위에
         절대 위치로 겹치므로 열고 닫아도 이 칸의 폭이 변하지 않는다 (스크롤바가 사라지거나
         본문이 가로로 밀리지 않는다).
+
+        **여닫이로 이 칸의 배경을 바꾸지 않는다** — 머리글은 이 컴포넌트의 형제라 함께 칠할
+        수 없어서, 칠하면 머리글 바로 아래에 각진 이음선이 생긴다 (위 주석 참고).
       */}
-      <div
-        className={cn(
-          "min-w-0 flex-1 overflow-auto p-8 transition-colors duration-200 [scrollbar-gutter:stable] motion-reduce:transition-none",
-          isOpen && "bg-foreground/5",
-        )}
-      >
+      <div className="min-w-0 flex-1 overflow-auto p-8 [scrollbar-gutter:stable]">
         <div className="mx-auto max-w-5xl space-y-6">
           {/*
             트리거는 **본문 안에 남는다** — 어디를 눌러야 이력·문서를 볼 수 있는지 화면에
@@ -212,7 +224,11 @@ export function DetailShell({
         inert={!isOpen}
         onKeyDown={handleKeyDown}
         className={cn(
-          "absolute inset-y-0 right-0 z-20 flex w-full flex-col border-l bg-card shadow-2xl transition-transform duration-300 ease-out outline-none sm:w-[28rem] xl:w-[34rem] motion-reduce:transition-none",
+          "absolute inset-y-0 right-0 z-20 flex w-full flex-col border-l bg-card outline-none sm:w-[28rem] xl:w-[34rem]",
+          // 왼쪽으로 떨어지는 그림자 — 이것이 "떠 있다" 는 유일한 단서다 (shadow-* 유틸은
+          // 모두 아래로 떨어져 왼쪽 모서리에 아무것도 그리지 않는다)
+          "shadow-[-12px_0_32px_-10px_rgb(0_0_0/0.22)]",
+          "transition-transform duration-300 ease-out motion-reduce:transition-none",
           isOpen ? "translate-x-0" : "translate-x-full",
         )}
       >

@@ -29,8 +29,31 @@ export function CatalogActiveToggle({
   isActive: boolean;
 }) {
   const router = useRouter();
-  const [active, setActive] = useState(isActive);
   const [isSaving, setIsSaving] = useState(false);
+  /*
+    낙관적 표시값 — **서버가 보낸 `isActive` 를 렌더 중에 다시 받아들인다.**
+
+    예전에는 `useState(isActive)` 하나였다. 초기값은 **처음 마운트할 때만** 읽히므로,
+    같은 행이 살아 있는 채로 서버 값이 바뀌면 스위치가 옛 값에 머문다 — ⋯ → 수정
+    다이얼로그에서도 활성을 바꿀 수 있으니(같은 `PATCH` 라우트다) 실제로 벌어지는 일이다.
+    행이 `key={item.id}` 라 다른 품목의 상태가 새는 일은 없지만, **같은 품목**의 상태는
+    갈린다.
+
+    `useEffect` 로 맞추지 않는다 — 한 프레임 늦게 반영되고 react-doctor
+    `set-state-in-effect` 에 걸린다. 프로젝트의 `account-combobox` 와 같은 **렌더 중
+    조정**이다: 서버가 보낸 값이 달라진 순간에만 받아들이고, 그 사이 사용자가 누른 값은
+    그대로 둔다(저장 실패 시 되돌리는 동작을 지키기 위해서다).
+  */
+  const [optimistic, setOptimistic] = useState<{
+    server: boolean;
+    shown: boolean;
+  }>({ server: isActive, shown: isActive });
+  if (optimistic.server !== isActive) {
+    setOptimistic({ server: isActive, shown: isActive });
+  }
+  const active = optimistic.shown;
+  const setActive = (next: boolean) =>
+    setOptimistic((prev) => ({ ...prev, shown: next }));
 
   const handleChange = async (next: boolean) => {
     setActive(next);

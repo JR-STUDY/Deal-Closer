@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Settings2 } from "lucide-react";
 import { userNav, adminNav } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -14,7 +14,12 @@ import { AddFolderButton } from "@/components/add-folder-button";
 type AppSidebarProps = {
   /** 콘솔 종류 — nav/라벨은 클라이언트에서 직접 선택한다 (함수 prop 전달 방지) */
   variant: "user" | "admin";
-  user: { name: string; roleLabel: string };
+  /*
+    이름만 받는다. 역할 라벨은 넘기지 않는다 — 아래 프로필 줄의 둘째 칸은 **여기를 누르면
+    무엇이 열리는지**(`내 계정`)를 적는 자리가 됐고, 역할은 그 문 안쪽(프로필 히어로)의
+    배지에 그대로 있다. 쓰지 않는 값을 계속 받으면 호출측이 매번 조회·계산해 넘기게 된다.
+  */
+  user: { name: string };
   /** 영업 포털 사이드바의 문서함별 폴더 (user 전용) */
   folders?: SidebarFolder[];
 };
@@ -30,14 +35,25 @@ export function AppSidebar({
   const nav = variant === "admin" ? adminNav : userNav;
   const kicker = variant === "admin" ? "관리자 콘솔" : "영업 담당자 포털";
   /*
-    프로필 설정 경로는 콘솔별로 그대로 둔다. 담당자 포털은 `/settings/profile`(회사·프로필)
-    이고, 관리자 콘솔의 `/account/profile` 은 **그 자리로 보내는 리다이렉트**다 (2.0.0) —
-    프로필 화면을 두 벌 두면 어느 쪽이 실제로 저장되는지 알 수 없다.
+    맨 아래 프로필 줄은 **설정 화면으로 가는 링크 하나**다 (`/settings/profile`).
+
+    사이드바에 `설정` 묶음을 따로 두지 않는 이유: 담겨 있던 둘 중 품목 카탈로그는 문서
+    보관함의 설정이라 그 묶음으로 갔고, 남은 회사 정보는 계정 정보·보안과 **같은 화면의
+    탭**이다. 한 화면의 탭 셋이 사이드바 두 곳(묶음 + 프로필 줄)으로 흩어져 있으면 어디서
+    무엇을 고치는지 매번 헷갈린다 — 실제로 그 전에는 프로필 줄과 `설정 > 회사·프로필` 이
+    이름만 다른 같은 링크였다(사용자 피드백).
+
+    한때 이 줄이 탭 셋을 고르는 **드롭다운 메뉴**였다. 걷어냈다 — 목적지가 결국 한 화면이라
+    메뉴는 **누르는 횟수만 한 번 늘리고**, 고른 뒤에도 같은 탭 줄이 화면에 다시 나와 같은
+    선택지를 두 번 보여 준다. 링크로 들어가면 탭이 바로 거기 있다 (사용자 피드백).
+
+    **두 콘솔이 같은 곳을 가리킨다.** 관리자 콘솔의 `/account/profile` 은 담당자 포털로 보내는
+    **리다이렉트일 뿐**이므로(2.0.0 — 프로필 화면을 두 벌 두면 어느 쪽이 저장되는지 알 수
+    없다) 옮긴 자리를 바로 가리킨다. 옛 주소는 북마크를 위해 그대로 남는다.
   */
-  const profileHref =
-    variant === "admin" ? "/account/profile" : "/settings/profile";
-  const profileActive =
-    pathname === profileHref || pathname.startsWith(profileHref + "/");
+  const profileHref = "/settings/profile";
+  /** 이 줄이 가리키는 화면에 있는지 — 어느 탭이든 이 문 안쪽이다 */
+  const profileActive = pathname === profileHref;
   // 접힌 문서함(내/공용) 경로 집합 — 기본은 모두 펼침
   const [collapsedBoxes, setCollapsedBoxes] = useState<Set<string>>(new Set());
   const toggleBox = (href: string) =>
@@ -53,7 +69,8 @@ export function AppSidebar({
       <Link
         href="/"
         aria-label="RAINMAKER 메인 페이지로 이동"
-        className="flex h-16 items-center gap-2.5 border-b px-6 transition-colors hover:bg-sidebar-accent/60"
+        // `shrink-0` — 없으면 세로가 좁을 때 로고 줄이 눌린다 (실측 700px 높이에서 63 → 35px)
+        className="flex h-16 shrink-0 items-center gap-2.5 border-b px-6 transition-colors hover:bg-sidebar-accent/60"
       >
         <BrandMark className="size-8" />
         <div className="leading-tight">
@@ -62,7 +79,16 @@ export function AppSidebar({
         </div>
       </Link>
 
-      <nav className="flex-1 space-y-1 p-3">
+      {/*
+        `min-h-0` + `overflow-y-auto` 가 **함께** 있어야 한다. flex 자식의 기본
+        `min-height: auto` 는 내용보다 작아지기를 거부하므로, `flex-1` 만 주면 이 칸이
+        내용 높이(760px)로 버티며 넘쳐 흐르고 **스크롤이 생기지 않는다** — 실측(1440×700):
+        `scrollHeight === clientHeight === 760`, `overflow-y: visible`, 그리고 아래 프로필
+        영역이 `y=795` 로 밀려 화면(700) 밖으로 나가 통째로 잘렸다(바깥칸이
+        `overflow-hidden` 이라 스크롤로 닿을 수도 없다). 사용자가 말한 "스크롤이 생기지
+        않는다"와 "하단 프로필 고정영역이 그대로 내려간다"는 **같은 원인 하나**였다.
+      */}
+      <nav className="overlay-scroll min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
         {nav.map((item) => {
           const Icon = item.icon;
           const hasChildren = !!item.children?.length;
@@ -193,28 +219,41 @@ export function AppSidebar({
         })}
       </nav>
 
-      <div className="border-t p-3">
+      {/* `shrink-0` — 위 목록이 길어져도 이 줄은 제 높이를 지키고 제자리에 남는다 */}
+      <div className="shrink-0 border-t p-3">
         <Link
           href={profileHref}
-          aria-label="프로필 설정 열기"
+          aria-label="설정 화면 열기"
           className={cn(
-            "flex items-center gap-3 rounded-md p-2 transition-colors",
+            "group flex items-center gap-3 rounded-md p-2 transition-colors",
             profileActive
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
               : "hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
           )}
         >
-          <Avatar className="size-9">
+          <Avatar className="size-9 shrink-0">
             <AvatarFallback className="bg-primary/10 text-xs text-primary">
               {user.name.slice(0, 2)}
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 leading-tight">
             <div className="truncate text-sm font-medium">{user.name}</div>
-            <div className="truncate text-xs text-muted-foreground">
-              {user.roleLabel}
-            </div>
+            {/*
+              역할 대신 **여기를 누르면 무엇이 열리는지**를 적는다. 이 줄이 `영업 담당자`
+              였을 때는 위쪽 브랜드 줄의 `영업 담당자 포털` 과 겹쳐 읽혀 같은 말이 두 번
+              나왔고, 정작 이 줄이 하는 일은 아무 데도 적혀 있지 않았다. 역할은 이 문
+              안쪽(프로필 히어로)에 배지로 그대로 있다.
+            */}
+            <div className="truncate text-xs text-muted-foreground">설정</div>
           </div>
+          {/*
+            설정으로 가는 문이라는 표시 — 아이콘 하나로 "이건 눌리는 줄" 임을 알린다
+            (색 변화만으로 알리지 않는다, ACC_*). 이름은 `aria-label` 이 말하므로 감춘다.
+          */}
+          <Settings2
+            aria-hidden="true"
+            className="ml-auto size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-sidebar-accent-foreground"
+          />
         </Link>
       </div>
     </aside>

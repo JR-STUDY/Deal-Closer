@@ -126,7 +126,19 @@ export function CatalogRowActions({
           categories={categories}
           title="품목 수정"
           description={`"${item.name}" 의 정보를 수정합니다. 이미 만든 문서의 품목표는 담을 때의 값을 복사해 두었으므로 바뀌지 않습니다.`}
-          onSaved={() => router.refresh()}
+          /*
+            **닫기를 먼저, 새로 고침을 나중에.** 예전에는 다이얼로그가 `onSaved()` 로
+            `router.refresh()` 를 부른 **직후** `onClose()` 로 자기 자신을 언마운트했다.
+            그 동기 state 업데이트가 refresh 가 시작한 트랜지션을 중간에 끊어서, 저장은
+            됐는데 **목록 행이 새로 고침 전까지 옛 값을 보여줬다** — 실측: ⋯ → 수정으로
+            활성을 끄면 DB 는 `비활성` 인데 행은 5초를 기다려도 `활성` 이고, 하드 리로드에서야
+            바뀌었다(같은 화면의 토글 스위치는 언마운트가 없어 정상 동작했다).
+            그래서 여기서 닫기와 새로 고침의 순서를 정하고, 다이얼로그는 `onSaved` 만 부른다.
+          */
+          onSaved={() => {
+            setIsEditing(false);
+            router.refresh();
+          }}
           onClose={() => setIsEditing(false)}
         />
       ) : null}
