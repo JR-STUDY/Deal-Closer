@@ -1,7 +1,11 @@
 "use client";
 
 import type { Block, BlockPropsMap } from "@/lib/editor-schema";
-import { calcItemTableTotal, evalSummaryRows } from "@/lib/editor-schema";
+import {
+  calcItemTableTotal,
+  evalSummaryRows,
+  totalSummaryRow,
+} from "@/lib/editor-schema";
 import { extraField, sameCell, type CellRef } from "@/lib/editor-cell";
 import { formatKRW } from "@/lib/format";
 import { InlineText } from "./inline-text";
@@ -77,6 +81,12 @@ export function ItemTableBlock({
   const extraCols = p.extraColumns ?? [];
   const total = calcItemTableTotal(p.rows);
   const summaries = evalSummaryRows(p);
+  /*
+   * 강조는 **총계 행**에 준다 — 예전에는 `마지막 행`을 굵게 그렸다. 총계 표식이 앞줄에
+   * 붙은 문서(예: 합계 → 부가세 순서로 적은 문서)에서는 굵은 줄과 문서 금액이 서로
+   * 다른 행을 가리켜, 화면만 보고는 어느 숫자가 저장되는지 알 수 없었다.
+   */
+  const totalRowId = totalSummaryRow(p.summaryRows)?.id ?? null;
   const labelSpan = 3 + extraCols.length;
   const editable = onStartEdit !== undefined;
 
@@ -184,10 +194,10 @@ export function ItemTableBlock({
       </tbody>
       {summaries.length > 0 ? (
         <tfoot>
-          {summaries.map(({ row, value }, i) => {
+          {summaries.map(({ row, value }) => {
             const ref: CellRef = { kind: "itemSummary", summaryId: row.id };
             return (
-              <tr key={row.id} className={i === summaries.length - 1 ? "font-semibold" : ""}>
+              <tr key={row.id} className={row.id === totalRowId ? "font-semibold" : ""}>
                 {/* 라벨은 사용자 문구다 (부가세·공급가액 등) — 고칠 수 있다 */}
                 <td
                   className={`border px-2 py-1 align-top text-right${

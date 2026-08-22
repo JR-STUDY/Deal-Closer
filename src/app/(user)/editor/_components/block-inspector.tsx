@@ -21,6 +21,10 @@ import {
   FORMULA_PRESETS,
   DEFAULT_LINE_HEIGHT,
   evalFormula,
+  formulaError,
+  normalizeSummaryRows,
+  parseIntInput,
+  totalSummaryRow,
   calcItemTableTotal,
   textFormat,
   normalizeMerges,
@@ -39,7 +43,14 @@ import { CatalogCombobox } from "./catalog-combobox";
 
 const MAX_IMAGE_BYTES = 1024 * 1024; // 1MB — 로고/직인 수준
 
-/** 숫자 입력값을 정수로 정규화 (빈값·NaN → 0) */
+/**
+ * 좌표·크기 입력값을 정수로 정규화 (빈값·NaN → 0).
+ *
+ * **수량·단가에는 쓰지 않는다** — 그 둘은 캔버스 칸 편집과 규칙이 같아야 하므로
+ * `@/lib/editor-schema` 의 `parseIntInput` 하나를 쓴다. 예전에는 이 함수가 수량·단가에도
+ * 쓰였고, 소수점 처리가 캔버스와 갈려 같은 `1200000.5` 가 인스펙터에서는 1,200,000 ·
+ * 캔버스에서는 12,000,005 로 저장됐다(단가 10배 → 부가세·합계·문서 금액 전부 어긋남).
+ */
 const toInt = (v: string) => Math.trunc(Number(v)) || 0;
 
 const ALIGN_LABELS: Record<Align, string> = {
@@ -488,8 +499,14 @@ function ItemTableForm({
     );
   const summaries = p.summaryRows ?? [];
   const subtotal = calcItemTableTotal(p.rows);
+  /**
+   * 요약행을 고치는 **모든** 경로가 여기를 지난다 — 총계 표식이 정확히 1개로 유지된다.
+   * 정규화를 빼면 행을 하나 더할 때마다 문서 금액이 새 행으로 옮겨간다(예전 버그).
+   */
   const setSummary = (next: SummaryRow[]) =>
-    onChangeProps({ summaryRows: next });
+    onChangeProps({ summaryRows: normalizeSummaryRows(next) });
+  /** 지금 문서 금액이 되는 행 (표식이 없는 예전 문서에서는 마지막 행) */
+  const totalRowId = totalSummaryRow(summaries)?.id ?? null;
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -610,7 +627,7 @@ function ItemTableForm({
                 update(
                   p.rows.map((x) =>
                     x.id === r.id
-                      ? { ...x, quantity: toInt(e.target.value) }
+                      ? { ...x, quantity: parseIntInput(e.target.value) }
                       : x,
                   ),
                 )
@@ -624,7 +641,7 @@ function ItemTableForm({
                 update(
                   p.rows.map((x) =>
                     x.id === r.id
-                      ? { ...x, unitPrice: toInt(e.target.value) }
+                      ? { ...x, unitPrice: parseIntInput(e.target.value) }
                       : x,
                   ),
                 )
@@ -673,56 +690,106 @@ function ItemTableForm({
         <Label className="text-xs">금액 요약 (수식)</Label>
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           변수 <code>subtotal</code> = 품목 합계. 예: <code>subtotal * 1.1</code>
+          <br />
+          <strong>문서 금액</strong>으로 표시한 행이 이 문서의 금액이 됩니다 (연결된 기회의
+          예상 금액도 이 값을 따릅니다).
         </p>
-        {summaries.map((sr) => (
-          <div key={sr.id} className="space-y-1">
-            <div className="flex gap-1">
-              <Input
-                placeholder="라벨 (예: 부가세)"
-                value={sr.label}
-                onChange={(e) =>
-                  setSummary(
-                    summaries.map((x) =>
-                      x.id === sr.id ? { ...x, label: e.target.value } : x,
-                    ),
-                  )
-                }
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="요약 행 삭제"
-                onClick={() =>
-                  setSummary(summaries.filter((x) => x.id !== sr.id))
-                }
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
-            <div className="flex items-center gap-1">
-              <Input
-                placeholder="수식 (예: subtotal*0.1)"
-                value={sr.formula}
-                className="font-mono text-xs"
-                onChange={(e) =>
-                  setSummary(
-                    summaries.map((x) =>
-                      x.id === sr.id
-                        ? { ...x, formula: e.target.value }
-                        : x,
-                    ),
-                  )
-                }
-              />
-              <span className="w-24 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
-                ={" "}
-                {Math.round(
-                  evalFormula(sr.formula, { subtotal }),
-                ).toLocaleString("ko-KR")}
-              </span>
-            </div>
+        {/*
+          * 총계 표식은 **라디오**다 — 여러 행 중 하나만 문서 금액이 될 수 있고,
+          * 어느 행인지 화면에서 보여야 한다(예전에는 "마지막 행"이라는 규약이
+          * 화면 어디에도 적혀 있지 않아 순서를 바꾸면 금액이 소리 없이 옮겨갔다).
+          */}
+        {summaries.length > 0 ? (
+          <div
+            role="radiogroup"
+            aria-label="문서 금액이 되는 요약 행"
+            className="space-y-2"
+          >
+            {summaries.map((sr) => {
+              const isTotal = sr.id === totalRowId;
+              const error = formulaError(sr.formula);
+              return (
+                <div key={sr.id} className="space-y-1">
+                  <div className="flex gap-1">
+                    <Input
+                      placeholder="라벨 (예: 부가세)"
+                      value={sr.label}
+                      onChange={(e) =>
+                        setSummary(
+                          summaries.map((x) =>
+                            x.id === sr.id ? { ...x, label: e.target.value } : x,
+                          ),
+                        )
+                      }
+                    />
+                    <Button
+                      type="button"
+                      role="radio"
+                      aria-checked={isTotal}
+                      variant={isTotal ? "default" : "outline"}
+                      size="sm"
+                      className="shrink-0 px-2 text-[11px]"
+                      title="이 행의 금액을 문서 금액으로 씁니다"
+                      onClick={() =>
+                        setSummary(
+                          summaries.map((x) => ({
+                            ...x,
+                            isTotal: x.id === sr.id,
+                          })),
+                        )
+                      }
+                    >
+                      문서 금액
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="요약 행 삭제"
+                      onClick={() =>
+                        setSummary(summaries.filter((x) => x.id !== sr.id))
+                      }
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      placeholder="수식 (예: subtotal*0.1)"
+                      value={sr.formula}
+                      className="font-mono text-xs"
+                      aria-invalid={error ? true : undefined}
+                      onChange={(e) =>
+                        setSummary(
+                          summaries.map((x) =>
+                            x.id === sr.id
+                              ? { ...x, formula: e.target.value }
+                              : x,
+                          ),
+                        )
+                      }
+                    />
+                    <span className="w-24 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
+                      ={" "}
+                      {Math.round(
+                        evalFormula(sr.formula, { subtotal }),
+                      ).toLocaleString("ko-KR")}
+                    </span>
+                  </div>
+                  {/*
+                    * 평가기는 못 읽는 글자를 **조용히 버린다** — `subtotal * 10%` 는
+                    * 소계의 10배가 된다. 값은 그대로 보여 주고(저장될 값이므로) 왜 그
+                    * 숫자가 나오는지 여기서 말한다.
+                    */}
+                  {error ? (
+                    <p className="text-[11px] leading-relaxed text-destructive">
+                      {error}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
-        ))}
+        ) : null}
         <div className="flex flex-wrap gap-1">
           <Button
             variant="outline"

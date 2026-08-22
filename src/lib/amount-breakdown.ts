@@ -15,12 +15,16 @@
  * 그대로 옮기는 것**뿐이다. 값 평가는 `evalSummaryRows()` 를 재사용한다 (수식 평가기가
  * 두 벌이 되면 화면 숫자와 PDF 숫자가 갈라진다).
  *
- * ## 마지막 요약 행을 왜 빼는가
+ * ## 총계 행을 왜 빼는가
  *
- * 마지막 행 값 = `Document.amount` = 화면에 이미 큰 글씨로 떠 있는 예상 금액이다. 같은 숫자를
+ * 총계 행 값 = `Document.amount` = 화면에 이미 큰 글씨로 떠 있는 예상 금액이다. 같은 숫자를
  * 바로 아래 한 번 더 적으면 읽는 사람이 "다른 금액인가" 하고 멈춘다. 다만 그 행의 **라벨**
  * (`합계 (VAT 포함)`)은 위 숫자가 무엇인지 알려 주는 유일한 단서라 `totalLabel` 로 살려
  * 금액 옆에 붙인다 — 값은 빼고 이름만 남긴다.
+ *
+ * 어느 행이 총계인지는 `totalSummaryRow()` 가 정한다(표식 `isTotal`, 없으면 마지막 행).
+ * **"마지막 행"이라고 여기서 다시 판단하지 않는다** — 그러면 금액을 고르는 규칙이 두 벌이
+ * 되어, 표식이 앞줄에 붙은 문서에서 큰 글씨 금액과 내역이 서로 다른 행을 가리킨다.
  *
  * ## 설명할 수 없으면 아무 말도 하지 않는다 (`unknown`)
  *
@@ -35,6 +39,7 @@ import {
   evalSummaryRows,
   itemTableGrandTotal,
   parseContentJson,
+  totalSummaryRow,
   type BlockPropsMap,
 } from "@/lib/editor-schema";
 
@@ -57,10 +62,10 @@ export type AmountBreakdownLine = { id: string; label: string; value: number };
 export const AMOUNT_BREAKDOWN_VISIBLE_MAX = 4;
 
 export type AmountBreakdown =
-  /** 요약 행이 있다 — 마지막 행은 `totalLabel` 로만 남기고 나머지를 나열한다 */
+  /** 요약 행이 있다 — 총계 행은 `totalLabel` 로만 남기고 나머지를 나열한다 */
   | {
       kind: "rows";
-      /** 마지막 요약 행의 라벨 (= 예상 금액이 무엇인지). 문서가 비워 뒀으면 빈 문자열 */
+      /** 총계 요약 행의 라벨 (= 예상 금액이 무엇인지). 문서가 비워 뒀으면 빈 문자열 */
       totalLabel: string;
       lines: AmountBreakdownLine[];
       /** 표시 한도를 넘어 접은 줄 (툴팁에 담는다) */
@@ -101,14 +106,15 @@ export function amountBreakdown(
   const evaluated = evalSummaryRows(props);
   if (evaluated.length === 0) return { kind: "subtotal" };
 
-  const last = evaluated[evaluated.length - 1];
+  // 총계 판정은 `totalSummaryRow` 하나뿐이다 (표식 → 없으면 마지막 행)
+  const total = totalSummaryRow(props.summaryRows);
   const rest = evaluated
-    .slice(0, -1)
+    .filter(({ row }) => row.id !== total?.id)
     .map(({ row, value }) => ({ id: row.id, label: row.label, value }));
 
   return {
     kind: "rows",
-    totalLabel: last.row.label,
+    totalLabel: total?.label ?? "",
     lines: rest.slice(0, AMOUNT_BREAKDOWN_VISIBLE_MAX),
     hidden: rest.slice(AMOUNT_BREAKDOWN_VISIBLE_MAX),
   };
