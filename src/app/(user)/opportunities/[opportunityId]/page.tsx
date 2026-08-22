@@ -3,7 +3,16 @@ import { notFound } from "next/navigation";
 import { FilePlus2 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
-import { OPPORTUNITY_DTO_SELECT, toOpportunityDTO } from "@/lib/opportunity";
+import {
+  OPPORTUNITY_DTO_SELECT,
+  toDateInputValue,
+  toOpportunityDTO,
+} from "@/lib/opportunity";
+import {
+  canRenewOpportunity,
+  renewalName,
+  suggestedRenewalCloseDate,
+} from "@/lib/opportunity-renewal";
 import { parseDetail } from "@/lib/opportunity-stage";
 import {
   ACTIVITY_EVENT_LABELS,
@@ -21,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OpportunityStageStepper } from "@/components/opportunity/opportunity-stage-stepper";
 import { OpportunityDetailActions } from "./_components/opportunity-detail-actions";
+import { RenewalOpportunityButton } from "./_components/renewal-opportunity-button";
 import { OpportunityInlineFields } from "./_components/opportunity-inline-fields";
 import { OpportunityDocuments } from "./_components/opportunity-documents";
 import { OpportunityTimestamps } from "./_components/opportunity-timestamps";
@@ -124,8 +134,16 @@ export default async function OpportunityDetailPage({
     await Promise.all([
       prisma.opportunity.findFirst({
         where: { id: opportunityId, orgId: user.orgId },
-        // 스테퍼가 실주 사유를 함께 보여주므로 그 필드만 더 읽는다 (F-117)
-        select: { ...OPPORTUNITY_DTO_SELECT, lostReason: true },
+        select: {
+          ...OPPORTUNITY_DTO_SELECT,
+          // 스테퍼가 실주 사유를 함께 보여주므로 그 필드만 더 읽는다 (F-117)
+          lostReason: true,
+          /*
+           * 갱신 기회 판정에 필요한 사실 (F-115). 체인이 `@unique` 라 다음 기회는
+           * 최대 1건이고, 이미 있으면 만들 수 없다 — 그때는 그 기회로 가는 링크를 준다.
+           */
+          nextOpportunity: { select: { id: true, name: true } },
+        },
       }),
       // 이력은 최신 활동이 위에 오도록 시간 역순으로 읽는다
       prisma.activityLog.findMany({
@@ -296,9 +314,21 @@ export default async function OpportunityDetailPage({
    * 마감(수주·실주)한 기회에는 문서 생성 진입점을 노출하지 않는다 (F-211).
    * 끝난 거래에 새 초안을 만들 이유가 없고, 생성 화면의 기회 후보도 진행 중만 담으므로
    * 눌러 봐야 기회가 선택되지 않은 채 열린다 — 갈 수 없는 문을 그려 두지 않는다.
-   * 갱신 거래는 수주 시 자동 생성되는 "다음 기회"(F-115)에서 이어간다.
+   * 갱신 거래는 수주한 기회의 `갱신 기회 만들기`(F-115)로 새 기회를 세워 이어간다.
    */
   const canCreateDocument = !isClosedOpportunityStage(dto.stage);
+
+  /*
+   * 갱신 기회를 만들 수 있는가 (F-115 · F-306) — 판정은 `@/lib/opportunity-renewal`
+   * 순수 함수가 단일 기준이고 **화면은 한 번만 판정한다**(하위 컴포넌트는 결과를 받아 쓴다).
+   * 서버(`POST /api/opportunities/:id/renewal`)가 같은 함수로 다시 판정한다 —
+   * 감춘 것은 안내이지 제약이 아니다.
+   */
+  const nextOpportunity = opportunity.nextOpportunity;
+  const canRenew = canRenewOpportunity({
+    stage: dto.stage,
+    hasNextOpportunity: nextOpportunity !== null,
+  });
 
   return (
     <>
@@ -342,6 +372,21 @@ export default async function OpportunityDetailPage({
                 </Link>
               </Button>
             ) : null}
+            {/*
+              수주한 거래를 다음 건으로 이어 간다 (F-115). 이미 이어 두었으면 같은 자리에
+              그 기회로 가는 링크가 뜨고, 그 밖의 단계에서는 아무것도 그리지 않는다.
+            */}
+            <RenewalOpportunityButton
+              opportunityId={dto.id}
+              canRenew={canRenew}
+              nextOpportunity={nextOpportunity}
+              // 이름·마감일 제안값은 **서버와 같은 순수 함수**로 만든다 — 폼에 뜬 값과
+              // 본문 없이 눌렀을 때 서버가 쓰는 값이 갈라지지 않는다.
+              suggestedName={renewalName(dto.name)}
+              suggestedCloseDate={toDateInputValue(
+                suggestedRenewalCloseDate(opportunity.expectedCloseDate, new Date()),
+              )}
+            />
             <OpportunityDetailActions
               opportunityId={dto.id}
               opportunityName={dto.name}

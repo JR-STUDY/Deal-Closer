@@ -124,8 +124,13 @@ function LinkDocumentDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-h-[90svh] gap-5 overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
+      {/*
+        껍데기는 넘치지 않고 **본문만** 스크롤한다 (기회 등록 팝업과 같은 골격).
+        다이얼로그 전체에 `overflow-y-auto` 를 걸면 제목·저장 버튼·닫기(×)까지 함께
+        밀려 올라간다.
+      */}
+      <DialogContent className="flex max-h-[90svh] flex-col gap-5 overflow-hidden sm:max-w-xl">
+        <DialogHeader className="shrink-0">
           <DialogTitle>기존 문서 연결</DialogTitle>
           <DialogDescription>
             보관함의 문서를 이 기회에 연결합니다. 문서는 복제되지 않으며,
@@ -133,11 +138,14 @@ function LinkDocumentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <LinkableDocumentPicker
-          selectedIds={selectedIds}
-          onChange={setSelectedIds}
-          disabled={isSaving}
-        />
+        {/* -mx-4 px-4 : 스크롤바는 팝업 가장자리에, 입력의 포커스 링은 잘리지 않게 */}
+        <div className="-mx-4 min-h-0 flex-1 overflow-y-auto px-4">
+          <LinkableDocumentPicker
+            selectedIds={selectedIds}
+            onChange={setSelectedIds}
+            disabled={isSaving}
+          />
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isSaving}>
@@ -488,7 +496,6 @@ export function OpportunityDocuments({
 
       {preview ? (
         <DocumentPreviewDialog
-
           id={preview.id}
           title={preview.title}
           open
