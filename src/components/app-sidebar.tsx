@@ -3,10 +3,16 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ChevronRight, Settings2 } from "lucide-react";
+import { Building2, ChevronRight, ShieldCheck, UserRound } from "lucide-react";
 import { userNav, adminNav, navHref } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { BrandMark, BrandWordmark } from "@/components/brand-logo";
 import { SidebarFolders, type SidebarFolder } from "@/components/sidebar-folders";
 import { AddFolderButton } from "@/components/add-folder-button";
@@ -38,30 +44,34 @@ export function AppSidebar({
   const nav = variant === "admin" ? adminNav : userNav;
   const kicker = variant === "admin" ? "관리자 콘솔" : "영업 담당자 포털";
   /*
-    맨 아래 프로필 영역은 **내 계정**(개인 값)으로 들어가는 문이다.
+    맨 아래 프로필 줄은 **설정 메뉴**다 — `/settings/profile` 세 탭으로 가는 문 셋을 담는다.
 
-    예전에는 이 영역과 `설정 > 회사·프로필` 이 둘 다 `/settings/profile` 를 가리켜, 이름만
-    다른 같은 링크가 사이드바에 두 개 있었다 (사용자 피드백: "회사 프로필과 하단 프로필
-    고정영역이 동일하다"). 그 화면은 애초에 **개인이냐 회사냐**로 탭이 갈려 있으므로
-    (설정 7), 두 진입점이 서로 다른 탭을 열게 해서 이름과 목적지를 맞췄다 — 아래는
-    `계정 정보`, 설정 묶음은 `회사 정보` 다.
+    사이드바에 `설정` 묶음을 따로 두지 않는 이유: 담겨 있던 둘 중 품목 카탈로그는 문서
+    보관함의 설정이라 그 묶음으로 갔고, 남은 회사 정보는 계정 정보·보안과 **같은 화면의
+    탭**이다. 한 화면의 탭 셋이 사이드바 두 곳(묶음 + 프로필 줄)으로 흩어져 있으면 어디서
+    무엇을 고치는지 매번 헷갈린다 — 실제로 그 전에는 프로필 줄과 `설정 > 회사·프로필` 이
+    이름만 다른 같은 링크였다(사용자 피드백).
 
-    경로는 콘솔별로 그대로 둔다. 관리자 콘솔의 `/account/profile` 은 담당자 포털로 보내는
-    **리다이렉트**다 (2.0.0) — 프로필 화면을 두 벌 두면 어느 쪽이 저장되는지 알 수 없다.
+    링크 하나가 아니라 **메뉴**인 이유는 목적지가 셋이기 때문이다. 링크로 두면 나머지 둘은
+    화면에 들어간 뒤 탭을 눌러야만 닿아, 사이드바만 봐서는 있는 줄도 모른다.
+
+    **두 콘솔이 같은 곳을 가리킨다.** 관리자 콘솔의 `/account/profile` 은 담당자 포털로 보내는
+    **리다이렉트일 뿐**이고(2.0.0 — 프로필 화면을 두 벌 두면 어느 쪽이 저장되는지 알 수 없다),
+    리다이렉트는 쿼리를 들고 가지 않아 탭 지목이 사라진다. 그래서 여기서는 옮긴 자리를 바로
+    가리킨다 — 옛 주소는 북마크를 위해 그대로 남는다.
   */
-  const isAdmin = variant === "admin";
-  const profileHref = isAdmin
-    ? "/account/profile"
-    : "/settings/profile?tab=account";
-  /*
-    강조는 **회사 정보 탭이 아닐 때만** 켠다. 개인 탭(`계정 정보`·`보안`)이 이 문의 안쪽이고
-    회사 탭은 설정 묶음의 것이다 — 탭을 보지 않으면 한 화면에서 두 곳이 함께 켜져,
-    갈라 놓은 두 진입점이 다시 같은 것처럼 보인다. 탭 없이 들어온 주소(관리자 콘솔
-    리다이렉트 등)는 개인 쪽으로 본다 — 화면의 첫 탭이 `계정 정보` 다.
-  */
-  const profileActive = isAdmin
-    ? pathname === "/account/profile"
-    : pathname === "/settings/profile" && currentTab !== "company";
+  /** 프로필 화면의 탭 = 이 메뉴의 항목 (라벨은 화면의 탭 이름과 같아야 한다) */
+  const profileMenu = [
+    { tab: "account", label: "계정 정보", icon: UserRound },
+    { tab: "company", label: "회사 정보", icon: Building2 },
+    { tab: "security", label: "보안", icon: ShieldCheck },
+  ];
+  /** 이 줄이 가리키는 화면에 있는지 — 어느 탭이든 이 문 안쪽이다 */
+  const profileActive = pathname === "/settings/profile";
+  /** 지금 열려 있는 탭 (모르는 값·없는 값은 첫 탭으로 — 화면의 판정과 같다) */
+  const activeTab =
+    profileMenu.find((entry) => entry.tab === currentTab)?.tab ??
+    profileMenu[0].tab;
   // 접힌 문서함(내/공용) 경로 집합 — 기본은 모두 펼침
   const [collapsedBoxes, setCollapsedBoxes] = useState<Set<string>>(new Set());
   const toggleBox = (href: string) =>
@@ -235,40 +245,76 @@ export function AppSidebar({
 
       {/* `shrink-0` — 위 목록이 길어져도 이 줄은 제 높이를 지키고 제자리에 남는다 */}
       <div className="shrink-0 border-t p-3">
-        <Link
-          href={profileHref}
-          aria-label="내 계정 설정 열기"
-          className={cn(
-            "group flex items-center gap-3 rounded-md p-2 transition-colors",
-            profileActive
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-          )}
-        >
-          <Avatar className="size-9 shrink-0">
-            <AvatarFallback className="bg-primary/10 text-xs text-primary">
-              {user.name.slice(0, 2)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 leading-tight">
-            <div className="truncate text-sm font-medium">{user.name}</div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="설정 메뉴 열기"
+            className={cn(
+              "group flex w-full items-center gap-3 rounded-md p-2 text-left transition-colors",
+              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              profileActive
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+            )}
+          >
+            <Avatar className="size-9 shrink-0">
+              <AvatarFallback className="bg-primary/10 text-xs text-primary">
+                {user.name.slice(0, 2)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-sm font-medium">{user.name}</div>
+              {/*
+                역할 대신 **여기를 누르면 무엇이 열리는지**를 적는다. 이 줄이 `영업 담당자`
+                였을 때는 위쪽 브랜드 줄의 `영업 담당자 포털` 과 겹쳐 읽혀 같은 말이 두 번
+                나왔고, 정작 이 줄이 하는 일은 아무 데도 적혀 있지 않았다. 역할은 이 문
+                안쪽(프로필 히어로)에 배지로 그대로 있다.
+              */}
+              <div className="truncate text-xs text-muted-foreground">설정</div>
+            </div>
             {/*
-              역할 대신 **여기를 누르면 무엇이 열리는지**를 적는다. 이 줄이 `영업 담당자`
-              였을 때는 위쪽 브랜드 줄의 `영업 담당자 포털` 과 겹쳐 읽혀 같은 말이 두 번
-              나왔고, 정작 이 영역이 하는 일(내 계정)은 아무 데도 적혀 있지 않았다.
-              역할은 이 문 안쪽(프로필 히어로)에 배지로 그대로 있다.
+              열리는 방향을 위로 그린다 — 메뉴가 위로 뜨므로(`side="top"`) 아래를 가리키는
+              화살표는 거짓말이 된다. 색 변화만으로 알리지 않는다 (ACC_*).
             */}
-            <div className="truncate text-xs text-muted-foreground">내 계정</div>
-          </div>
+            <ChevronRight
+              aria-hidden="true"
+              className="ml-auto size-4 shrink-0 -rotate-90 text-muted-foreground transition-colors group-hover:text-sidebar-accent-foreground"
+            />
+          </DropdownMenuTrigger>
           {/*
-            설정으로 가는 문이라는 표시 — 아이콘 하나로 "이건 눌리는 줄" 임을 알린다
-            (색 변화만으로 알리지 않는다, ACC_*). 이름은 `aria-label` 이 말하므로 감춘다.
+            위로 열린다 — 화면 맨 아래 줄이라 아래로는 자리가 없다. 폭은 트리거에 맞춰
+            사이드바 안에 머문다(`w-(--radix-dropdown-menu-trigger-width)`).
           */}
-          <Settings2
-            aria-hidden="true"
-            className="ml-auto size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-sidebar-accent-foreground"
-          />
-        </Link>
+          <DropdownMenuContent
+            side="top"
+            align="start"
+            sideOffset={8}
+            className="w-(--radix-dropdown-menu-trigger-width)"
+          >
+            {/*
+              머리글(`DropdownMenuLabel`)을 두지 않는다 — 바로 아래 트리거 줄이 이미
+              `설정` 이라고 적고 있어 같은 낱말이 두 줄 사이에 두 번 나온다.
+            */}
+            {profileMenu.map((entry) => {
+              /*
+                지금 보고 있는 탭에 표시를 남긴다 — 메뉴를 다시 열었을 때 어디에 있는지
+                알 수 있어야 한다. 굵기 + `aria-current` 로 알리고 색만 쓰지 않는다.
+              */
+              const current = profileActive && activeTab === entry.tab;
+              return (
+                <DropdownMenuItem key={entry.tab} asChild>
+                  <Link
+                    href={`/settings/profile?tab=${entry.tab}`}
+                    aria-current={current ? "page" : undefined}
+                    className={cn(current && "font-medium")}
+                  >
+                    <entry.icon aria-hidden="true" />
+                    {entry.label}
+                  </Link>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </aside>
   );
