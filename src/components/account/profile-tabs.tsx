@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,7 +12,7 @@ import {
 } from "@/components/ui/tabs";
 
 type ProfileSection = {
-  /** 탭 식별자 (URL 노출 없음, key·value 로 사용) */
+  /** 탭 식별자 — 그대로 `?tab=` 에 실린다 (사이드바가 이 값으로 탭을 지목한다) */
   value: string;
   label: string;
   content: ReactNode;
@@ -29,6 +30,22 @@ type ProfileTabsProps = {
  * 지금 쓰는 곳은 담당자 포털의 `회사·프로필 설정`(계정 정보 · 회사 정보 · 보안) 한 곳이다
  * (관리자 콘솔의 프로필 화면은 그 자리로 보내는 리다이렉트가 됐다 — 2.0.0).
  * `sections` 를 받는 형태는 유지한다 — 탭 구성이 화면마다 달라질 수 있는 자리다.
+ *
+ * ## 열린 탭은 주소(`?tab=`)에 있다
+ *
+ * 목록 정렬·페이지·캘린더의 달과 같은 규칙이다 — 주소를 복사하거나 새로 고쳐도 같은 탭이
+ * 열리고, **사이드바가 특정 탭을 지목할 수 있다**. 이것이 필요해진 이유는 프로필 화면의
+ * 진입점이 둘이기 때문이다: 사이드바 맨 아래 `내 계정`(→ `계정 정보`)과 `설정 > 회사 정보`
+ * (→ `회사 정보`). 탭이 주소에 없으면 두 문이 같은 자리로 열려 구분이 사라진다.
+ *
+ * **제어 컴포넌트다**(`value`). `defaultValue` 로 두면 이미 이 화면에 있는 상태에서 사이드바의
+ * 다른 진입점을 눌렀을 때 주소만 바뀌고 탭은 그대로다 — 같은 라우트의 이동이라 이 컴포넌트가
+ * 다시 마운트되지 않으므로 `defaultValue` 는 두 번 읽히지 않는다.
+ *
+ * 탭을 바꿀 때는 `router.replace` 가 아니라 **`history.replaceState`** 를 쓴다. App Router 는
+ * 이 호출을 알아보고 `useSearchParams` 를 갱신하므로 주소는 맞춰지면서 **서버 왕복이 없다** —
+ * `replace` 로 하면 탭을 누를 때마다 RSC 를 다시 받아 와 탭 전환이 느려진다. 되돌리기
+ * (`pushState`)를 쓰지 않는 것은 탭 전환이 "뒤로 가기로 되짚을 이동"은 아니기 때문이다.
  */
 export function ProfileTabs({
   name,
@@ -36,6 +53,19 @@ export function ProfileTabs({
   roleLabel,
   sections,
 }: ProfileTabsProps) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  /** 모르는 값·없는 값은 첫 탭으로 떨어뜨린다 (캘린더의 잘못된 `month` 와 같은 처리) */
+  const requested = searchParams.get("tab");
+  const active =
+    sections.find((section) => section.value === requested)?.value ??
+    sections[0]?.value;
+
+  const selectTab = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", value);
+    window.history.replaceState(null, "", `${pathname}?${next}`);
+  };
   /*
     폭은 `max-w-5xl` 이다 — `회사 정보` 탭이 3열(입력 2열 + 미리보기) 격자를 쓰므로
     3xl 에서는 미리보기가 눌린다. 계정 정보·보안 탭은 카드가 그만큼 넓어질 뿐이다.
@@ -63,7 +93,7 @@ export function ProfileTabs({
       </div>
 
       {/* 섹션 탭 */}
-      <Tabs defaultValue={sections[0]?.value}>
+      <Tabs value={active} onValueChange={selectTab}>
         <TabsList variant="line">
           {sections.map((section) => (
             <TabsTrigger key={section.value} value={section.value}>
