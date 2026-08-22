@@ -39,7 +39,14 @@ export default async function GeneratorPage({
 
   // 독립 조회는 병렬화 (REACT_BEST_PRACTICES ①)
   // prettier-ignore
-  const [wallet, allDocuments, templates, confirmedQuotes, opportunities] = await Promise.all([
+  const [
+    wallet,
+    allDocuments,
+    templates,
+    confirmedQuotes,
+    opportunities,
+    promptPresets,
+  ] = await Promise.all([
     prisma.creditWallet.findUnique({ where: { orgId: org.id } }),
     prisma.document.findMany({
       where: { orgId: org.id, status: { not: "VOID" } },
@@ -103,6 +110,12 @@ export default async function GeneratorPage({
       },
       take: 100,
     }),
+    // 저장해 둔 예시 지시문 (기본 예시는 코드에 있다 — @/lib/prompt-preset)
+    prisma.promptPreset.findMany({
+      where: { orgId: org.id },
+      orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+      select: { id: true, text: true, sortOrder: true },
+    }),
   ]);
 
   // 참고 문서 선택기에는 버전 묶음별 최신 버전만 노출한다 (F-214)
@@ -149,6 +162,7 @@ export default async function GeneratorPage({
               ? opportunityParam
               : null
           }
+          promptPresets={promptPresets}
         />
       </div>
     </>

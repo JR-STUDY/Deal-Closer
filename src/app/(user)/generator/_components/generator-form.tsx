@@ -22,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DOCUMENT_TYPES, DOCUMENT_TYPE_LABELS } from "@/lib/constants";
 import { formatKRW } from "@/lib/format";
 import { DocumentPicker, type LibraryDoc } from "./document-picker";
 import { AiModelSelect } from "@/components/ai-model-select";
@@ -33,6 +32,10 @@ import type {
   OpportunityChoice,
   TemplateChoice,
 } from "./types";
+import {
+  FOLDER_SCENARIO_PROMPT,
+  type PromptPresetDTO,
+} from "@/lib/prompt-preset";
 import { AttachmentFields } from "./attachment-fields";
 import { ModeChoice } from "./mode-choice";
 import { SelectionChips, ToolbarButton } from "./composer-toolbar";
@@ -52,16 +55,6 @@ const NO_TEMPLATE = "NONE";
 
 const MAX_LENGTH = 2000;
 
-/** 데모 일괄 변환 시나리오를 트리거하는 예시 프롬프트 (폴더 첨부와 함께 사용) */
-const FOLDER_SCENARIO_PROMPT =
-  "이전에 쓰던 견적서 양식을 첨부해, 같은 형식으로 새로 만들어줘 (파일 첨부)";
-
-const EXAMPLES = [
-  "A사에 서버 인스턴스 5대와 유지보수 1년 포함한 견적서",
-  "협력사 견적서 기준으로 마진 20%를 붙인 견적서 (파일 첨부)",
-  FOLDER_SCENARIO_PROMPT,
-];
-
 /** AI 대화형 문서 생성기 입력 폼 (클라이언트 전용 상태) */
 export function GeneratorForm({
   libraryDocuments,
@@ -73,6 +66,7 @@ export function GeneratorForm({
   mockProvider,
   opportunities,
   initialOpportunityId,
+  promptPresets,
 }: {
   libraryDocuments: LibraryDoc[];
   templates: TemplateChoice[];
@@ -91,6 +85,8 @@ export function GeneratorForm({
    * 서버가 후보 목록 안에 있는지 확인한 값만 내려온다.
    */
   initialOpportunityId?: string | null;
+  /** 저장해 둔 내 예시 지시문 — 기본 예시는 코드(`@/lib/prompt-preset`)에 있다 */
+  promptPresets: PromptPresetDTO[];
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -103,7 +99,6 @@ export function GeneratorForm({
   const [mode, setMode] = useState<GenerateMode>(
     initialTemplateId ? "template" : "blank",
   );
-  const [documentType, setDocumentType] = useState<string>(AUTO_TYPE);
   const [model, setModel] = useState<string>(defaultModel);
   // 기회 연결은 선택 — 고르지 않으면 "기회 미연결" 빠른 초안이 된다
   const [opportunityId, setOpportunityId] = useState<string>(
@@ -114,9 +109,6 @@ export function GeneratorForm({
       ? null
       : (opportunities.find((o) => o.id === opportunityId) ?? null);
   const [sourceQuoteId, setSourceQuoteId] = useState<string>(NO_TEMPLATE);
-  const [clientName, setClientName] = useState("");
-  const [clientContact, setClientContact] = useState("");
-  const [clientEmail, setClientEmail] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [folderAttach, setFolderAttach] = useState<{
     name: string;
@@ -142,13 +134,21 @@ export function GeneratorForm({
     if (next === "blank") setTemplateId(NO_TEMPLATE);
   };
 
-  // 양식을 고르면 그 양식의 문서 종류를 따른다 (수동 선택이 있으면 그 값 우선)
-  const effectiveType =
-    documentType !== AUTO_TYPE ? documentType : (selectedTemplate?.type ?? AUTO_TYPE);
+  /**
+   * 문서 종류는 **화면에서 묻지 않는다.** 양식을 고르면 양식이 정하고, 빈 문서면 AI 가
+   * 지시문을 보고 판단한다 — `견적서를 만들어줘` 라고 적으면서 종류를 또 고르는 것은
+   * 같은 사실을 두 번 말하는 일이다.
+   */
+  const effectiveType = selectedTemplate?.type ?? AUTO_TYPE;
 
-  // 확정 견적서 소스 선택은 계약서를 만들 때만 의미가 있다 (F-213)
+  /**
+   * 근거 견적서(F-213)는 계약서를 만들 때만 의미가 있다. 그런데 종류를 묻지 않게 된 뒤로는
+   * **빈 문서 모드에서 무엇을 만들지 미리 알 수 없다** — 그래서 그때는 열어 두고(선택),
+   * 양식 모드는 종류를 아니까 계약서 양식일 때만 보인다. 안 고르면 아무 일도 없다.
+   */
   const showQuoteSource =
-    effectiveType === "CONTRACT" && confirmedQuotes.length > 0;
+    confirmedQuotes.length > 0 &&
+    (mode === "blank" || effectiveType === "CONTRACT");
 
 
   /** 폴더명+파일명을 세션에 담고 데모 변환 페이지로 이동 */
@@ -203,9 +203,6 @@ export function GeneratorForm({
     if (opportunityId !== NO_TEMPLATE) {
       formData.append("opportunityId", opportunityId);
     }
-    if (clientName.trim()) formData.append("clientName", clientName.trim());
-    if (clientContact.trim()) formData.append("clientContact", clientContact.trim());
-    if (clientEmail.trim()) formData.append("clientEmail", clientEmail.trim());
 
     try {
       const res = await fetch("/api/generate", {
@@ -343,7 +340,7 @@ export function GeneratorForm({
               disabled={isSubmitting}
             />
 
-            {/* 방식에 따라 이 자리의 입력이 바뀐다 — 같은 것을 두 번 묻지 않는다 */}
+            {/* 양식 모드에서만 이 자리에 입력이 온다 — 빈 문서는 지시문이 곧 전부다 */}
             {mode === "template" ? (
               <TemplatePicker
                 templates={templates}
@@ -351,30 +348,7 @@ export function GeneratorForm({
                 onChange={setTemplateId}
                 disabled={isSubmitting}
               />
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <Label htmlFor="type-select" className="text-xs text-muted-foreground">
-                  문서 종류
-                </Label>
-                <Select
-                  value={documentType}
-                  onValueChange={setDocumentType}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger id="type-select" size="sm" className="w-44">
-                    <SelectValue placeholder="AI 가 판단" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={AUTO_TYPE}>AI 가 판단</SelectItem>
-                    {DOCUMENT_TYPES.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {DOCUMENT_TYPE_LABELS[type]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            ) : null}
 
             <div className="space-y-1">
               <Textarea
@@ -410,12 +384,6 @@ export function GeneratorForm({
                   onOpportunityChange={setOpportunityId}
                   selectedOpportunity={selectedOpportunity}
                   noOpportunityValue={NO_TEMPLATE}
-                  clientName={clientName}
-                  onClientNameChange={setClientName}
-                  clientContact={clientContact}
-                  onClientContactChange={setClientContact}
-                  clientEmail={clientEmail}
-                  onClientEmailChange={setClientEmail}
                   disabled={isSubmitting}
                 />
               </ToolbarButton>
@@ -522,7 +490,7 @@ export function GeneratorForm({
       </div>
 
       <PromptExamples
-        examples={EXAMPLES}
+        presets={promptPresets}
         onPick={setPrompt}
         hasDraft={prompt.trim().length > 0}
         disabled={isSubmitting}

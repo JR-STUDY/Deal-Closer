@@ -35,6 +35,7 @@ model Organization {
   creditWallet    CreditWallet?
   creditTxns      CreditTransaction[]
   emailTemplates  EmailTemplate[]
+  promptPresets   PromptPreset[]
   teamMailDomains TeamMailDomain[]
   accounts        Account[]
   contacts        Contact[]
@@ -494,6 +495,28 @@ model EmailTemplate {
   @@index([orgId])
   @@index([ownerId])
   @@map("email_templates")
+}
+
+/// 지시문 예시 프리셋 — 문서 생성 화면 오른쪽 레일의 "이렇게 말해보세요" (생성 UI).
+/// **기본 예시 셋은 코드(`src/lib/prompt-preset.ts`)에 있고 이 표에 넣지 않는다** —
+/// 표에 넣으면 지워질 수 있고, 지워진 뒤에는 새 담당자가 무엇을 어떻게 적는지 배울 곳이
+/// 없어진다. 이 표는 **사용자가 더한 것만** 담는다.
+/// EmailTemplate 의 팀 공용 프리셋과 같은 판단으로 조직 단위다 — 예시 지시문은 "우리 팀이
+/// 이렇게 쓴다" 는 관행이라 사람마다 따로 쌓을 이유가 없다. 개인 프리셋이 필요해지면
+/// EmailTemplate.ownerId 처럼 옵셔널 소유자를 더한다.
+model PromptPreset {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  /// 지시문 본문. 줄바꿈을 포함할 수 있다(여러 줄 지시문)
+  text      String
+  /// 레일에 그리는 순서. 기본 예시 뒤에 이 순서로 붙는다
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("prompt_presets")
 }
 
 // ======================= 크레딧 & 과금 =======================

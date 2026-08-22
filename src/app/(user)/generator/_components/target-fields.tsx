@@ -1,6 +1,5 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -13,13 +12,24 @@ import { formatKRW } from "@/lib/format";
 import type { OpportunityChoice } from "./types";
 
 /**
- * ② 누구에게 — 영업 기회를 고르면 거래처가 따라온다 (F-212).
+ * 이 문서를 **누구에게** 보내는지 — 영업 기회 하나를 고르는 것이 전부다 (F-212).
  *
- * **기회를 고르면 거래처 자유 입력 3칸을 감춘다.** 같은 사실(거래처가 누구인가)을 주장하는
- * 출처가 둘이면 어느 쪽이 문서에 박혔는지 알 수 없다 — 그래서 CRM 값 하나만 남기고,
- * 그 사실을 화면에 적어 사용자가 "왜 입력칸이 사라졌는지" 알게 한다.
+ * ## 거래처를 손으로 적는 칸을 두지 않는다
  *
- * 이 컴포넌트는 표시만 한다 — 연결 여부·권한은 서버가 `orgId` 로 다시 확인한다.
+ * 예전에는 기회를 고르지 않았을 때 `고객사명`·`수신 담당자`·`담당자 이메일` 3칸이 나타났다.
+ * 걷어낸 이유는 셋이다.
+ *
+ *  1. **같은 사실의 출처가 둘이 된다.** 거래처는 CRM(`Account`·`Contact`)에 있고 기회를
+ *     고르면 그 값이 그대로 간다. 손으로 적는 길을 열어 두면 CRM 에 없는 거래처명이 문서에
+ *     박히고, 나중에 그 문서를 기회에 붙일 때 본문과 기회가 서로 다른 거래처를 주장한다
+ *     (확정 문서 금액을 한 곳에서만 쓰는 것과 같은 이유다).
+ *  2. **적어도 AI 는 프롬프트에서 읽는다.** `A사에 서버 5대 견적서` 라고 쓰면 거래처명은
+ *     이미 지시문에 있다. 같은 값을 두 번 묻는 셈이었다.
+ *  3. **칸 셋이 팝오버의 대부분을 차지했다.** 기회를 고르는 일이 이 팝오버의 목적인데,
+ *     정작 그 선택기는 위에 한 줄이고 아래로 입력 셋이 붙어 있었다.
+ *
+ * 기회 연결은 **끝까지 선택**이다 — 고르지 않으면 "기회 미연결" 빠른 초안이 되고, 거래처
+ * 정보는 지시문과 첨부에서 나온다. 나중에 기회에 붙이는 길은 문서 보관함에 있다.
  */
 export function TargetFields({
   opportunities,
@@ -27,12 +37,6 @@ export function TargetFields({
   onOpportunityChange,
   selectedOpportunity,
   noOpportunityValue,
-  clientName,
-  onClientNameChange,
-  clientContact,
-  onClientContactChange,
-  clientEmail,
-  onClientEmailChange,
   disabled,
 }: {
   opportunities: OpportunityChoice[];
@@ -42,96 +46,38 @@ export function TargetFields({
   selectedOpportunity: OpportunityChoice | null;
   /** "기회 없이 생성" 을 뜻하는 값 (폼이 서버로 보내는 규약) */
   noOpportunityValue: string;
-  clientName: string;
-  onClientNameChange: (value: string) => void;
-  clientContact: string;
-  onClientContactChange: (value: string) => void;
-  clientEmail: string;
-  onClientEmailChange: (value: string) => void;
   disabled: boolean;
 }) {
   return (
-    <>
-      <div className="space-y-1.5">
-        <Label htmlFor="opportunity-select" className="text-xs">
-          영업 기회 연결
-        </Label>
-        <Select
-          value={opportunityId}
-          onValueChange={onOpportunityChange}
-          disabled={disabled}
-        >
-          <SelectTrigger id="opportunity-select" className="w-full">
-            <SelectValue placeholder="기회 없이 생성" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={noOpportunityValue}>기회 없이 생성</SelectItem>
-            {opportunities.map((opportunity) => (
-              <SelectItem key={opportunity.id} value={opportunity.id}>
-                {opportunity.accountName} · {opportunity.name}
-                {opportunity.expectedAmount > 0
-                  ? ` · ${formatKRW(opportunity.expectedAmount)}`
-                  : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          {selectedOpportunity
-            ? `${selectedOpportunity.accountName} 의 거래처 정보를 AI 에 그대로 전달하고, 생성된 문서를 이 기회에 연결합니다.`
-            : "기회를 고르면 거래처 정보를 CRM 에서 가져와 채웁니다. 고르지 않으면 기회 미연결 문서가 됩니다."}
-        </p>
-      </div>
-
-      {selectedOpportunity ? (
-        <p className="rounded-md border border-dashed bg-background px-3 py-2 text-xs text-muted-foreground">
-          거래처 정보는{" "}
-          <strong className="font-medium">
-            {selectedOpportunity.accountName}
-          </strong>{" "}
-          의 CRM 등록값을 사용합니다. 직접 입력할 필요가 없습니다.
-        </p>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="client-name" className="text-xs">
-              고객사명
-            </Label>
-            <Input
-              id="client-name"
-              value={clientName}
-              onChange={(e) => onClientNameChange(e.target.value)}
-              disabled={disabled}
-              placeholder="(주)글로벌커머스"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="client-contact" className="text-xs">
-              수신 담당자
-            </Label>
-            <Input
-              id="client-contact"
-              value={clientContact}
-              onChange={(e) => onClientContactChange(e.target.value)}
-              disabled={disabled}
-              placeholder="김레인 책임"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="client-email" className="text-xs">
-              담당자 이메일
-            </Label>
-            <Input
-              id="client-email"
-              type="email"
-              value={clientEmail}
-              onChange={(e) => onClientEmailChange(e.target.value)}
-              disabled={disabled}
-              placeholder="rain@example.com"
-            />
-          </div>
-        </div>
-      )}
-    </>
+    <div className="space-y-1.5">
+      <Label htmlFor="opportunity-select" className="text-xs">
+        영업 기회 연결
+      </Label>
+      <Select
+        value={opportunityId}
+        onValueChange={onOpportunityChange}
+        disabled={disabled}
+      >
+        <SelectTrigger id="opportunity-select" className="w-full">
+          <SelectValue placeholder="기회 없이 생성" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={noOpportunityValue}>기회 없이 생성</SelectItem>
+          {opportunities.map((opportunity) => (
+            <SelectItem key={opportunity.id} value={opportunity.id}>
+              {opportunity.accountName} · {opportunity.name}
+              {opportunity.expectedAmount > 0
+                ? ` · ${formatKRW(opportunity.expectedAmount)}`
+                : ""}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        {selectedOpportunity
+          ? `${selectedOpportunity.accountName} 의 CRM 등록값을 AI 에 그대로 전달하고, 만든 문서를 이 기회에 연결합니다.`
+          : "기회를 고르시면 거래처·담당자를 CRM 에서 가져옵니다. 고르지 않으시면 기회 미연결 문서가 되고, 거래처는 지시문에 적으신 대로 들어갑니다."}
+      </p>
+    </div>
   );
 }
