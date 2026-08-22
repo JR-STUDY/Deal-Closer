@@ -18,6 +18,8 @@ import {
   EMAIL_LOG_STATUSES,
   EMAIL_LOG_STATUS_LABELS,
   EMAIL_LOG_STATUS_PARAM,
+  EMAIL_OPEN_FILTERS,
+  EMAIL_OPEN_FILTER_LABELS,
 } from "@/lib/email-log";
 
 const DEBOUNCE_MS = 350;
@@ -26,7 +28,7 @@ const LIST_HREF = "/mail/sent";
 const ALL = ALL_FILTER_VALUE;
 
 /**
- * 발송 이력 툴바 — 검색(수신자·제목·문서 제목) + 상태 필터 + 열람 여부 필터.
+ * 발송 이력 툴바 — 검색(수신자·제목·문서 제목) + 상태 필터 + 열람 확인 필터.
  *
  * 조건은 URL 쿼리(`?q=&status=&opened=&page=`)에 담아 서버 컴포넌트가 조회 조건으로 쓰게 한다
  * (기회 목록 툴바와 같은 골격 — 사용자가 화면마다 다시 배우지 않도록 debounce·지우기 버튼·
@@ -112,13 +114,20 @@ export function SentMailToolbar({ children }: { children?: ReactNode }) {
         value={opened}
         onValueChange={(value) => push({ [EMAIL_LOG_OPENED_PARAM]: value })}
       >
-        <SelectTrigger className="w-36" aria-label="열람 여부 필터">
+        <SelectTrigger className="w-40" aria-label="열람 확인 필터">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL}>열람 여부 전체</SelectItem>
-          <SelectItem value="opened">열람</SelectItem>
-          <SelectItem value="unopened">미열람</SelectItem>
+          <SelectItem value={ALL}>열람 확인 전체</SelectItem>
+          {/*
+            "미열람" 이라고 적지 않는다 — 걸러내는 것은 **기록이 없는 건**이고 그것이 곧
+            읽지 않은 건은 아니다(이미지 차단). 라벨은 `@/lib/email-log` 한 곳에서 온다.
+          */}
+          {EMAIL_OPEN_FILTERS.map((value) => (
+            <SelectItem key={value} value={value}>
+              {EMAIL_OPEN_FILTER_LABELS[value]}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
 

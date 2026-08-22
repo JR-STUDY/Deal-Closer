@@ -30,9 +30,9 @@ import { SentMailTable } from "./_components/sent-mail-table";
 const LIST_HREF = "/mail/sent";
 
 /**
- * 메일 발송 이력 (F-234 · 메일-1) — 보낸 날짜 · 제목 · 문서 · 기회 · 받는 사람 · 상태 · 열람 여부.
+ * 메일 발송 이력 (F-234 · 메일-1) — 보낸 날짜 · 제목 · 문서 · 기회 · 받는 사람 · 상태 · 열람 확인.
  *
- * 검색어·상태·열람 여부·정렬·페이지는 URL 쿼리(`?q=&status=&opened=&sort=&dir=&page=`)로 받는다
+ * 검색어·상태·열람 확인·정렬·페이지는 URL 쿼리(`?q=&status=&opened=&sort=&dir=&page=`)로 받는다
  * (기회·거래처 목록과 같은 규칙 — 새로고침·뒤로가기·주소 공유에서 같은 화면이 나온다).
  * 조회 조건·정렬은 `@/lib/email-log` **순수 함수가 단일 기준**이고 이 페이지는 결과를 그린다.
  *
@@ -94,7 +94,7 @@ export default async function SentMailPage({
     <>
       <PageHeader
         title="발송 이력"
-        description="문서를 메일로 보낸 기록입니다. 받는 사람·본문·열람 여부를 다시 확인하실 수 있습니다."
+        description="문서를 메일로 보낸 기록입니다. 받는 사람·본문과 열람이 확인된 시각을 다시 보실 수 있습니다."
       />
 
       {/* scrollbar-gutter: 스크롤바가 생겼다 사라지며 본문 폭이 흔들리는 것을 막는다 */}
