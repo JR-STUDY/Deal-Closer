@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { PackageSearch, SearchX } from "lucide-react";
+import { EyeOff, PackageSearch, SearchX } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import {
@@ -13,6 +13,7 @@ import {
   catalogWhere,
   nextCatalogSort,
   parseCatalogSort,
+  toCatalogItemDTO,
   type CatalogSortKey,
 } from "@/lib/catalog";
 import {
@@ -37,6 +38,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CatalogActions } from "./_components/catalog-actions";
+import { CatalogActiveToggle } from "./_components/catalog-active-toggle";
+import { CatalogRowActions } from "./_components/catalog-row-actions";
 import { CatalogToolbar } from "./_components/catalog-toolbar";
 
 const LIST_HREF = "/settings/catalog";
@@ -58,7 +61,8 @@ const ALL_CATEGORY = "";
  *
  * 행 전체 클릭(`@/components/list-row-link`)은 **두지 않았다** — 품목 상세 화면이 없어
  * 갈 곳이 없다. 눌러도 아무 일이 없는 덮개는 사용자를 한 번 속인다(0건일 때 팝오버를
- * 붙이지 않는 것과 같은 판단). 품목 편집 화면이 생기면 그때 덮개를 붙인다.
+ * 붙이지 않는 것과 같은 판단). 대신 등록·수정·삭제는 **폼 다이얼로그**로 하고(행 끝 `⋯`
+ * 메뉴 — 거래처 목록과 같은 골격), 활성/비활성만 상태 칸에서 바로 토글한다.
  */
 export default async function CatalogPage({
   searchParams,
@@ -117,6 +121,9 @@ export default async function CatalogPage({
     redirect(pageHref(LIST_HREF, listQuery, pagination.page));
   }
 
+  // 등록·수정 팝업의 카테고리 후보 — 탭과 **같은 출처**를 쓴다(둘이 갈리면 새 카테고리를
+  // 만들었다고 생각한 값이 실은 오타로 갈라진 묶음이 된다)
+  const categories = categoryRows.map((row) => row.category);
   const tabs = [
     { key: ALL_CATEGORY, label: "전체" },
     ...categoryRows.map((row) => ({ key: row.category, label: row.category })),
@@ -131,7 +138,7 @@ export default async function CatalogPage({
       <PageHeader
         title="품목 카탈로그"
         description="견적서 품목표에서 바로 고를 수 있는 상품·서비스 목록입니다."
-        actions={<CatalogActions />}
+        actions={<CatalogActions categories={categories} />}
       />
 
       {/* scrollbar-gutter: 스크롤바가 생겼다 사라지며 본문 폭이 흔들리는 것을 막는다 */}
@@ -222,9 +229,9 @@ export default async function CatalogPage({
                 내용으로 폭을 다시 계산해 검색·페이지 이동 때마다 칸 경계가 옮겨간다.
                 폭을 적지 않은 칸(품목명)이 남는 폭을 흡수한다 — 설명이 함께 들어가므로
                 넓어지는 만큼 실제로 더 읽히는 유일한 칸이다.
-                min-w 는 고정 폭 합(160+140+80+140+96=616)에 품목명 최소 264px 를 더했다.
+                min-w 는 고정 폭 합(160+140+80+140+120+56=696)에 품목명 최소 264px 를 더했다.
               */}
-              <Table className="min-w-[880px] table-fixed">
+              <Table className="min-w-[960px] table-fixed">
                 <TableHeader>
                   <TableRow>
                     <SortableHead
@@ -253,7 +260,11 @@ export default async function CatalogPage({
                       align="right"
                       className="w-[140px]"
                     />
-                    <TableHead className="w-[96px]">상태</TableHead>
+                    <TableHead className="w-[120px]">상태</TableHead>
+                    {/* `⋯` 메뉴 칸 — 머리글 글자는 스크린리더에만 준다 */}
+                    <TableHead className="w-[56px]">
+                      <span className="sr-only">관리</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -269,8 +280,21 @@ export default async function CatalogPage({
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="truncate font-medium" title={item.name}>
-                          {item.name}
+                        {/*
+                          비활성은 **색만으로 구분하지 않는다** (정책 ACC_*) — 상태 칸의
+                          글자("비활성")에 더해 품목명 앞에 감춤 아이콘을 둔다.
+                        */}
+                        <div
+                          className="flex items-center gap-1.5 truncate font-medium"
+                          title={item.name}
+                        >
+                          {item.isActive ? null : (
+                            <EyeOff
+                              className="size-3.5 shrink-0 text-muted-foreground"
+                              aria-hidden="true"
+                            />
+                          )}
+                          <span className="truncate">{item.name}</span>
                         </div>
                         {item.description ? (
                           <div
@@ -292,16 +316,17 @@ export default async function CatalogPage({
                         {formatKRW(item.unitPrice)}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          className={cn(
-                            "border-0",
-                            item.isActive
-                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
-                              : "bg-muted text-muted-foreground",
-                          )}
-                        >
-                          {item.isActive ? "활성" : "비활성"}
-                        </Badge>
+                        <CatalogActiveToggle
+                          itemId={item.id}
+                          name={item.name}
+                          isActive={item.isActive}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <CatalogRowActions
+                          item={toCatalogItemDTO(item)}
+                          categories={categories}
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
