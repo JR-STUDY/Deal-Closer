@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Sparkles,
-  MessageSquareText,
   Target,
-  X,
   FolderOpen,
+  Paperclip,
+  ReceiptText,
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,14 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { DocTypeBadge } from "@/components/status-badge";
 import { formatKRW } from "@/lib/format";
 import { DocumentPicker, type LibraryDoc } from "./document-picker";
 import { AiModelSelect } from "@/components/ai-model-select";
@@ -40,9 +32,15 @@ import type {
   OpportunityChoice,
   TemplateChoice,
 } from "./types";
+import {
+  FOLDER_SCENARIO_PROMPT,
+  type PromptPresetDTO,
+} from "@/lib/prompt-preset";
 import { AttachmentFields } from "./attachment-fields";
-import { DocumentKindFields } from "./document-kind-fields";
-import { FormSection } from "./form-section";
+import { ModeChoice } from "./mode-choice";
+import { SelectionChips, ToolbarButton } from "./composer-toolbar";
+import { PromptExamples } from "./prompt-examples";
+import { TemplatePicker } from "./template-picker";
 import { TargetFields } from "./target-fields";
 
 export type { ConfirmedQuote, OpportunityChoice, TemplateChoice } from "./types";
@@ -57,16 +55,6 @@ const NO_TEMPLATE = "NONE";
 
 const MAX_LENGTH = 2000;
 
-/** 데모 일괄 변환 시나리오를 트리거하는 예시 프롬프트 (폴더 첨부와 함께 사용) */
-const FOLDER_SCENARIO_PROMPT =
-  "이전에 쓰던 견적서 양식을 첨부해, 같은 형식으로 새로 만들어줘 (파일 첨부)";
-
-const EXAMPLES = [
-  "A사에 서버 인스턴스 5대와 유지보수 1년 포함한 견적서",
-  "협력사 견적서 기준으로 마진 20%를 붙인 견적서 (파일 첨부)",
-  FOLDER_SCENARIO_PROMPT,
-];
-
 /** AI 대화형 문서 생성기 입력 폼 (클라이언트 전용 상태) */
 export function GeneratorForm({
   libraryDocuments,
@@ -78,6 +66,7 @@ export function GeneratorForm({
   mockProvider,
   opportunities,
   initialOpportunityId,
+  promptPresets,
 }: {
   libraryDocuments: LibraryDoc[];
   templates: TemplateChoice[];
@@ -96,6 +85,8 @@ export function GeneratorForm({
    * 서버가 후보 목록 안에 있는지 확인한 값만 내려온다.
    */
   initialOpportunityId?: string | null;
+  /** 저장해 둔 내 예시 지시문 — 기본 예시는 코드(`@/lib/prompt-preset`)에 있다 */
+  promptPresets: PromptPresetDTO[];
 }) {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
@@ -108,7 +99,6 @@ export function GeneratorForm({
   const [mode, setMode] = useState<GenerateMode>(
     initialTemplateId ? "template" : "blank",
   );
-  const [documentType, setDocumentType] = useState<string>(AUTO_TYPE);
   const [model, setModel] = useState<string>(defaultModel);
   // 기회 연결은 선택 — 고르지 않으면 "기회 미연결" 빠른 초안이 된다
   const [opportunityId, setOpportunityId] = useState<string>(
@@ -119,9 +109,6 @@ export function GeneratorForm({
       ? null
       : (opportunities.find((o) => o.id === opportunityId) ?? null);
   const [sourceQuoteId, setSourceQuoteId] = useState<string>(NO_TEMPLATE);
-  const [clientName, setClientName] = useState("");
-  const [clientContact, setClientContact] = useState("");
-  const [clientEmail, setClientEmail] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [folderAttach, setFolderAttach] = useState<{
     name: string;
@@ -147,13 +134,21 @@ export function GeneratorForm({
     if (next === "blank") setTemplateId(NO_TEMPLATE);
   };
 
-  // 양식을 고르면 그 양식의 문서 종류를 따른다 (수동 선택이 있으면 그 값 우선)
-  const effectiveType =
-    documentType !== AUTO_TYPE ? documentType : (selectedTemplate?.type ?? AUTO_TYPE);
+  /**
+   * 문서 종류는 **화면에서 묻지 않는다.** 양식을 고르면 양식이 정하고, 빈 문서면 AI 가
+   * 지시문을 보고 판단한다 — `견적서를 만들어줘` 라고 적으면서 종류를 또 고르는 것은
+   * 같은 사실을 두 번 말하는 일이다.
+   */
+  const effectiveType = selectedTemplate?.type ?? AUTO_TYPE;
 
-  // 확정 견적서 소스 선택은 계약서를 만들 때만 의미가 있다 (F-213)
+  /**
+   * 근거 견적서(F-213)는 계약서를 만들 때만 의미가 있다. 그런데 종류를 묻지 않게 된 뒤로는
+   * **빈 문서 모드에서 무엇을 만들지 미리 알 수 없다** — 그래서 그때는 열어 두고(선택),
+   * 양식 모드는 종류를 아니까 계약서 양식일 때만 보인다. 안 고르면 아무 일도 없다.
+   */
   const showQuoteSource =
-    effectiveType === "CONTRACT" && confirmedQuotes.length > 0;
+    confirmedQuotes.length > 0 &&
+    (mode === "blank" || effectiveType === "CONTRACT");
 
 
   /** 폴더명+파일명을 세션에 담고 데모 변환 페이지로 이동 */
@@ -208,9 +203,6 @@ export function GeneratorForm({
     if (opportunityId !== NO_TEMPLATE) {
       formData.append("opportunityId", opportunityId);
     }
-    if (clientName.trim()) formData.append("clientName", clientName.trim());
-    if (clientContact.trim()) formData.append("clientContact", clientContact.trim());
-    if (clientEmail.trim()) formData.append("clientEmail", clientEmail.trim());
 
     try {
       const res = await fetch("/api/generate", {
@@ -251,247 +243,258 @@ export function GeneratorForm({
     }
   };
 
-  return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6">
-      {/* 어느 기회에 붙을 문서인지 먼저 알린다 (기회-2) — 만들고 나서야 알게 되면 늦다 */}
-      {selectedOpportunity ? (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border bg-muted/30 px-4 py-3 text-sm">
-          <Target className="size-4 shrink-0 text-primary" aria-hidden="true" />
-          <span>
-            <span className="font-medium">{selectedOpportunity.name}</span>
-            <span className="text-muted-foreground">
-              {" "}
-              · {selectedOpportunity.accountName}
-            </span>
-          </span>
-          <span className="text-muted-foreground">
-            기회에 연결할 문서를 만듭니다.
-          </span>
-          <Link
-            href={`/opportunities/${selectedOpportunity.id}`}
-            className="ml-auto shrink-0 rounded text-xs text-muted-foreground transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            기회로 돌아가기
-          </Link>
-        </div>
-      ) : null}
+  /** 툴바 버튼에 적을 현재 모델 이름 — 무엇으로 만들지가 누르기 전에 보여야 한다 */
+  const modelLabel = models.find((m) => m.id === model)?.label ?? "AI 모델";
 
-      <Card>
-        <CardHeader className="items-center text-center">
-          <CardTitle className="text-xl">
-            어떤 문서를 만들어 드릴까요?
-          </CardTitle>
-          <CardDescription className="max-w-lg text-pretty">
-            입력하신 데이터는 안전하게 보호되며, AI 학습에 사용되지 않습니다.
-            <br />
-            자연어로 필요하신 내용을 자유롭게 적어주세요.
-          </CardDescription>
-        </CardHeader>
+  /** 지금 AI 에게 함께 주는 것들 — 툴바가 접혀 있어도 이 줄에서 보인다 */
+  const chips = [
+    ...files.map((file, index) => ({
+      id: `file-${file.name}-${index}`,
+      icon: Paperclip,
+      label: file.name,
+      onRemove: () => setFiles(files.filter((_, i) => i !== index)),
+      removeLabel: `${file.name} 첨부 해제`,
+    })),
+    ...(folderAttach
+      ? [
+          {
+            id: "folder",
+            icon: FolderOpen,
+            label: `${folderAttach.name} (${folderAttach.fileNames.length}개 파일)`,
+            onRemove: () => setFolderAttach(null),
+            removeLabel: "폴더 첨부 해제",
+          },
+        ]
+      : []),
+    ...selectedRefs.map((doc) => ({
+      id: `ref-${doc.id}`,
+      icon: FolderOpen,
+      label: doc.title,
+      onRemove: () => setRefIds(refIds.filter((x) => x !== doc.id)),
+      removeLabel: `${doc.title} 참고 해제`,
+    })),
+    ...(showQuoteSource && sourceQuoteId !== NO_TEMPLATE
+      ? [
+          {
+            id: "quote",
+            icon: ReceiptText,
+            label:
+              confirmedQuotes.find((q) => q.id === sourceQuoteId)?.title ??
+              "확정 견적서",
+            onRemove: () => setSourceQuoteId(NO_TEMPLATE),
+            removeLabel: "확정 견적서 해제",
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    /*
+     * 컴포저 중심 배치 — 지시문이 주인공이고 부수 입력은 그 아래 한 줄이다.
+     *
+     * 예전에는 번호 붙은 섹션 네 개(무엇을·누구에게·무엇을 보고·무엇을 지시)가 세로로
+     * 쌓여 있었다. 다섯 가지 입력이 늘 펼쳐져 있어 지시문 칸이 화면 아래로 밀렸고,
+     * 정작 대부분의 생성은 **아무 것도 붙이지 않고 지시문만 적는다**. 매번 쓰는 것이
+     * 가장 가까이 있어야 한다 — 그래서 지시문을 위로 올리고 나머지를 툴바로 접었다.
+     * 접은 것은 감춘 것이 아니다: 고른 값은 툴바 아래 칩으로 남는다.
+     */
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
+      <div className="min-w-0 space-y-4">
         {/*
-          * 한 화면 · 네 섹션이다 (위저드로 나누지 않는다 — 네 값이 서로를 바꾼다:
-          * 양식 → 문서 종류 → 확정 견적서 노출까지 이어진다).
-          * 묶음의 뜻은 `form-section.tsx` 주석에 적어 두었다.
-          */}
-        <CardContent className="space-y-5">
-          <FormSection
-            step={1}
-            title="무엇을 만드는가"
-            description="새로 작성하거나, 우리 팀의 표준 양식을 불러와 채웁니다."
-          >
-            <DocumentKindFields
+         * 어느 기회에 붙을 문서인지 **먼저** 알린다 (기회-2) — 만들고 나서야 알게 되면 늦다.
+         * 칩이 아니라 띠인 이유는, 기회에서 들어온 사용자가 되돌아갈 길도 함께 필요하기
+         * 때문이다. 기회를 바꾸거나 떼는 것은 툴바의 `거래처` 팝오버 한 곳에서 한다.
+         */}
+        {selectedOpportunity ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+            <Target className="size-4 shrink-0 text-primary" aria-hidden="true" />
+            <span className="min-w-0">
+              <span className="font-medium">{selectedOpportunity.name}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {selectedOpportunity.accountName}
+              </span>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              이 기회에 연결할 문서를 만듭니다.
+            </span>
+            <Link
+              href={`/opportunities/${selectedOpportunity.id}`}
+              className="ml-auto shrink-0 rounded text-xs text-muted-foreground transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              기회로 돌아가기
+            </Link>
+          </div>
+        ) : null}
+
+        <div className="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+          <div className="space-y-4">
+            {/*
+             * 생성 방식이 맨 위다 — 빈 문서와 양식 기반은 AI 에게 주는 것과 결과물이
+             * 달라서, 지시문을 적기 전에 정해져 있어야 한다.
+             */}
+            <ModeChoice
               mode={mode}
               onModeChange={changeMode}
-              templates={templates}
-              templateId={templateId === NO_TEMPLATE ? null : templateId}
-              onTemplateChange={setTemplateId}
-              documentType={documentType}
-              onDocumentTypeChange={setDocumentType}
-              autoType={AUTO_TYPE}
+              templateCount={templates.length}
               disabled={isSubmitting}
             />
-          </FormSection>
 
-          <FormSection
-            step={2}
-            title="누구에게 보내는 문서인가"
-            description="영업 기회를 고르면 거래처 정보를 CRM 에서 그대로 가져옵니다."
-          >
-            <TargetFields
-              opportunities={opportunities}
-              opportunityId={opportunityId}
-              onOpportunityChange={setOpportunityId}
-              selectedOpportunity={selectedOpportunity}
-              noOpportunityValue={NO_TEMPLATE}
-              clientName={clientName}
-              onClientNameChange={setClientName}
-              clientContact={clientContact}
-              onClientContactChange={setClientContact}
-              clientEmail={clientEmail}
-              onClientEmailChange={setClientEmail}
-              disabled={isSubmitting}
-            />
-          </FormSection>
+            {/* 양식 모드에서만 이 자리에 입력이 온다 — 빈 문서는 지시문이 곧 전부다 */}
+            {mode === "template" ? (
+              <TemplatePicker
+                templates={templates}
+                value={templateId === NO_TEMPLATE ? null : templateId}
+                onChange={setTemplateId}
+                disabled={isSubmitting}
+              />
+            ) : null}
 
-          <FormSection
-            step={3}
-            title="무엇을 보고 만드는가"
-            description="근거가 되는 문서·파일을 주면 그 값을 최우선으로 씁니다. 없어도 됩니다."
-          >
-            {/* 계약서: 확정된 견적서를 소스로 지정 (F-213) */}
-            {showQuoteSource && (
-              <div className="space-y-1.5">
-                <Label htmlFor="quote-select" className="text-xs">
-                  근거가 되는 확정 견적서
-                </Label>
-                <Select
-                  value={sourceQuoteId}
-                  onValueChange={setSourceQuoteId}
+            <div className="space-y-1">
+              <Textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value.slice(0, MAX_LENGTH))}
+                maxLength={MAX_LENGTH}
+                disabled={isSubmitting}
+                aria-label="문서 생성 지시문"
+                placeholder={
+                  mode === "template"
+                    ? "이번 건에서 달라지는 점만 적으시면 됩니다. 예: 라이선스 30명, 1년 계약"
+                    : "만들고 싶은 문서를 자연어로 적어주세요. 예: A사에 서버 5대와 유지보수 1년 포함한 견적서"
+                }
+                className="min-h-44 resize-y text-base"
+              />
+              <span className="block text-right text-xs tabular-nums text-muted-foreground">
+                {prompt.length.toLocaleString("ko-KR")} /{" "}
+                {MAX_LENGTH.toLocaleString("ko-KR")}
+              </span>
+            </div>
+
+            {/* 부수 입력 한 줄 — 자리를 미리 잡지 않고 누를 때 펼친다 */}
+            <div className="flex flex-wrap items-center gap-2">
+              <ToolbarButton
+                label="거래처"
+                icon={Target}
+                count={selectedOpportunity ? 1 : 0}
+                disabled={isSubmitting}
+              >
+                <TargetFields
+                  opportunities={opportunities}
+                  opportunityId={opportunityId}
+                  onOpportunityChange={setOpportunityId}
+                  selectedOpportunity={selectedOpportunity}
+                  noOpportunityValue={NO_TEMPLATE}
+                  disabled={isSubmitting}
+                />
+              </ToolbarButton>
+
+              <ToolbarButton
+                label="파일"
+                icon={Paperclip}
+                count={files.length + (folderAttach ? 1 : 0)}
+                disabled={isSubmitting}
+              >
+                <AttachmentFields
+                  files={files}
+                  setFiles={setFiles}
+                  folderAttach={folderAttach}
+                  setFolderAttach={setFolderAttach}
+                  isSubmitting={isSubmitting}
+                />
+              </ToolbarButton>
+
+              <DocumentPicker
+                documents={libraryDocuments}
+                selectedIds={refIds}
+                onConfirm={setRefIds}
+                disabled={isSubmitting}
+                triggerLabel={
+                  refIds.length > 0 ? `참고 문서 ${refIds.length}` : "참고 문서"
+                }
+                triggerClassName="h-9"
+              />
+
+              {/* 계약서를 만들 때만 의미가 있는 입력이다 (F-213) — 그때만 나타난다 */}
+              {showQuoteSource ? (
+                <ToolbarButton
+                  label="확정 견적서"
+                  icon={ReceiptText}
+                  count={sourceQuoteId === NO_TEMPLATE ? 0 : 1}
                   disabled={isSubmitting}
                 >
-                  <SelectTrigger id="quote-select" className="w-full">
-                    <SelectValue placeholder="선택 안 함" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_TEMPLATE}>선택 안 함</SelectItem>
-                    {confirmedQuotes.map((quote) => (
-                      <SelectItem key={quote.id} value={quote.id}>
-                        {quote.title} · v{quote.version} · {formatKRW(quote.amount)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  선택한 견적서의 품목·금액을 그대로 계약 조건에 반영합니다.
-                </p>
-              </div>
-            )}
-
-            <AttachmentFields
-              files={files}
-              setFiles={setFiles}
-              folderAttach={folderAttach}
-              setFolderAttach={setFolderAttach}
-              isSubmitting={isSubmitting}
-            />
-
-            {/* 문서 보관함 참고 문서 (기존 견적서 등) */}
-            <DocumentPicker
-              documents={libraryDocuments}
-              selectedIds={refIds}
-              onConfirm={setRefIds}
-              disabled={isSubmitting}
-            />
-
-            {selectedRefs.length > 0 && (
-              <ul className="space-y-1.5">
-                {selectedRefs.map((doc) => (
-                  <li
-                    key={doc.id}
-                    className="flex min-h-11 items-center gap-2 rounded-md border bg-muted/30 px-3 py-1.5 text-sm"
-                  >
-                    <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="flex-1 truncate" title={doc.title}>
-                      {doc.title}
-                    </span>
-                    <DocTypeBadge type={doc.type} />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-9 shrink-0"
+                  <div className="space-y-1.5">
+                    <Label htmlFor="quote-select" className="text-xs">
+                      근거가 되는 확정 견적서
+                    </Label>
+                    <Select
+                      value={sourceQuoteId}
+                      onValueChange={setSourceQuoteId}
                       disabled={isSubmitting}
-                      aria-label={`${doc.title} 참고 해제`}
-                      onClick={() =>
-                        setRefIds((prev) => prev.filter((x) => x !== doc.id))
-                      }
                     >
-                      <X className="size-4" />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </FormSection>
+                      <SelectTrigger id="quote-select" className="w-full">
+                        <SelectValue placeholder="선택 안 함" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_TEMPLATE}>선택 안 함</SelectItem>
+                        {confirmedQuotes.map((quote) => (
+                          <SelectItem key={quote.id} value={quote.id}>
+                            {quote.title} · v{quote.version} ·{" "}
+                            {formatKRW(quote.amount)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      고르신 견적서의 품목·금액을 그대로 계약 조건에 반영합니다.
+                    </p>
+                  </div>
+                </ToolbarButton>
+              ) : null}
 
-          {/*
-            * ④ 지시문은 **마지막**이다 — 위 세 섹션이 정해진 뒤에 "이번 건에서 달라지는
-            * 점"을 적는 자리이고(양식 모드의 안내 문구가 그렇게 말한다), 생성 버튼이
-            * 바로 아래 있어야 마지막으로 읽은 것과 누르는 것이 이어진다.
-            */}
-          <FormSection
-            step={4}
-            title="무엇을 지시하는가"
-            description="자연어로 적어 주세요. 모델을 고른 뒤 생성을 시작합니다."
-          >
-            <Textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value.slice(0, MAX_LENGTH))}
-              maxLength={MAX_LENGTH}
-              disabled={isSubmitting}
-              aria-label="문서 생성 지시문"
-              placeholder={
-                mode === "template"
-                  ? "예: 라이선스 30명, 1년 계약으로 채워줘 (이번 건에서 달라지는 점만 적으면 됩니다)"
-                  : "예: 협력사에게 받은 견적서에 마진 20%를 붙여서 견적서를 만들어줘"
-              }
-              className="min-h-40 resize-none text-base"
-            />
-            <span className="block text-right text-xs tabular-nums text-muted-foreground">
-              {prompt.length.toLocaleString("ko-KR")} /{" "}
-              {MAX_LENGTH.toLocaleString("ko-KR")}
-            </span>
+              <div className="ml-auto flex items-center gap-2">
+                <ToolbarButton
+                  label={modelLabel}
+                  icon={Sparkles}
+                  disabled={isSubmitting}
+                  contentClassName="w-[20rem]"
+                >
+                  <AiModelSelect
+                    models={models}
+                    value={model}
+                    onChange={setModel}
+                    disabled={isSubmitting}
+                    mock={mockProvider}
+                  />
+                </ToolbarButton>
+                <Button
+                  onClick={handleGenerate}
+                  disabled={!prompt.trim() || isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-4" />
+                  )}
+                  {isSubmitting ? "생성 중…" : "초안 생성"}
+                </Button>
+              </div>
+            </div>
 
-            <AiModelSelect
-              models={models}
-              value={model}
-              onChange={setModel}
-              disabled={isSubmitting}
-              mock={mockProvider}
-            />
-
-            <Button
-              className="w-full"
-              onClick={handleGenerate}
-              disabled={!prompt.trim() || isSubmitting}
-            >
-              {isSubmitting ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Sparkles className="size-4" />
-              )}
-              {isSubmitting ? "생성 중…" : "AI 초안 생성 시작"}
-            </Button>
-          </FormSection>
-        </CardContent>
-      </Card>
-
-      <div>
-        <p className="mb-3 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-          <MessageSquareText className="size-4" />
-          이렇게 말해보세요
-        </p>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {EXAMPLES.map((example) => (
-            <Card
-              key={example}
-              role="button"
-              tabIndex={0}
-              onClick={() => setPrompt(example)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setPrompt(example);
-                }
-              }}
-              className="cursor-pointer transition-colors hover:bg-muted/50"
-            >
-              <CardContent className="text-sm leading-relaxed">
-                {example}
-              </CardContent>
-            </Card>
-          ))}
+            <SelectionChips items={chips} />
+          </div>
         </div>
+
+        <p className="text-xs text-muted-foreground">
+          입력하신 내용은 문서를 만드는 데만 쓰이며 AI 학습에 사용되지 않습니다.
+        </p>
       </div>
+
+      <PromptExamples
+        presets={promptPresets}
+        onPick={setPrompt}
+        hasDraft={prompt.trim().length > 0}
+        disabled={isSubmitting}
+      />
     </div>
   );
 }

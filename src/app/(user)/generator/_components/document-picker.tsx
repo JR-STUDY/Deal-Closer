@@ -35,6 +35,13 @@ type DocumentPickerProps = {
   selectedIds: string[];
   onConfirm: (ids: string[]) => void;
   disabled?: boolean;
+  /**
+   * 트리거 문구·폭을 부모가 정할 수 있다 — 컴포저 툴바에서는 한 줄에 들어가야 하고
+   * (`참고 문서 2`), 폼 안에서는 전체 폭 버튼(`문서 보관함에서 가져오기`)이 맞다.
+   * 다이얼로그 본문은 어느 쪽에서 열어도 같다.
+   */
+  triggerLabel?: string;
+  triggerClassName?: string;
 };
 
 /** 문서 보관함에서 참고 문서를 다중 선택하는 다이얼로그 */
@@ -43,6 +50,8 @@ export function DocumentPicker({
   selectedIds,
   onConfirm,
   disabled,
+  triggerLabel,
+  triggerClassName,
 }: DocumentPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -85,11 +94,12 @@ export function DocumentPicker({
         <Button
           type="button"
           variant="outline"
-          className="w-full"
+          className={triggerClassName ?? "w-full"}
+          size={triggerClassName ? "sm" : "default"}
           disabled={disabled}
         >
           <FolderOpen className="size-4" />
-          문서 보관함에서 가져오기
+          {triggerLabel ?? "문서 보관함에서 가져오기"}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
