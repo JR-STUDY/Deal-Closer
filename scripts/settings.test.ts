@@ -9,6 +9,8 @@
  *  ② 로고·인감은 dataUrl 로 컬럼에 들어가므로 **크기 상한이 서버에서도** 걸린다.
  *  ③ 옮겨온 품목 카탈로그 목록이 다른 목록과 같은 URL 규칙을 쓴다 — 기본 정렬은 주소에
  *    남지 않고, 정렬·필터를 바꾸면 page 가 1로 돌아간다.
+ *  ④ 품목 등록·수정 검증은 **한 함수**(`parseCatalogInput`)가 맡고 단가는 캔버스·인스펙터와
+ *    **같은 파서**(`parseIntInput`)를 쓴다. 부분 수정(활성 토글)도 같은 검증을 지난다.
  */
 
 import assert from "node:assert/strict";
@@ -21,16 +23,25 @@ import {
 } from "../src/lib/branding";
 import { parseProfileInput } from "../src/lib/user-profile";
 import {
+  CATALOG_DEFAULT_UNIT,
+  CATALOG_UNIT_PRICE_MAX,
   CATEGORY_PARAM,
   DEFAULT_CATALOG_SORT,
   catalogOrderBy,
   catalogSortHref,
   catalogSortParams,
   catalogSortStateOf,
+  catalogDeleteMessage,
+  catalogUsageWhere,
   catalogWhere,
   nextCatalogSort,
+  parseCatalogInput,
   parseCatalogSort,
+  toCatalogFormValues,
+  toCatalogItemDTO,
+  withCatalogDefaults,
 } from "../src/lib/catalog";
+import { parseIntInput } from "../src/lib/editor-schema";
 import { PAGE_PARAM } from "../src/lib/pagination";
 
 let checks = 0;
@@ -219,6 +230,153 @@ check(
   catalogOrderBy({ key: "sku", direction: "desc" })[0],
   { sku: { sort: "desc", nulls: "last" } },
   "SKU 는 어느 방향이든 미정(null)을 뒤로 보낸다",
+);
+
+// ─────────────────── 품목 등록·수정 검증 (parseCatalogInput) ───────────────────
+
+const item = parseCatalogInput({
+  category: "  라이선스 ",
+  name: " 통합 보안 솔루션 ",
+  sku: " SEC-01 ",
+  // 사람이 실제로 붙여 넣는 형태 — 통화기호·쉼표·단위·소수점이 섞여 들어온다
+  unitPrice: "₩1,200,000.5원",
+  description: "  ",
+  unit: "  ",
+});
+assert.ok(!("error" in item), "정상 입력은 통과한다");
+check(item.category, "라이선스", "카테고리는 공백을 다듬는다");
+check(item.name, "통합 보안 솔루션", "품목명은 공백을 다듬는다");
+check(item.sku, "SEC-01", "SKU 도 공백을 다듬는다");
+check(item.description, null, "적지 않은 설명은 null");
+check(
+  item.unit,
+  CATALOG_DEFAULT_UNIT,
+  `단위를 비우면 기본값(${CATALOG_DEFAULT_UNIT})으로 저장한다(스키마 기본값과 같아야 한다)`,
+);
+check(item.isActive, true, "활성 여부를 주지 않으면 활성으로 등록한다");
+
+// 단가는 **캔버스·인스펙터와 같은 파서**를 지난다 — 세 번째 파서를 만들면 같은 값이
+// 카탈로그에서만 다르게 저장되고, 그 품목을 견적서에 꽂는 순간 단가가 화면마다 갈린다.
+check(
+  item.unitPrice,
+  parseIntInput("₩1,200,000.5원"),
+  "단가는 parseIntInput 결과와 정확히 같다(파서를 새로 만들지 않는다)",
+);
+check(item.unitPrice, 1_200_000, "소수점 앞까지만 읽는다(10배가 되지 않는다)");
+
+const negative = parseCatalogInput({
+  category: "서비스",
+  name: "환불",
+  unitPrice: "-50000",
+});
+assert.ok(!("error" in negative), "음수 입력 자체는 파서가 정리한다");
+check(negative.unitPrice, 0, "음수 단가는 0 이다(파서의 규칙을 그대로 따른다)");
+
+// 필수 두 개 — 카테고리는 목록의 묶음 기준이고 품목명은 견적서에 그대로 박히는 값이다
+check(
+  "error" in parseCatalogInput({ category: " ", name: "이름" }),
+  true,
+  "카테고리는 비울 수 없다",
+);
+check(
+  "error" in parseCatalogInput({ category: "서비스", name: "  " }),
+  true,
+  "품목명은 비울 수 없다",
+);
+// 상한은 앱이 먼저 막는다 — Prisma Int(32비트)를 넘기면 사람이 읽을 수 없는 오류가 뜬다
+check(
+  "error" in
+    parseCatalogInput({
+      category: "서비스",
+      name: "초고가",
+      unitPrice: String(CATALOG_UNIT_PRICE_MAX + 1),
+    }),
+  true,
+  "32비트 상한을 넘는 단가는 사용자 문구로 막는다",
+);
+check(
+  "error" in
+    parseCatalogInput({
+      category: "서비스",
+      name: "가장 비싼 품목",
+      unitPrice: String(CATALOG_UNIT_PRICE_MAX),
+    }),
+  false,
+  "상한 자체는 저장할 수 있다(경계값)",
+);
+check(
+  "error" in parseCatalogInput({ category: "가".repeat(41), name: "이름" }),
+  true,
+  "길이 상한을 넘으면 막는다",
+);
+
+// ─────────── 부분 수정(활성 토글) — 검증을 두 벌로 만들지 않는다 ───────────
+const current = {
+  category: "라이선스",
+  name: "모니터링 SW 라이선스",
+  sku: "LIC-MON",
+  unit: "연",
+  unitPrice: 2_400_000,
+  description: null,
+  isActive: true,
+};
+const toggled = parseCatalogInput(
+  withCatalogDefaults({ isActive: false }, current),
+);
+assert.ok(!("error" in toggled), "isActive 하나만 보내도 통과한다");
+check(toggled.isActive, false, "토글한 값은 반영된다");
+check(
+  { ...toggled, isActive: true },
+  { ...current, isActive: true },
+  "보내지 않은 필드는 현재 값 그대로다(토글이 다른 값을 덮지 않는다)",
+);
+check(
+  "error" in parseCatalogInput({ isActive: false }),
+  true,
+  "현재 값을 채우지 않으면 같은 요청이 막힌다(withCatalogDefaults 가 필요한 이유)",
+);
+
+// DTO ↔ 폼 값 왕복 — 단가는 입력 중에는 문자열이고, null 은 빈 문자열로 내려간다
+const dto = toCatalogItemDTO({
+  id: "cat_1",
+  ...current,
+  createdAt: new Date("2026-01-02T03:04:05.000Z"),
+  updatedAt: new Date("2026-02-03T04:05:06.000Z"),
+});
+check(dto.updatedAt, "2026-02-03T04:05:06.000Z", "날짜는 ISO 문자열로 내린다");
+const formValues = toCatalogFormValues(dto);
+check(formValues.unitPrice, "2400000", "단가는 폼에서 문자열로 다룬다");
+check(formValues.description, "", "null 설명은 빈 문자열로 내려간다");
+check(
+  "error" in parseCatalogInput({ ...formValues }),
+  false,
+  "폼 값을 그대로 다시 넣어도 통과한다(왕복이 깨지지 않는다)",
+);
+
+// ─────────── 삭제 확인창 — 되돌릴 수 없는 조작은 결과를 미리 말한다 ───────────
+const usage = catalogUsageWhere("org_1", " 연간 유지보수 ");
+check(
+  Array.isArray(usage.OR) && usage.OR.length,
+  2,
+  "쓰임은 품목 행·본문(contentJson) 두 곳에서 센다(문서는 값을 복사해 두므로 링크가 없다)",
+);
+check(
+  catalogUsageWhere("org_1", "   "),
+  { orgId: "org_1", id: { in: [] } },
+  "이름이 비면 아무것도 세지 않는다(contains:\"\" 는 조직 전체 문서에 걸린다)",
+);
+const warning = catalogDeleteMessage("연간 유지보수", 3);
+check(warning.includes("3건"), true, "몇 건이 쓰고 있는지 미리 말한다");
+check(
+  warning.includes("금액은 그대로 유지됩니다"),
+  true,
+  "이미 만든 문서의 금액이 바뀌지 않는다는 사실을 함께 말한다",
+);
+check(
+  catalogDeleteMessage("연간 유지보수", 0).includes("아직 없다") ||
+    catalogDeleteMessage("연간 유지보수", 0).includes("아직 없습니다"),
+  true,
+  "0건이면 0건이라고 말한다(숫자를 감추지 않는다)",
 );
 
 console.log(`settings: ${checks}건 검증 통과`);
