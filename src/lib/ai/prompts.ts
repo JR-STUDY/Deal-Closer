@@ -36,6 +36,7 @@ const COMMON_RULES = `당신은 한국 B2B 영업 문서(견적서·계약서·�
   "공급가액"(formula: subtotal), "부가세 (10%)"(formula: subtotal * 0.1),
   "합계 (VAT 포함)"(formula: subtotal * 1.1) 3행을 넣습니다.
 - summaryRows 의 formula 에는 변수 subtotal 과 + - * / ( ) 만 사용합니다. 다른 변수는 0으로 평가됩니다.
+- summaryRows 의 **마지막 행이 문서 금액**이 됩니다. 총계(합계) 행을 반드시 마지막에 둡니다.
 
 [정확성 규칙]
 - 근거 없는 값을 만들지 않습니다. 모르는 값은 빈 문자열로 두어 사용자가 채우게 합니다.

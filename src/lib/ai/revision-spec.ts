@@ -7,7 +7,13 @@
  * (서버·클라이언트 공용 순수 모듈)
  */
 
-import { uid, type Block, type BlockPropsMap, type EditorDoc } from "@/lib/editor-schema";
+import {
+  normalizeSummaryRows,
+  uid,
+  type Block,
+  type BlockPropsMap,
+  type EditorDoc,
+} from "@/lib/editor-schema";
 import {
   itemTableHeight,
   labelMatches,
@@ -251,11 +257,14 @@ export function applyRevision(
         unitPrice: r.unitPrice,
       }));
       if (spec.itemTable.summaryRows.length > 0) {
-        props.summaryRows = spec.itemTable.summaryRows.map((r) => ({
-          id: uid(),
-          label: r.label,
-          formula: r.formula,
-        }));
+        // 총계 표식을 굳힌다 — 모델은 표식을 만들지 않는다 (doc-spec 과 같은 규칙)
+        props.summaryRows = normalizeSummaryRows(
+          spec.itemTable.summaryRows.map((r) => ({
+            id: uid(),
+            label: r.label,
+            formula: r.formula,
+          })),
+        );
       }
       target.h = itemTableHeight(props.rows.length, (props.summaryRows ?? []).length);
       changed = true;

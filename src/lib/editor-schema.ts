@@ -130,8 +130,26 @@ export type ItemRow = {
 /** 품목표 사용자 추가 열 정의 */
 export type TableColumn = { id: string; label: string; align: Align };
 
-/** 품목표 요약(수식) 행 — 예: 공급가액/부가세/합계 (#9) */
-export type SummaryRow = { id: string; label: string; formula: string };
+/**
+ * 품목표 요약(수식) 행 — 예: 공급가액/부가세/합계 (#9)
+ *
+ * `isTotal` 이 **문서 금액이 되는 행**을 가리킨다. 예전에는 "마지막 행이 총계" 라는
+ * 암묵적 규약이었는데, 그것은 금액을 **행을 넣은 순서**에 맡기는 것이다 — 사용자가
+ * `공급가액` → `부가세` 순서로만 넣으면 문서 금액이 **부가세 금액**이 된다
+ * (실측: 1,000만원 견적서가 100만원으로 저장됐다). 그 값은 확정 문서를 통해 기회
+ * 예상 금액까지 내려간다(기회-6). 프리셋은 마지막이 `합계` 라서 우연히 맞았을 뿐이다.
+ *
+ * **옵셔널이다** — 예전 `contentJson` 에는 없으므로 `parseContentJson` 이 읽으면서
+ * 마지막 행에 붙여 준다(음수 z 치유·`MetaFieldRole` 추정과 같은 선례). 그래야 이미
+ * 저장된 문서의 금액이 이 변경 한 번으로 달라지지 않는다.
+ */
+export type SummaryRow = {
+  id: string;
+  label: string;
+  formula: string;
+  /** 이 행이 문서 금액이다. 표식이 없으면 마지막 행으로 본다(예전 문서) */
+  isTotal?: boolean;
+};
 
 /** 카탈로그(마스터 데이터) 품목 — 품목표에서 드롭다운으로 선택 (#6) */
 export type CatalogOption = {
@@ -525,6 +543,31 @@ export function createBlock(
   };
 }
 
+/**
+ * 사용자가 입력한 글자를 **수량·단가 정수**로 읽는다 (정책 FORM_CURRENCY_KRW).
+ *
+ * 캔버스 칸 편집과 인스펙터 숫자 입력이 **이 함수 하나**를 쓴다. 예전에는 둘이 따로였고
+ * 결과가 갈렸다 — 인스펙터는 `Math.trunc(Number(v))` 라 `1200000.5` → `1200000`,
+ * 캔버스는 숫자 아닌 글자를 지우는 방식이라 소수점까지 지워 `1200000.5` → `12000005`
+ * 였다. 즉 **같은 값을 캔버스에서 고치면 단가가 10배**가 되고, 그 위에 얹힌 부가세·
+ * 합계·문서 금액이 통째로 어긋났다(사용자가 겪은 "단가를 고치면 부가세가 깨진다").
+ *
+ * 규칙은 하나다 — **소수점 앞까지만 읽는다.** 통화기호·쉼표·공백·단위(`원`)는 걷어내고
+ * 소수점이 나오면 거기서 끊는다(지우지 않는다 — 지우면 자릿수가 늘어난다).
+ * 음수는 0 으로 본다 — 수량·단가가 음수인 견적서는 없고, 있다면 할인 행으로 표현한다.
+ */
+export function parseIntInput(value: string | number): number {
+  const raw = typeof value === "number" ? String(value) : String(value ?? "");
+  // 소수점 뒤를 **버린다**. `1200000.5` 는 1200000 이지 12000005 가 아니다
+  const head = raw.split(".")[0];
+  const digits = head.replace(/[^\d]/g, "");
+  if (!digits) return 0;
+  // 부호가 섞였으면(음수·`1-2` 같은 오타) 0 — 값을 짐작하지 않는다
+  if (head.includes("-")) return 0;
+  const parsed = Number.parseInt(digits, 10);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
 export function calcItemTableTotal(rows: ItemRow[]): number {
   if (!Array.isArray(rows)) return 0;
   // 행 표시와 동일한 식(수량×단가)으로 계산해 합계 불일치를 방지한다.
@@ -585,6 +628,50 @@ export function evalFormula(expr: string, vars: Record<string, number>): number 
   return Number.isFinite(result) ? result : 0;
 }
 
+/** 수식에서 쓸 수 있는 변수 — 이 목록 밖의 이름은 0 으로 평가된다 */
+export const FORMULA_VARIABLES = ["subtotal"] as const;
+
+/**
+ * 수식이 **평가기가 읽지 못하는 글자**를 담고 있으면 그 이유, 아니면 `null`.
+ *
+ * `evalFormula` 는 알아보지 못하는 토큰을 **조용히 버린다**. 그래서 부가세를
+ * `subtotal * 10%` 로 적으면 `%` 가 사라져 `subtotal * 10`, 즉 **소계의 10배**가
+ * 부가세로 찍힌다(실측 1,000만원 → 1억). `subtotal*.1` 은 `.` 이 사라져 `subtotal * 1`
+ * 이 되고, `subtotal + 부가세` 는 한글 이름이 사라져 소계 그대로다. 세 경우 모두
+ * 화면에 **그럴듯한 숫자**가 뜨기 때문에 사용자가 알아챌 단서가 없다.
+ *
+ * 평가 규칙은 **바꾸지 않는다** — 이미 저장된 문서의 금액이 달라지면 안 되기 때문이다.
+ * 대신 인스펙터가 이 판정을 옆에 적어 사용자가 고칠 수 있게 한다.
+ */
+export function formulaError(expr: string): string | null {
+  const raw = String(expr ?? "");
+  if (!raw.trim()) return "수식이 비어 있습니다.";
+  // 평가기가 **읽는** 토큰과 공백을 걷어내고 남은 글자 = 조용히 버려지는 글자
+  const rest = raw.replace(/\d+\.?\d*|[a-zA-Z_]\w*|[()+\-*/]|\s+/g, "");
+  if (rest) {
+    const chars = [...new Set([...rest])].join(" ");
+    return `계산에 쓸 수 없는 문자가 있습니다 (${chars}). 무시되므로 금액이 달라집니다.`;
+  }
+  const unknown = [
+    ...new Set(
+      (raw.match(/[a-zA-Z_]\w*/g) ?? []).filter(
+        (name) => !(FORMULA_VARIABLES as readonly string[]).includes(name),
+      ),
+    ),
+  ];
+  if (unknown.length > 0) {
+    return `알 수 없는 변수 ${unknown.join(", ")} 는 0 으로 계산됩니다. 쓸 수 있는 변수: ${FORMULA_VARIABLES.join(", ")}.`;
+  }
+  let depth = 0;
+  for (const ch of raw) {
+    if (ch === "(") depth += 1;
+    if (ch === ")") depth -= 1;
+    if (depth < 0) return "괄호가 맞지 않습니다.";
+  }
+  if (depth !== 0) return "괄호가 맞지 않습니다.";
+  return null;
+}
+
 /** 품목표 요약 행들을 평가한다 (subtotal = 품목 합계). 값은 KRW 정수로 반올림. */
 export function evalSummaryRows(
   props: BlockPropsMap["itemTable"],
@@ -596,14 +683,56 @@ export function evalSummaryRows(
   }));
 }
 
-/** 품목표의 최종 총계: 요약 행이 있으면 마지막 행 값, 없으면 품목 합계. */
+/**
+ * 요약행 중 **문서 금액이 되는 한 행**. 요약행이 없으면 `null`(= 품목 소계가 금액이다).
+ *
+ * 표식(`isTotal`)이 있으면 그 행이고, 없으면 **마지막 행**이다 — 표식이 없는 예전
+ * 문서의 금액이 달라지지 않게 하는 폴백이다(`parseContentJson` 이 읽으면서 표식을
+ * 붙이므로, 한 번 저장하면 그 뒤로는 표식이 단일 기준이 된다).
+ * 표식이 여럿이면 **첫 번째**를 쓴다 — 총계는 하나여야 하고, 하나로 맞추는 일은
+ * `normalizeSummaryRows` 가 한다.
+ */
+export function totalSummaryRow(
+  rows: readonly SummaryRow[] | undefined,
+): SummaryRow | null {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  return rows.find((row) => row?.isTotal) ?? rows[rows.length - 1];
+}
+
+/**
+ * 총계 표식을 **정확히 1개**로 맞춘다 (요약행을 고치는 모든 경로가 이걸 지난다).
+ *
+ * 표식이 없으면 마지막 행에 붙인다(예전 문서 치유 — 저장된 금액이 그대로여야 한다).
+ * 여럿이면 첫 번째만 남긴다. 바뀐 게 없으면 **같은 배열**을 돌려준다 — 파싱마다 새
+ * 객체를 만들면 캔버스가 헛돌고, `props` 가 달라져 미저장 표시가 잘못 켜진다.
+ */
+export function normalizeSummaryRows(
+  rows: readonly SummaryRow[] | undefined,
+): SummaryRow[] {
+  if (!Array.isArray(rows)) return [];
+  const target = totalSummaryRow(rows);
+  if (!target) return rows as SummaryRow[];
+  let changed = false;
+  const next = rows.map((row) => {
+    const isTotal = row === target;
+    if (Boolean(row?.isTotal) === isTotal) return row;
+    changed = true;
+    return { ...row, isTotal };
+  });
+  return changed ? next : (rows as SummaryRow[]);
+}
+
+/**
+ * 품목표의 최종 총계: 요약 행이 있으면 **총계 표식이 붙은 행** 값, 없으면 품목 합계.
+ *
+ * 예전에는 무조건 **마지막** 요약행이었다 — `공급가액` → `부가세` 순서로만 넣은
+ * 문서의 금액이 부가세 금액이 되던 원인이다 (`SummaryRow.isTotal` 주석 참고).
+ */
 export function itemTableGrandTotal(props: BlockPropsMap["itemTable"]): number {
-  const summaries = props.summaryRows ?? [];
   const subtotal = calcItemTableTotal(props.rows);
-  if (!summaries.length) return subtotal;
-  return Math.round(
-    evalFormula(summaries[summaries.length - 1].formula, { subtotal }),
-  );
+  const total = totalSummaryRow(props.summaryRows);
+  if (!total) return subtotal;
+  return Math.round(evalFormula(total.formula, { subtotal }));
 }
 
 /**
@@ -849,19 +978,20 @@ export function shiftMergesOnColDelete(
 /** 금액 수식 예시 프리셋 (#9) — 인스펙터에서 불러오기 */
 export const FORMULA_PRESETS: {
   label: string;
-  rows: { label: string; formula: string }[];
+  rows: { label: string; formula: string; isTotal?: boolean }[];
 }[] = [
   {
     label: "부가세 포함 합계",
+    // 총계 표식은 **명시한다** — 순서에 기대면 행을 하나 더 넣는 순간 금액이 옮겨간다
     rows: [
       { label: "공급가액", formula: "subtotal" },
       { label: "부가세 (10%)", formula: "subtotal * 0.1" },
-      { label: "합계 (VAT 포함)", formula: "subtotal * 1.1" },
+      { label: "합계 (VAT 포함)", formula: "subtotal * 1.1", isTotal: true },
     ],
   },
   {
     label: "합계만",
-    rows: [{ label: "합계", formula: "subtotal" }],
+    rows: [{ label: "합계", formula: "subtotal", isTotal: true }],
   },
 ];
 
@@ -914,6 +1044,30 @@ function healBlockMetaRoles(block: Block): Block["props"] {
 }
 
 /**
+ * 품목표 요약행에 **총계 표식**을 채운 props (표식이 없는 예전 문서 치유).
+ *
+ * 마지막 행에 붙이므로 저장된 금액은 달라지지 않고, 그 뒤로는 행을 더해도 금액이
+ * 따라 옮겨가지 않는다 — 이것이 이 치유의 목적이다.
+ */
+function healItemTableTotal(block: Block): Block["props"] {
+  const props = block.props as BlockPropsMap["itemTable"];
+  if (!Array.isArray(props.summaryRows)) return block.props;
+  const summaryRows = normalizeSummaryRows(props.summaryRows);
+  return summaryRows === props.summaryRows
+    ? block.props
+    : { ...props, summaryRows };
+}
+
+/** 읽으면서 채우는 값들을 한곳에서 갈라 준다 (블록 종류별 치유) */
+function healBlockProps(block: Block): Block["props"] {
+  if (block.type === "supplier" || block.type === "clientMeta") {
+    return healBlockMetaRoles(block);
+  }
+  if (block.type === "itemTable") return healItemTableTotal(block);
+  return block.props;
+}
+
+/**
  * contentJson 문자열을 EditorDoc 으로 안전 파싱한다.
  * 형태가 어긋나거나 유효 블록이 없으면 null 을 반환하고,
  * 개별 블록도 최소 스키마를 검증해 렌더 크래시를 방지한다.
@@ -943,9 +1097,10 @@ export function parseContentJson(
        * 정보 필드의 **역할**을 여기서 채운다 (예전 contentJson 에는 없다).
        * 지금 채워 두면 다음 저장에 함께 남으므로, 그 뒤로는 라벨을 고쳐도 거래처명·
        * 공급자명 조회가 끊기지 않는다. 마이그레이션 없이 읽는 쪽에서 치유하는 방식은
-       * 음수 z 와 같은 선례다.
+       * 음수 z 와 같은 선례다. 품목표 요약행의 **총계 표식**도 같은 방식으로 채운다
+       * (없으면 마지막 행 — 예전 규약을 그대로 굳혀 금액이 달라지지 않게 한다).
        */
-      props: healBlockMetaRoles(b),
+      props: healBlockProps(b),
     }));
     return {
       version: 1,

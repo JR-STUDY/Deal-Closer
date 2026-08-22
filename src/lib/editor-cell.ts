@@ -1,4 +1,5 @@
 import { formatKRW } from "./format";
+import { parseIntInput } from "./editor-schema";
 import type { Block, BlockPropsMap, MetaField } from "./editor-schema";
 
 /**
@@ -77,14 +78,14 @@ export function sameCell(a: CellRef | null | undefined, b: CellRef | null | unde
   }
 }
 
-/**
- * 숫자 칸 — 사용자가 `1,200,000 원` 처럼 넣어도 받아 준다 (정책 FORM_CURRENCY_KRW).
- * 음수는 0 으로 본다 — 수량·단가가 음수인 견적서는 없고, 있다면 할인 행으로 표현한다.
+/*
+ * 숫자 칸의 파싱은 `@/lib/editor-schema` 의 `parseIntInput` **한 곳**이다.
+ *
+ * 예전에는 이 모듈이 `value.replace(/[^\d-]/g, "")` 로 직접 걷어냈고 인스펙터는
+ * `Math.trunc(Number(v))` 를 썼다. 두 규칙은 소수점에서 갈린다 — 같은 `1200000.5`
+ * 를 캔버스는 `12000005`(10배!), 인스펙터는 `1200000` 으로 읽었다. 어느 자리에서
+ * 고쳤는지에 따라 단가가 달라지면 그 위에 얹힌 부가세·합계·문서 금액이 전부 어긋난다.
  */
-function toInt(value: string): number {
-  const parsed = Number.parseInt(value.replace(/[^\d-]/g, ""), 10);
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-}
 
 /**
  * 그 칸에 **저장된 값**. 없는 칸이면 `null`.
@@ -189,8 +190,8 @@ export function writeCell(block: Block, ref: CellRef, text: string): Block {
         if (ref.field === "description") return { ...row, description: text };
         // 수량·단가는 숫자다 — 문자열로 저장하면 합계 계산이 NaN 이 된다.
         // 키를 계산식(`[ref.field]`)으로 쓰지 않는다 — 오타가 타입 검사를 통과해 버린다
-        if (ref.field === "quantity") return { ...row, quantity: toInt(text) };
-        if (ref.field === "unitPrice") return { ...row, unitPrice: toInt(text) };
+        if (ref.field === "quantity") return { ...row, quantity: parseIntInput(text) };
+        if (ref.field === "unitPrice") return { ...row, unitPrice: parseIntInput(text) };
         const colId = extraColId(ref.field);
         return colId
           ? { ...row, extra: { ...(row.extra ?? {}), [colId]: text } }
