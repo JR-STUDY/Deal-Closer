@@ -33,9 +33,10 @@ export default async function TemplateEditorPage({
   const [template, branding, catalog] = await Promise.all([
     prisma.template.findFirst({ where: { id: templateId, orgId: org.id } }),
     prisma.branding.findUnique({ where: { orgId: org.id } }),
-    // 품목 카탈로그 — 문서 편집과 같은 인스펙터를 쓰므로 같이 넘긴다
+    // 품목 카탈로그 — 문서 편집과 같은 인스펙터를 쓰므로 같이 넘긴다.
+    // 비활성 품목은 빼는 것도 문서 편집과 같다 (`isActive` = 선택 목록에 뜨는지)
     prisma.catalogItem.findMany({
-      where: { orgId: org.id },
+      where: { orgId: org.id, isActive: true },
       orderBy: [{ category: "asc" }, { name: "asc" }],
       select: {
         id: true,

@@ -28,9 +28,12 @@ export default async function EditorPage({
       include: { items: { orderBy: { sortOrder: "asc" } } },
     }),
     prisma.branding.findUnique({ where: { orgId: org.id } }),
-    // 품목 카탈로그(마스터 데이터) — 클라 useEffect fetch 대신 서버에서 조회해 prop 전달 (no-fetch-in-effect)
+    // 품목 카탈로그(마스터 데이터) — 클라 useEffect fetch 대신 서버에서 조회해 prop 전달 (no-fetch-in-effect).
+    // **비활성 품목은 내려보내지 않는다** — `CatalogItem.isActive` 는 "에디터 품목 선택
+    // 목록에 뜨는지" 를 뜻한다(지우는 대신 내리는 길). 필터가 빠지면 내려 둔 품목이
+    // 선택 목록 맨 위에 다시 올라와, 카탈로그 화면에서 비활성으로 만든 일이 무의미해진다.
     prisma.catalogItem.findMany({
-      where: { orgId: org.id },
+      where: { orgId: org.id, isActive: true },
       orderBy: [{ category: "asc" }, { name: "asc" }],
       select: {
         id: true,
