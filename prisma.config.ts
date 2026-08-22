@@ -7,6 +7,9 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    // Prisma 7 부터 시드 명령은 package.json 의 "prisma.seed" 가 아니라 여기서 정의한다.
+    // 이 줄이 없으면 `pnpm db:reset` 이 마이그레이션만 재적용하고 데모 데이터를 넣지 않는다.
+    seed: "tsx prisma/seed.ts",
   },
   datasource: {
     url: process.env["DATABASE_URL"],
