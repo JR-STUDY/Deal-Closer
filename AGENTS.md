@@ -50,6 +50,7 @@ pnpm test:opportunity-progress  # 기회 단계 진행 표시 순수 함수 검�
 pnpm test:opportunity-transition # 기회 단계 전이 규칙 순수 함수 검증 (DB 없이 실행)
 pnpm test:opportunity-patch     # 기회 부분 수정(인라인) 병합 순수 함수 검증 (DB 없이 실행)
 pnpm test:opportunity-sort      # 기회 목록 정렬 순수 함수 검증 (DB 없이 실행)
+pnpm test:opportunity-renewal   # 갱신 기회 판정·이름·마감일 순수 함수 검증 (DB 없이 실행)
 pnpm test:pagination # 목록 페이지네이션 순수 함수 검증 (DB 없이 실행)
 pnpm test:contact   # 거래처 담당자 대표 규칙 순수 함수 검증 (DB 없이 실행)
 pnpm test:confirmed-document # 확정 문서 판정 순수 함수 검증 (DB 없이 실행)
@@ -175,6 +176,9 @@ src/
     opportunity-transition.ts # 단계 전이 **규칙** 순수 함수 — 전진만·되돌리기 판정·문서별 목표 단계 (F-112·113)
     opportunity-stage.ts # 기회 생성·단계 전이 + 활동 이력 기록 (한 트랜잭션, 서버 전용, F-111·113)
     opportunity-progress.ts # 단계 진행 **표시** 순수 함수 — 이력에서 도달 지점 도출·지나온/현재/남은·마감 노드 1건·다음 행동 안내
+    opportunity-renewal.ts  # 갱신 기회 **규칙** 순수 함수 (F-115·F-306) — decideRenewal
+                         #   (수주 + 다음 기회 없음만 허용) · renewalBlockMessage ·
+                         #   renewalName(회차 증가·길이 상한) · suggestedRenewalCloseDate
   generated/prisma/    # Prisma Client (자동 생성, 커밋 안 함)
 ```
 
@@ -418,6 +422,23 @@ src/
   문서 연결은 확정 문서 재판정 시점이라 같은 트랜잭션에서 `syncOpportunityAmount()` 를 부른다.
   기회 연결은 **끝까지 선택**이다 — 고르지 않으면 "기회 미연결" 빠른 초안이 되고, 보관함 목록이
   그 사실을 표시한다.
+- **갱신은 단계를 되돌리는 것이 아니라 새 기회를 세우는 것이다** (F-115 · F-306).
+  수주로 끝난 거래의 다음 건은 `previousOpportunityId` 체인으로 원본과 이어지고,
+  원본은 `수주` 로 그대로 남는다 — 단계를 되돌려 재활용하면 이미 딴 계약의 기록이 사라진다.
+  **갱신 전용 스키마 필드를 만들지 않는다** — 주기·갱신 여부 컬럼 대신 `expectedCloseDate`
+  하나로 표현하고, 새 기회의 마감일은 사용자가 폼에서 정한다(모듈은 **제안값**만 낸다:
+  원본 마감일 + 1년, 이미 지난 날이면 다음 해로 밀어 낸다).
+  판정은 `@/lib/opportunity-renewal` **순수 함수가 단일 기준**이다 — **수주(WON) + 다음
+  기회 없음**, 이 한 조합만 허용한다(진행 중인 건은 "다음"이 없고, 실주한 건은 이어 갈
+  계약이 없다). 체인 컬럼이 `@unique` 라 다음 기회는 최대 1건이므로 **화면은 버튼을
+  감추고 서버는 409 로 거절한다** — 화면에서만 막은 것은 막은 것이 아니다. 동시 요청이
+  겹치면 DB 제약(P2002)이 마지막 방어선이고, 라우트가 그것을 **같은 안내 문구**로 옮긴다.
+  이미 갱신한 기회에는 버튼 대신 **그 기회로 가는 링크**를 둔다(갈 수 없는 문을 그리지 않는다).
+  생성은 `@/lib/opportunity-stage` 의 `createOpportunity()` 만 경유하고(생성과
+  OPPORTUNITY_CREATED 이력이 한 트랜잭션), **예상 금액은 복제하지 않는다** (기회-6) —
+  확정 문서에서 파생되는 값이라 새 기회는 확정 문서 없음 → 0 으로 시작한다.
+  이름·마감일 제안값은 화면과 서버가 **같은 순수 함수**로 만든다 — 폼에 뜬 값과 본문 없이
+  요청했을 때 서버가 쓰는 값이 갈라지지 않는다.
 - **마감된 기회에는 문서 생성 진입점을 노출하지 않는다** (F-211). 기회 상세의 `문서 작성`(헤더)과
   `새 문서 생성`(연관 문서 패널) 둘 다 감추며, 판정은 상세 화면이 한 번만 하고 하위 컴포넌트는
   `canCreateDocument` 를 받아 쓴다(같은 규칙이 두 곳에 있으면 갈라진다). **`기존 문서 연결`은

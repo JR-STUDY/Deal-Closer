@@ -74,6 +74,14 @@ export type CreateOpportunityInput = {
   name: string;
   expectedCloseDate: Date | null;
   memo: string | null;
+  /**
+   * 이 기회가 **이어받는** 직전 기회 (F-115 · F-306 갱신 체인). 갱신이 아니면 넘기지 않는다.
+   *
+   * 컬럼이 `@unique` 라 한 기회의 다음 기회는 최대 1건이다 — 허용 판정은
+   * `@/lib/opportunity-renewal` 의 순수 함수가 먼저 하고, 그래도 동시 요청이 겹치면
+   * DB 제약이 마지막 방어선으로 남는다(라우트가 그 오류를 안내 문구로 옮긴다).
+   */
+  previousOpportunityId?: string | null;
 };
 
 /**
@@ -85,16 +93,25 @@ export type CreateOpportunityInput = {
  *
  * **예상 금액도 명시하지 않는다** (기회-6). 확정 문서가 정하는 값이라 새 기회는 0 으로
  * 시작하고, 문서가 붙는 순간 `@/lib/opportunity-amount` 가 채운다.
+ * 갱신 기회(F-115)도 **이전 건의 금액을 복제하지 않는다** — 같은 이유다.
  */
 export function createOpportunity(
   input: CreateOpportunityInput,
   tx?: Prisma.TransactionClient,
 ): Promise<{ id: string }> {
-  const { orgId, actorId, accountId, ownerId, ...rest } = input;
+  const { orgId, actorId, accountId, ownerId, previousOpportunityId, ...rest } =
+    input;
 
   return runInTransaction(async (client) => {
     const created = await client.opportunity.create({
-      data: { orgId, accountId, ownerId, ...rest },
+      data: {
+        orgId,
+        accountId,
+        ownerId,
+        // 갱신이 아니면 아예 넣지 않는다 (null 을 명시해도 같지만 의도가 드러나지 않는다)
+        ...(previousOpportunityId ? { previousOpportunityId } : {}),
+        ...rest,
+      },
       select: { id: true },
     });
 
@@ -103,7 +120,12 @@ export function createOpportunity(
       opportunityId: created.id,
       actorId,
       eventType: "OPPORTUNITY_CREATED",
-      detail: { accountId, ownerId },
+      // 어디서 이어졌는지도 이력에 남긴다 — 체인은 컬럼에도 있지만 이력은 시점을 함께 담는다
+      detail: {
+        accountId,
+        ownerId,
+        ...(previousOpportunityId ? { previousOpportunityId } : {}),
+      },
     });
 
     return created;
@@ -119,8 +141,12 @@ export function createOpportunity(
  * 대신 마감 해제는 확정일·실주 사유를 지우므로 화면에서 확인을 받는다
  * (`stageChangeWarning()` — 정책 STATE_BACK_NAV_CONFIRM).
  *
- * TODO(Phase 4): WON 전이의 후속 처리(F-115 매출 반영·다음 기회 생성, F-117 실주 사유
- * 목록)는 여기에 얹는다. 확인 팝업이 필요한 흐름이라 UI 결정과 함께 붙인다.
+ * **수주 전이가 다음 기회를 자동 생성하지 않는다** (F-115). 갱신은 담당자가 상세에서
+ * `갱신 기회 만들기` 로 이름·마감일을 확인해 만드는 별도 동작이고, 허용 판정은
+ * `@/lib/opportunity-renewal` 이 한다 — 수주와 동시에 만들면 사용자가 정해야 할 마감일을
+ * 시스템이 정하게 되고, 실물 계약이 갱신되지 않는 건에도 빈 기회가 쌓인다.
+ *
+ * TODO(Phase 4): WON 전이의 매출 반영과 F-117 실주 사유 목록은 여기에 얹는다.
  */
 export function changeStage(
   input: StageTransitionInput,
