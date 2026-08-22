@@ -62,9 +62,9 @@ pnpm test:block-align        # 다중선택 정렬·분할·이동 순수 함수
 pnpm test:editor-cell        # 캔버스 칸 편집 규칙 순수 함수 검증 (DB 없이 실행)
 
 pnpm db:migrate     # 스키마 변경 → 마이그레이션 생성·적용
-pnpm db:seed        # 데모 데이터 시드
+pnpm db:seed        # 데모 데이터 시드 (prisma db seed — 명령은 prisma.config.ts 가 정의)
 pnpm db:studio      # Prisma Studio (DB GUI)
-pnpm db:reset       # DB 초기화 + 마이그레이션 재적용
+pnpm db:reset       # DB 초기화 + 마이그레이션 재적용 + 시드
 pnpm db:generate    # Prisma Client 재생성
 
 pnpm doctor         # react-doctor 전체 진단 (보안·성능·정확성)
@@ -185,6 +185,11 @@ src/
 - **금액은 원(KRW) 단위 정수(Int)** 로 저장한다 (정책 FORM_CURRENCY_KRW).
 - DB 접근은 **반드시 `src/lib/db.ts` 의 `prisma` 싱글톤**을 사용한다 (직접 `new PrismaClient()` 금지 — dev 리로드 커넥션 누수).
 - 생성된 Client(`src/generated/prisma`)와 `dev.db` 는 커밋하지 않는다. `pnpm install` 시 `postinstall` 이 Client 를 자동 생성한다.
+- **시드 명령은 `prisma.config.ts` 의 `migrations.seed` 가 정의한다** (Prisma 7). `package.json` 의
+  `"prisma": { "seed": ... }` 는 더 이상 읽히지 않고, `prisma migrate reset` 도 **시드를 자동 실행하지
+  않는다**(`--skip-seed` 옵션 자체가 사라졌다). 그래서 `db:reset` 이 `prisma migrate reset && prisma db seed`
+  로 두 단계를 명시한다 — 설정이 빠지면 리셋 뒤 **빈 DB** 로 개발 서버가 뜨고, 화면이 비어 있는 원인을
+  스키마에서 찾게 된다. 시드 진입점을 바꿀 때는 `prisma.config.ts` 한 곳만 고친다.
 
 ## 코딩 컨벤션
 
