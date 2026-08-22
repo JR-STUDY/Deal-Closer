@@ -13,8 +13,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 Rainmaker 는 자연어 한 줄로 영업 문서(견적서·계약서·NDA·제안서)를 생성하고, 웹에서 편집한 뒤 이메일로 발송하는 영업 문서 자동화 SaaS 의 **MVP** 입니다.
 
-- **영업 담당자 포털(user-web)**: 대시보드 · AI 문서 생성 · 웹 에디터 · 이메일 발송 · 문서 보관함 · 메일 연동
-- **관리자 콘솔(admin-web)**: 로그인 · 팀원 관리 · 마스터 데이터 · 요금/크레딧 · 브랜딩 · 통계
+- **영업 담당자 포털(user-web)**: 대시보드 · 거래처 · 영업 기회 · AI 문서 생성 · 웹 에디터 · 문서 보관함 · 메일(발송 이력·수신함·연동·템플릿) · 설정(회사·프로필 · 품목 카탈로그)
+- **관리자 콘솔(admin-web)**: 사이드바·랜딩에서 **진입점을 걷어냈다**(2.0.0). 라우트는 살아 있고 주소로만 들어간다 — 통계·리포트 · 팀원 관리 · 요금/크레딧 · 메일 도메인. 담당자가 실제로 쓰는 **품목 카탈로그·회사 정보는 포털로 옮겼다**(아래 컨벤션 참고).
 - 원본 기획서: Lamina 공유 문서(24화면 / 정책 24개). 요약은 `docs/SPEC.md` 참고.
 
 ## 작업 시작 전 (필독)
@@ -60,6 +60,7 @@ pnpm test:editor-render      # 캔버스·미리보기·PDF 렌더 정합 검증
 pnpm test:table-merge        # 표 셀 병합 순수 함수 검증 (DB 없이 실행)
 pnpm test:block-align        # 다중선택 정렬·분할·이동 순수 함수 검증 (DB 없이 실행)
 pnpm test:editor-cell        # 캔버스 칸 편집 규칙 순수 함수 검증 (DB 없이 실행)
+pnpm test:settings           # 회사·프로필 검증 + 품목 카탈로그 목록 규칙 순수 함수 검증 (DB 없이 실행)
 
 pnpm db:migrate     # 스키마 변경 → 마이그레이션 생성·적용
 pnpm db:seed        # 데모 데이터 시드 (prisma db seed — 명령은 prisma.config.ts 가 정의)
@@ -82,7 +83,9 @@ prisma/
 src/
   app/
     (user)/            # 영업 담당자 포털 — 사이드바 공유 (에디터는 블록 캔버스, _components/ 에 co-locate)
-    (admin)/           # 관리자 콘솔 — 사이드바 레이아웃 공유
+    (admin)/           # 관리자 콘솔 — 사이드바 레이아웃 공유 (진입점 없음: 주소로만 들어간다)
+                     #  잔존: analytics · team/members · billing · settings/mail-domain
+                     #  이전 완료(리다이렉트만 남음): settings/branding · account/profile → /settings/profile
     (auth)/            # 로그인 등 인증 화면 (사이드바 없음)
     api/               # REST API Route Handlers (SQLite 조회 / LLM 호출 / 일부 목업)
                      #  generate · templates · documents/[id]/{versions,revise} 는 실제 LLM 호출
@@ -91,7 +94,7 @@ src/
     page.tsx           # 랜딩 (콘솔 진입)
   components/
     ui/                # shadcn/ui (직접 수정 지양, CLI 로 관리)
-    account/           # 프로필/계정 공용 폼 (profile-form·password-form·profile-tabs, user·admin 공유)
+    account/           # 회사·프로필 공용 폼 (profile-tabs 셸 + profile-form·company-form·password-form)
     email-template/    # 메일 템플릿 공용 폼 다이얼로그 (관리 페이지·발송폼 재사용)
     document/          # 문서 공용 — linkable-document-picker(기회에 연결할 보관함 문서 선택),
                        #   document-preview-dialog(미리보기 iframe + 편집 화면으로 이동)
@@ -113,7 +116,12 @@ src/
     constants.ts         # enum 대체 상수 + 라벨
     format.ts            # 통화/날짜 포맷
     api.ts               # API 응답 헬퍼(ok/fail)
-    nav.ts               # 사이드바 네비게이션 정의 (user/admin)
+    nav.ts               # 사이드바 네비게이션 정의 (user 만 노출 · adminNav 는 잔존 화면용)
+    branding.ts          # 회사 정보(Branding) 검증·정규화·DTO — 사업자번호·연락처는 거래처·담당자와
+                         #   **같은 순수 함수**를 재사용한다. 로고·인감 dataUrl 상한(1MB)도 여기 하나
+    user-profile.ts      # 담당자 개인 정보(이름·직함·연락처) 검증·정규화·DTO
+    catalog.ts           # 품목 카탈로그 목록 조회 조건·정렬 순수 함수 (catalogWhere/catalogOrderBy/
+                         #   catalogSortHref — 다른 목록과 같은 URL 규칙)
     pagination.ts        # 목록 페이지네이션 순수 함수 — page 파싱·구간·번호 목록·href·필터 변경 시 리셋
     validation.ts        # 이메일 수신자 형식 검증·다중 파싱 (VAL_*)
     editor-schema.ts     # 블록 캔버스 문서 모델(contentJson) 파싱·시드 + **공용 순수 함수**:
@@ -419,6 +427,40 @@ src/
 - **지나온 구간은 `stage` 하나로 단정하지 않는다.** 마감된 기회는 어느 단계에서 마감했는지가 활동 이력(ActivityLog)에만 남으므로, `opportunityProgress(stage, history)` 에 이력의 `from`/`to` 를 넘겨 도달 지점을 도출한다(`reachedOpenStage`). 상단(진행 단계)과 하단(이력)이 같은 출처를 봐야 "제안에서 실주했는데 검토/협상까지 지나온 것으로 보이는" 어긋남이 생기지 않는다. 이력을 **새로 조회하지 말고** 화면이 이미 읽은 것을 재사용한다. 이력이 없으면 초기까지만 지나온 것으로 본다(모르면 덜 주장한다).
 - **목록 페이지네이션은 `@/lib/pagination` + `@/components/list-pagination` 을 쓴다.** 페이지는 URL 쿼리(`?page=`)로만 주고받는 **서버 페이지네이션**이며, 페이지 크기는 `LIST_PAGE_SIZE` 상수 하나다. 페이지 UI 는 **1페이지뿐이어도 노출**한다(이전·다음 비활성) — 결과 수에 따라 나타났다 사라지면 표 아래가 들썩이고 이 목록이 페이지로 나뉘는 화면인지도 알 수 없다. **0건일 때만** 감추고 그 자리에 빈 상태 안내를 둔다. 검색·필터를 바꿀 때는 툴바가 `nextListSearch` 로 page 를 1로 되돌린다(3페이지에 머문 채 조건을 좁히면 빈 화면이 뜬다). 총 건수·합계는 **필터를 적용한 전체**를 기준으로 내고, 건수 조회는 목록 조회와 `Promise.all` 로 병렬화한다. 기회 **칸반 보기는 페이지네이션 대상이 아니다** — 전체가 보여야 파이프라인이 성립한다.
 - **목록 행 전체 클릭은 `@/components/list-row-link` 를 쓴다.** `onClick` + `router.push` 로 행을 이동시키지 않는다 — `RowLink` 의 `::after` 덮개가 행을 채우므로 JS 없이 동작하고 키보드 Tab·Enter·새 탭이 그대로 된다(정책 ACC_*). 행에 `ROW_LINK_ROW`, 행 안의 다른 링크·`⋯` 메뉴 칸에 `ROW_LINK_ABOVE` 를 함께 붙인다.
+- **사이드바는 담당자 포털 하나뿐이다** (2.0.0). `userNav` 가 유일한 진입 경로이고, 관리자 콘솔은
+  랜딩·사이드바에서 링크를 걷어냈다 — MVP 에는 인증이 없어(`session.ts` 가 데모 사용자 1명 고정)
+  "관리자"라는 주체를 화면으로 나눌 근거가 없고, 두 콘솔을 나란히 노출하면 담당자가 어느 쪽에서
+  무엇을 고치는지 매번 헷갈린다. **`adminNav` 를 지우지 않는다** — `(admin)/layout.tsx` 가 읽고,
+  잔존 화면(통계·팀원·요금·메일 도메인)은 주소로 들어가면 그대로 동작해야 한다.
+  옮긴 항목은 `adminNav` 에서 **빼고** 옛 라우트는 옮긴 자리로 **리다이렉트**한다 — 같은 폼을 두
+  곳에서 렌더하면 한쪽만 손봤을 때 어느 쪽이 실제로 저장되는지 알 수 없다.
+  **묶음(children)이 있는 항목의 부모 href 는 첫 하위 항목과 같게 둔다** — 묶음 자체를 위한 페이지를
+  새로 만들지 않는다. 그래서 사이드바의 묶음 강조는 부모가 아니라 **하위 항목까지 보고** 판단한다.
+- **품목 카탈로그는 담당자 포털의 `/settings/catalog` 다** (관리자 콘솔 `마스터 데이터 관리` 에서 이전).
+  카탈로그를 쓰는 사람은 견적서를 쓰는 담당자이고, 에디터 품목표의 자동완성(`catalog-combobox`)이
+  보는 데이터도 이것이다 — 고치는 자리와 쓰는 자리가 다른 콘솔에 있을 이유가 없다.
+  옮기면서 **목록 규칙을 그대로 적용했다**: 검색·카테고리·정렬·페이지는 URL 쿼리로만 주고받고
+  (`@/lib/catalog` + `@/lib/pagination` + `@/components/list-sort-header`), 서버가 잘라 내려준다.
+  카테고리 탭은 **필터를 걸지 않은 조직 전체**에서 뽑는다 — 필터 결과에서 뽑으면 하나를 고른 순간
+  나머지 탭이 사라져 되돌아올 길이 없다. 행 전체 클릭(`RowLink`)은 **두지 않았다**: 품목 상세 화면이
+  없어 갈 곳이 없고, 눌러도 아무 일이 없는 덮개는 사용자를 한 번 속인다. 상세가 생기면 그때 붙인다.
+- **설정 값은 "개인이냐 회사냐" 로 나눈다** (설정 7). 직함·연락처는 사람마다 다르므로 `User`
+  (`position`·`phone`), 상호·대표자·사업자등록번호·주소·대표 연락처·로고·인감은 조직 단위이므로
+  `Branding`(`companyName`·`ceoName`·`bizRegNo`·`address`·`phone`·`logoUrl`·`stampUrl`)이다.
+  조직 쪽에 개인 값을 두면 팀원이 늘 때 서로의 값을 덮어쓴다. **같은 항목을 두 탭에 두지 않는다** —
+  문서에 어느 값이 박히는지 알 수 없다. 화면은 `/settings/profile` 의 세 탭
+  (`계정 정보 · 회사 정보 · 보안`) 하나이고 저장은 `PATCH /api/profile` · `PATCH /api/branding` 뿐이다.
+  전부 **선택 입력**이다 — 회사 정보를 아직 채우지 않은 조직도 문서를 만들 수 있어야 한다.
+- **회사·프로필 검증은 새로 만들지 않는다.** 사업자등록번호는 거래처와 같은 `@/lib/account` 의
+  `normalizeBizRegNo`·`isBizRegNo`, 연락처는 담당자와 같은 `@/lib/contact` 의
+  `normalizePhone`·`isPhone`, 이메일은 `@/lib/validation` 의 `isEmail` 이다 — 규칙이 두 벌이 되면
+  같은 값이 화면마다 다르게 저장되고, 번호로 찾거나 중복을 가려낼 방법이 사라진다
+  (`scripts/settings.test.ts` 가 이 경계를 지킨다).
+- **로고·인감은 dataUrl 로 컬럼에 들어간다** — 별도 파일 저장소가 없고, 에디터 이미지 블록도 같은
+  방식이다. 그래서 이미지 상한(`MAX_BRANDING_IMAGE_BYTES` = 1MB)이 곧 DB 행 크기의 상한이며
+  **화면과 서버가 같은 순수 함수(`brandingImageError`)로 판정한다** — 화면에서만 막은 것은 막은 것이
+  아니다(문서 `contentJson` 상한에서 이미 배운 규칙과 같다). base64 길이는 4글자 → 3바이트로
+  되짚어 잰다(문자열 길이를 그대로 재면 33% 더 크게 잡혀 정상 파일이 거절된다).
 - import alias 는 `@/*` = `src/*`.
 - **서버가 읽는 상수는 `"use client"` 파일에서 export 하지 않는다.** 클라이언트 모듈의
   export 는 번들러가 **클라이언트 참조로 바꿔** 놓으므로, 서버 컴포넌트가 import 하면 값이
@@ -523,5 +565,11 @@ Claude(Anthropic Messages API) · GPT(OpenAI Responses API) · Gemini(Google gen
 - **인증 없음**: `src/lib/session.ts` 가 데모 고정 사용자/조직을 반환한다. 실제 인증(NextAuth 등) 도입 시 이 모듈만 교체하면 된다.
 - 일부 쓰기 액션(폼 제출 등)은 `sonner` toast 목업이다. 실제 저장이 필요하면 `/api/*` 를 확장한다.
 - `/api/generate/batch`(폴더 일괄 변환)는 **여전히 데모 목업**이다 — 파일명만 받아 기준본을 복제한다.
+- 품목 카탈로그의 `엑셀 업로드`·`품목 추가` 버튼은 아직 목업이다 (조회·정렬·페이지는 실제 DB).
+- **로고·인감을 PDF·에디터에 반영하는 것은 아직 하지 않았다.** 꽂을 자리는 두 곳이다 —
+  `src/lib/pdf-html.ts` 의 `PdfBranding`(로고는 이미 빈 이미지 블록의 대체값으로 쓰인다. 인감은
+  `stampUrl` 을 타입에 더해 같은 방식으로 내려주면 된다)과 `src/lib/editor-schema.ts` 의
+  `seedTemplate` → `supplier` 블록(현재 `supplierName` 만 시드한다 — 대표자·등록번호·주소를
+  Branding 에서 채우면 공급자 6칸이 비지 않는다).
 - 비밀정보는 `.env`(gitignore). 공유는 `.env.example` 로 한다.
 - Next.js 16 은 breaking changes 가 있다(상단 블록 참고). `params`·`searchParams` 는 **Promise** 이므로 `await` 한다.

@@ -29,7 +29,11 @@ export function AppSidebar({
   const pathname = usePathname();
   const nav = variant === "admin" ? adminNav : userNav;
   const kicker = variant === "admin" ? "관리자 콘솔" : "영업 담당자 포털";
-  // 프로필 설정 경로는 콘솔별로 다르다 (user-web 은 /account/profile 이 admin 과 충돌)
+  /*
+    프로필 설정 경로는 콘솔별로 그대로 둔다. 담당자 포털은 `/settings/profile`(회사·프로필)
+    이고, 관리자 콘솔의 `/account/profile` 은 **그 자리로 보내는 리다이렉트**다 (2.0.0) —
+    프로필 화면을 두 벌 두면 어느 쪽이 실제로 저장되는지 알 수 없다.
+  */
   const profileHref =
     variant === "admin" ? "/account/profile" : "/settings/profile";
   const profileActive =
@@ -66,9 +70,17 @@ export function AppSidebar({
           const active =
             !hasChildren &&
             (pathname === item.href || pathname.startsWith(item.href + "/"));
+          /*
+            묶음 강조는 **하위 항목까지 본다.** 묶음의 부모 href 는 첫 하위 항목과 같게 두므로
+            (`@/lib/nav`), 부모 경로만 비교하면 다른 하위 항목에 있을 때 묶음이 꺼진다 —
+            `메일` 묶음에서 `/settings/email` 을 보고 있으면 부모(`/mail/sent`) 와 접두사가
+            달라 어느 묶음에 있는지 사이드바가 알려주지 못한다.
+          */
           const groupActive =
             hasChildren &&
-            (pathname === item.href || pathname.startsWith(item.href + "/"));
+            [item.href, ...item.children!.map((child) => child.href)].some(
+              (href) => pathname === href || pathname.startsWith(href + "/"),
+            );
           const parentLink = (
             <Link
               href={item.href}
@@ -86,6 +98,8 @@ export function AppSidebar({
             </Link>
           );
           const groupKey = `group:${item.href}`;
+          // 폴더 트리·폴더 추가가 붙는 묶음 (내 문서함 하나뿐이다)
+          const isLibraryGroup = item.href === "/library";
           const groupCollapsed = collapsedBoxes.has(groupKey);
           return (
             <div key={item.href}>
@@ -105,9 +119,16 @@ export function AppSidebar({
                       )}
                     />
                   </button>
-                  <Suspense fallback={null}>
-                    <AddFolderButton />
-                  </Suspense>
+                  {/*
+                    폴더 추가는 **문서 보관함 묶음에만** 붙는다. 묶음이 있으면 무조건 그렸더니
+                    메일·설정 묶음에도 폴더 추가 버튼이 따라 나왔다 — 폴더가 있는 곳은
+                    내 문서함 하나뿐이다(`SidebarFolders` 도 같은 조건으로 붙는다).
+                  */}
+                  {isLibraryGroup ? (
+                    <Suspense fallback={null}>
+                      <AddFolderButton />
+                    </Suspense>
+                  ) : null}
                 </div>
               ) : (
                 parentLink
