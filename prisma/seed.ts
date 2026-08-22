@@ -586,6 +586,18 @@ async function main() {
         unit: "연",
         unitPrice: 2_400_000,
       },
+      // 비활성 품목 1건 — 판매를 끝낸 품목을 **지우지 않고 내려두는** 길이 있다는 것을
+      // 데모에서 보여준다. 지우면 이름만 남은 지난 견적서를 나중에 대조할 수 없다.
+      {
+        orgId: org.id,
+        category: "라이선스",
+        name: "레거시 백업 SW 라이선스",
+        sku: "LIC-BAK-OLD",
+        unit: "연",
+        unitPrice: 1_200_000,
+        description: "판매 종료 — 기존 계약 갱신 대조용으로만 남겨 둡니다",
+        isActive: false,
+      },
     ],
   });
 

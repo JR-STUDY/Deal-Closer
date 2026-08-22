@@ -64,7 +64,7 @@ pnpm test:editor-render      # 캔버스·미리보기·PDF 렌더 정합 검증
 pnpm test:table-merge        # 표 셀 병합 순수 함수 검증 (DB 없이 실행)
 pnpm test:block-align        # 다중선택 정렬·분할·이동 순수 함수 검증 (DB 없이 실행)
 pnpm test:editor-cell        # 캔버스 칸 편집 규칙 순수 함수 검증 (DB 없이 실행)
-pnpm test:settings           # 회사·프로필 검증 + 품목 카탈로그 목록 규칙 순수 함수 검증 (DB 없이 실행)
+pnpm test:settings           # 회사·프로필 검증 + 품목 카탈로그 목록·등록 규칙 순수 함수 검증 (DB 없이 실행)
 
 pnpm db:migrate     # 스키마 변경 → 마이그레이션 생성·적용
 pnpm db:seed        # 데모 데이터 시드 (prisma db seed — 명령은 prisma.config.ts 가 정의)
@@ -124,8 +124,10 @@ src/
     branding.ts          # 회사 정보(Branding) 검증·정규화·DTO — 사업자번호·연락처는 거래처·담당자와
                          #   **같은 순수 함수**를 재사용한다. 로고·인감 dataUrl 상한(1MB)도 여기 하나
     user-profile.ts      # 담당자 개인 정보(이름·직함·연락처) 검증·정규화·DTO
-    catalog.ts           # 품목 카탈로그 목록 조회 조건·정렬 순수 함수 (catalogWhere/catalogOrderBy/
-                         #   catalogSortHref — 다른 목록과 같은 URL 규칙)
+    catalog.ts           # 품목 카탈로그 — 목록 조회 조건·정렬 (catalogWhere/catalogOrderBy/
+                         #   catalogSortHref — 다른 목록과 같은 URL 규칙) + **등록·수정 검증·DTO**
+                         #   (parseCatalogInput/withCatalogDefaults/toCatalogItemDTO ·
+                         #    catalogUsageWhere/catalogDeleteMessage — 삭제 확인창 문구)
     pagination.ts        # 목록 페이지네이션 순수 함수 — page 파싱·구간·번호 목록·href·필터 변경 시 리셋
     calendar.ts          # 대시보드 월 캘린더 순수 함수 (F-302) — month 쿼리 파싱·달 이동 주소 ·
                          #   달 그리드(gridRange/calendarGrid, 로컬 자정 기준) · 칸 접기(foldDayEvents) ·
@@ -572,6 +574,42 @@ src/
   카테고리 탭은 **필터를 걸지 않은 조직 전체**에서 뽑는다 — 필터 결과에서 뽑으면 하나를 고른 순간
   나머지 탭이 사라져 되돌아올 길이 없다. 행 전체 클릭(`RowLink`)은 **두지 않았다**: 품목 상세 화면이
   없어 갈 곳이 없고, 눌러도 아무 일이 없는 덮개는 사용자를 한 번 속인다. 상세가 생기면 그때 붙인다.
+- **품목 등록·수정·삭제는 실제로 저장한다** (2.0.0 · 목업 제거). 라우트는 `POST /api/catalog` ·
+  `PATCH`·`DELETE`·`GET /api/catalog/:id` 이고, 단건 조회는 **조직 범위**(`findFirst({ id, orgId })`)
+  다 — 없는 품목과 남의 품목은 같은 404 다. 검증은 `@/lib/catalog` 의 `parseCatalogInput()`
+  **하나**이고 화면(폼)과 서버가 같은 함수를 지난다(카테고리·품목명 필수, 길이 상한, 단위는
+  비우면 `EA`). **단가 파싱은 `parseIntInput()` 을 재사용한다** — 캔버스·인스펙터와 같은 함수다.
+  파서를 새로 만들면 같은 `1,200,000.5` 가 카탈로그에서만 다르게 저장되고 그 품목을 견적서에
+  꽂는 순간 단가가 갈린다(에디터에서 이미 겪은 사고다). 상한은 **Prisma `Int` = 32비트**라
+  `CATALOG_UNIT_PRICE_MAX` 로 앱이 먼저 막는다 — 안 막으면 드라이버 오류가 그대로 화면에 뜬다.
+  **등록과 수정은 폼 다이얼로그 한 벌**을 공유하고(상세 화면이 없으므로 목록에서 편집한다 —
+  거래처 목록과 같은 골격), 활성 토글만 목록에서 바로 바꾼다. 토글은 `{ isActive }` 하나만
+  보내고 서버가 `withCatalogDefaults()` 로 나머지를 현재 값으로 채운다 — **토글 전용 라우트를
+  만들지 않는다**(기회 상세 인라인 수정과 같은 규칙: 검증이 두 벌이면 제약이 갈린다).
+- **`isActive` 는 "에디터 품목 선택 목록에 뜨는가" 다 — 지우는 대신 내려두는 길이다.** 판매를
+  끝낸 품목을 지우면 이름만 남은 지난 견적서를 나중에 대조할 수 없다. 목록에서는 **기본 필터로
+  감추지 않고** 색만으로도 구분하지 않는다(정책 ACC_*) — 상태 칸의 글자(`활성`/`비활성`)와
+  품목명 앞의 감춤 아이콘 **모양**으로 함께 알린다.
+- **SKU 중복은 막지 않고 알린다.** 스키마에 유니크 제약이 없고(`sku String?`), 앱 검사만으로는
+  ① 동시 요청 두 건이 나란히 통과하고 ② 이미 중복이 저장된 조직에서는 단가만 고치려는 수정까지
+  막힌다 — 없는 제약을 있는 척하는 셈이다. SKU 는 사내 품번·거래처 코드 같은 **외부 식별자**라
+  같은 제품의 단위·옵션별 행이 한 코드를 공유하는 것이 정상이고, 카탈로그를 고르는 유일한 경로
+  (에디터 자동완성)도 **품목명**으로 찾는다. 그래서 저장 응답에 `duplicateSkuCount` 를 실어
+  화면이 toast 로 알린다. 앱 레벨 강제는 **대표 담당자처럼 불변식인 값**에만 쓴다.
+- **품목 삭제는 문서가 있어도 막지 않는다 — 확인창이 결과를 미리 말한다.** 문서의 품목표는
+  카탈로그를 참조하지 않고 담을 때 이름·단가를 **복사**하므로(`contentJson` · `DocumentItem`),
+  지워도 이미 만든 문서의 품목·금액은 그대로다(거래처 삭제를 연관 기회로 막는 것과 다르다 —
+  그쪽은 Cascade 로 기록이 실제로 사라진다). 확인창은 ① **품목명이 같은** 문서가 몇 건인지
+  (`catalogUsageWhere` — 이어 주는 열이 없어 이름으로 센다. 그래서 문구도 "품목명이 같은 문서"
+  라고 적는다. 링크가 있는 척하지 않는다) ② 그래도 금액은 바뀌지 않는다는 사실 ③ 지우는 대신
+  비활성으로 내리는 길을 함께 말한다(문구는 `catalogDeleteMessage()` 한 곳). 문서 수는 **확인창을
+  열 때 한 번만** 가져온다 — 목록 행마다 세면 페이지를 볼 때마다 조회가 10배로 는다.
+- **`엑셀 업로드` 버튼은 걷어냈다** — 누르면 "준비 중입니다 (데모)" toast 만 뜨는 목업이었다.
+  실제 일괄 등록은 열 매핑·미리보기·오류 행 안내에 **중복 정책**(같은 SKU·품목명을 갱신할지
+  건너뛸지)까지 필요한 별개의 기능이고, `@/lib/attachments` 의 엑셀 추출은 **프롬프트용 TSV
+  텍스트**(시트 목록 머리글·병합셀 공백·길이 잘림)라 표로 되짚어 읽기에 맞지 않는다 — 재사용처럼
+  보이지만 실은 파서를 새로 만드는 일이다. 있는 척하는 버튼은 남기지 않는다(수신함에 가짜 메일을
+  채우지 않은 것과 같은 판단). 되살릴 때는 CRUD 와 같은 `parseCatalogInput()` 을 행마다 통과시킨다.
 - **설정 값은 "개인이냐 회사냐" 로 나눈다** (설정 7). 직함·연락처는 사람마다 다르므로 `User`
   (`position`·`phone`), 상호·대표자·사업자등록번호·주소·대표 연락처·로고·인감은 조직 단위이므로
   `Branding`(`companyName`·`ceoName`·`bizRegNo`·`address`·`phone`·`logoUrl`·`stampUrl`)이다.
@@ -693,7 +731,12 @@ Claude(Anthropic Messages API) · GPT(OpenAI Responses API) · Gemini(Google gen
 - **인증 없음**: `src/lib/session.ts` 가 데모 고정 사용자/조직을 반환한다. 실제 인증(NextAuth 등) 도입 시 이 모듈만 교체하면 된다.
 - 일부 쓰기 액션(폼 제출 등)은 `sonner` toast 목업이다. 실제 저장이 필요하면 `/api/*` 를 확장한다.
 - `/api/generate/batch`(폴더 일괄 변환)는 **여전히 데모 목업**이다 — 파일명만 받아 기준본을 복제한다.
-- 품목 카탈로그의 `엑셀 업로드`·`품목 추가` 버튼은 아직 목업이다 (조회·정렬·페이지는 실제 DB).
+- **에디터의 품목 카탈로그 조회에 `isActive` 필터가 없다.** `(user)/editor/[documentId]/page.tsx`
+  와 `(user)/editor/template/[templateId]/page.tsx` 의 `prisma.catalogItem.findMany` 가
+  `where: { orgId }` 만 걸어 **비활성 품목까지** 품목표 자동완성(`catalog-combobox`)에 내려간다
+  (실측: 비활성 품목이 `catalog` prop 에 실려 목록 첫 줄에 떴다). `isActive` 의 뜻이 "선택 목록에
+  뜨지 않는다" 이므로 두 조회에 `isActive: true` 를 더해야 한다 — 에디터 파일은 다른 작업 흐름이
+  소유하고 있어 이 라운드에서 손대지 않았다. 참고로 `GET /api/catalog?active=1` 이 같은 범위를 준다.
 - **로고·인감을 PDF·에디터에 반영하는 것은 아직 하지 않았다.** 꽂을 자리는 두 곳이다 —
   `src/lib/pdf-html.ts` 의 `PdfBranding`(로고는 이미 빈 이미지 블록의 대체값으로 쓰인다. 인감은
   `stampUrl` 을 타입에 더해 같은 방식으로 내려주면 된다)과 `src/lib/editor-schema.ts` 의
