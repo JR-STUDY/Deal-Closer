@@ -40,7 +40,7 @@ export function ModeChoice({
       value: "blank" as GenerateMode,
       icon: FilePlus2,
       label: "빈 문서로 만들기",
-      hint: "지시문만으로 처음부터 구성합니다. 문서 종류는 직접 고르거나 AI 에게 맡깁니다.",
+      hint: "지시문만으로 처음부터 구성합니다. 어떤 문서인지도 지시문을 보고 AI 가 판단합니다.",
       disabled: false,
     },
     {
