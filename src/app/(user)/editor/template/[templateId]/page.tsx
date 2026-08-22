@@ -1,7 +1,12 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
-import { parseContentJson, seedTemplate } from "@/lib/editor-schema";
+import {
+  parseContentJson,
+  seedTemplate,
+  withCompanyDefaults,
+} from "@/lib/editor-schema";
+import { toCompanyProfile } from "@/lib/branding";
 import { DocumentEditorLoader } from "../../_components/document-editor-loader";
 
 /**
@@ -45,16 +50,15 @@ export default async function TemplateEditorPage({
 
   if (!template) notFound();
 
-  // 아직 AI 세팅이 안 된 양식은 문서와 같은 기본 문서에서 시작한다
-  const initialDoc =
+  const company = toCompanyProfile(branding, org.name);
+
+  // 아직 AI 세팅이 안 된 양식은 문서와 같은 기본 문서에서 시작한다.
+  // 회사 정보 반영도 문서 편집과 같은 함수를 지난다 (화면 = 인쇄).
+  const initialDoc = withCompanyDefaults(
     parseContentJson(template.contentJson) ??
-    seedTemplate({
-      type: template.type,
-      clientName: "",
-      supplierName: branding?.companyName ?? org.name,
-      logoUrl: branding?.logoUrl ?? null,
-      items: [],
-    });
+      seedTemplate({ type: template.type, clientName: "", company, items: [] }),
+    company,
+  );
 
   return (
     <DocumentEditorLoader

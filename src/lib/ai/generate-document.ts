@@ -23,8 +23,6 @@ import { buildGenerateContent, SYSTEM_GENERATE, type GenerateContentInput } from
 import { documentDate } from "./today";
 
 export type GenerateDocumentInput = Omit<GenerateContentInput, "today"> & {
-  /** 브랜딩 로고 (양식이 없을 때 새로 조립하는 문서에 사용) */
-  logoUrl?: string | null;
   /** 사용자가 UI 에서 고른 모델. 없으면 기본값(AI_MODEL_GENERATE) */
   model?: string | null;
 };
@@ -61,11 +59,11 @@ export async function generateDocument(
 
   // 양식 본문이 있으면 그 레이아웃을 베이스로 값만 채운다 (F-212)
   const base = parseContentJson(input.template?.contentJson);
-  const editorDoc = specToEditorDoc(spec, {
-    base,
-    supplierName: input.supplierName,
-    logoUrl: input.logoUrl,
-  });
+  /*
+   * 회사 정보는 프롬프트(무엇을 쓸지)와 조립(어디에 넣을지)이 **같은 값**을 봐야 한다 —
+   * 갈라지면 "AI 에게 준 공급자" 와 "문서에 박힌 공급자" 가 달라진다.
+   */
+  const editorDoc = specToEditorDoc(spec, { base, company: input.company });
 
   return {
     spec,

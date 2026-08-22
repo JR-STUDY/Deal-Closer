@@ -37,8 +37,39 @@ contentJson ─ parseContentJson ─▶ EditorDoc
 | 필드 | 반영 위치 |
 |---|---|
 | `primaryColor` | 품목표 헤더 밑줄, 합계 행 강조색 |
-| `logoUrl` | 비어 있는 이미지 블록의 대체 이미지 |
-| `companyName` | PDF 제목 메타데이터, 공급자 블록의 **빈** "상호" 값 |
+| `companyName` | PDF 제목 메타데이터 + 아래 회사 정보 반영 |
+| `logoUrl` · `stampUrl` | 역할이 `logo`·`stamp` 인 **빈** 이미지 블록 |
+| `ceoName` · `bizRegNo` · `address` · `phone` | 공급자 블록의 **빈** 칸 (역할로 지목) |
+
+### 회사 정보 반영은 문서 단계에서 한 번만 한다
+
+판정은 `editor-schema.ts` 의 `withCompanyDefaults(doc, company)` **순수 함수 하나**이고,
+`buildDocumentHtml` 이 렌더 직전에 그 함수를 지난다. **에디터 페이지도 같은 함수를 지난다**
+(`src/app/(user)/editor/**/page.tsx`).
+
+예전에는 이 폴백이 인쇄 렌더러 안에 흩어져 있었다 — `renderFieldTable(props, cls, fallbacks)`
+가 빈 `상호` 를 메우고 `renderImage` 가 빈 이미지에 로고를 넣었다. 그러면 **캔버스에는 빈 칸,
+PDF 에만 값**이 되어 사용자가 화면에서 확인할 수 없는 내용이 고객에게 발송된다. 지금은
+렌더러가 블록에 담긴 값만 그리고, 값을 정하는 곳은 위 함수 하나다.
+
+지키는 선은 넷이다.
+
+- **사용자가 적은 값은 덮지 않는다** — 비어 있는 칸만 채운다.
+- **역할로 지목한다** (`MetaFieldRole` · `ImageRole`). `alt`·라벨 문자열 비교는 사용자가
+  라벨을 고치는 순간 끊긴다. 역할이 **없는** 빈 이미지 블록에는 아무것도 넣지 않는다 —
+  예전에는 빈 이미지면 무엇이든 로고가 찍혀서, 자리만 잡아 둔 칸에 로고가 인쇄됐다.
+- **블록을 만들지 않는다** — 인감 블록을 놓는 것은 시드(`seedTemplate` ·
+  `buildDocFromSpec`)의 일이고, 인감이 등록되지 않은 조직에는 **블록 자체를 만들지
+  않는다**(빈 이미지 블록은 회색 자리표시자가 되어 견적서에 남는다).
+- 바뀔 것이 없으면 **같은 객체**를 돌려준다 (불필요한 리렌더·미저장 표시 방지).
+
+인감의 기본 자리는 `STAMP_BOX`(x 684 · y 126 · 68×68) — 공급자 블록 오른쪽 위에 겹친다.
+겹침 순서는 `reorderZ(..., "front")` 로 정한다(z 를 손으로 계산하지 않는다).
+`Branding` 에 이메일 컬럼이 없어 공급자 블록의 `이메일` 칸은 **라벨만** 두고 비워 둔다.
+
+브랜딩 조립은 `toPdfBranding(record, fallbackCompanyName)` 한 곳에서 한다 — `PdfBranding`
+의 필드를 모두 **필수(nullable)** 로 둔 이유가 이것이다(옵셔널이면 호출측이 하나를
+빠뜨려도 타입 검사가 통과하고 런타임에만 값이 사라진다).
 
 ## 실행 환경 요구사항
 

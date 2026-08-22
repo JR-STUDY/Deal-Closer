@@ -7,6 +7,7 @@ import { setupTemplate } from "@/lib/ai/setup-template";
 import { aiErrorResponse } from "@/lib/ai/http";
 import { resolveRequestedModel } from "@/lib/ai/model-access";
 import { TEMPLATE_SELECT } from "@/lib/template";
+import { toCompanyProfile } from "@/lib/branding";
 import {
   CREDITS_PER_TEMPLATE_SETUP,
   DOCUMENT_TYPES,
@@ -114,8 +115,7 @@ export async function POST(req: NextRequest) {
       name: name || "표준 양식",
       documentType,
       sourceFile: prepared,
-      supplierName: branding?.companyName ?? user.name,
-      logoUrl: branding?.logoUrl ?? null,
+      company: toCompanyProfile(branding, user.name),
       model: resolved.model,
     });
   } catch (error) {

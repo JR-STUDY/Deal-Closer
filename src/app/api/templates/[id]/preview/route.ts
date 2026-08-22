@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { parseContentJson, seedTemplate } from "@/lib/editor-schema";
-import { buildDocumentHtml } from "@/lib/pdf-html";
+import { buildDocumentHtml, toPdfBranding } from "@/lib/pdf-html";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -32,26 +32,20 @@ export async function GET(_req: NextRequest, { params }: Params) {
     });
   }
 
+  const pdfBranding = toPdfBranding(branding, org.name);
   const doc =
     parseContentJson(template.contentJson) ??
     seedTemplate({
       type: template.type,
       clientName: "",
-      supplierName: branding?.companyName ?? org.name,
-      logoUrl: branding?.logoUrl ?? null,
+      company: pdfBranding,
       items: [],
     });
 
   const html = buildDocumentHtml({
     doc,
     title: template.name,
-    branding: branding
-      ? {
-          companyName: branding.companyName,
-          logoUrl: branding.logoUrl,
-          primaryColor: branding.primaryColor,
-        }
-      : null,
+    branding: pdfBranding,
   });
 
   return new Response(html, {

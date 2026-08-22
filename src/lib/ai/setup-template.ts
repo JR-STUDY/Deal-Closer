@@ -30,7 +30,6 @@ import {
 import { documentDate } from "./today";
 
 export type SetupTemplateInput = Omit<TemplateSetupContentInput, "today"> & {
-  logoUrl?: string | null;
   /** 사용자가 UI 에서 고른 모델. 없으면 기본값(AI_MODEL_GENERATE) */
   model?: string | null;
 };
@@ -60,11 +59,7 @@ export async function setupTemplate(
 
   const spec = parseTemplateSpec(result.value, input.documentType ?? "QUOTE");
   // 양식은 항상 새로 조립한다 (베이스가 될 기존 양식이 없다)
-  const editorDoc = specToEditorDoc(spec, {
-    base: null,
-    supplierName: input.supplierName,
-    logoUrl: input.logoUrl,
-  });
+  const editorDoc = specToEditorDoc(spec, { base: null, company: input.company });
 
   return {
     spec,

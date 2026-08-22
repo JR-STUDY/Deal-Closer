@@ -88,6 +88,61 @@ export function toBrandingFormValues(
   };
 }
 
+/**
+ * 문서의 **공급자 자리**에 박히는 회사 정보 (문서 시드·렌더·AI 조립이 함께 쓴다).
+ *
+ * `BrandingFormValues`(폼 상태)·`BrandingInput`(저장값)과 따로 두는 이유는 **필수 여부**다.
+ * 문서에 찍힐 때는 상호가 반드시 있어야 하고(비면 공급자가 누구인지 알 수 없다), 회사 정보를
+ * 아직 채우지 않은 조직도 문서를 만들 수 있어야 하므로 호출측이 조직명·사용자명으로
+ * 폴백을 **한 번** 정해 넘긴다(`toCompanyProfile`). 그래서 `companyName` 만 `string` 이다.
+ *
+ * 나머지가 옵셔널인 것은 "없으면 그 칸을 비워 둔다" 를 타입으로 말하기 위해서다 —
+ * 빈 문자열과 `null` 을 호출측마다 다르게 정하지 않는다.
+ */
+export type CompanyProfile = {
+  /** 상호 — 유일한 필수 값 (폴백은 호출측이 정한다) */
+  companyName: string;
+  ceoName?: string | null;
+  bizRegNo?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  logoUrl?: string | null;
+  stampUrl?: string | null;
+};
+
+/** `toCompanyProfile` 이 받는 Prisma `Branding` 행의 부분집합 */
+export type BrandingCompanyRecord = {
+  companyName: string | null;
+  ceoName: string | null;
+  bizRegNo: string | null;
+  address: string | null;
+  phone: string | null;
+  logoUrl: string | null;
+  stampUrl: string | null;
+};
+
+/**
+ * Prisma 레코드(또는 없음) → 문서용 회사 정보.
+ *
+ * **상호 폴백을 정하는 곳은 여기 하나다.** 예전에는 호출측마다
+ * `branding?.companyName ?? org.name` 을 손으로 적었고, 같은 화면에서 어떤 경로는
+ * 조직명·어떤 경로는 사용자명으로 폴백해 문서마다 공급자 이름이 달라졌다.
+ */
+export function toCompanyProfile(
+  record: BrandingCompanyRecord | null | undefined,
+  fallbackCompanyName: string,
+): CompanyProfile {
+  return {
+    companyName: record?.companyName?.trim() || fallbackCompanyName,
+    ceoName: record?.ceoName ?? null,
+    bizRegNo: record?.bizRegNo ?? null,
+    address: record?.address ?? null,
+    phone: record?.phone ?? null,
+    logoUrl: record?.logoUrl ?? null,
+    stampUrl: record?.stampUrl ?? null,
+  };
+}
+
 /** 검증을 통과한 회사 정보 (빈 값은 null — 컬럼이 모두 optional 이다) */
 export type BrandingInput = {
   companyName: string | null;

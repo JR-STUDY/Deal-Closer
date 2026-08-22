@@ -139,7 +139,10 @@ src/
                          #   formulaError(수식이 조용히 버리는 글자를 알린다) ·
                          #   reorderZ/reorderZMany(겹침 순서 1..n 정규화 · 묶음째) ·
                          #   tableLayout/normalizeMerges(셀 병합) ·
-                         #   textFormat(서식 기본값) · FONT_FAMILIES(화면·인쇄 공용 글꼴)
+                         #   textFormat(서식 기본값) · FONT_FAMILIES(화면·인쇄 공용 글꼴) ·
+                         #   withCompanyDefaults(빈 공급자 칸·빈 로고·빈 인감을 회사 정보로 —
+                         #     화면·인쇄가 함께 지나는 단일 기준) · companyMetaValues ·
+                         #   STAMP_BOX(인감 기본 자리) · supplierBlockHeight
     block-align.ts       # 다중선택 정렬·분할·이동 **규칙** 순수 함수 — selectionBounds ·
                          #   alignBlocks(바운딩 박스 기준) · distributeBlocks(양 끝 고정) ·
                          #   translateBlocks(묶음째 클램프) · blocksInRect(마퀴 교차 판정)
@@ -178,7 +181,10 @@ src/
     signature.ts         # 메일 서명 HTML 판별·미리보기 문서·검증
     mail-domain.ts       # 팀 발신 도메인 검증·팀 주소 조합·발신 신원 해석
     mailer.ts            # 메일 전송 어댑터(server-only, Resend) — 검증·재시도·개발 모드 건너뜀
-    pdf-html.ts          # PDF 인쇄용 HTML 생성 — 블록 좌표 재현·브랜딩·이스케이프
+    branding.ts          # 회사 정보 검증·정규화·DTO (설정 7) + **CompanyProfile** ·
+                         #   toCompanyProfile(상호 폴백을 정하는 유일한 곳)
+    pdf-html.ts          # PDF 인쇄용 HTML 생성 — 블록 좌표 재현·브랜딩·이스케이프.
+                         #   PdfBranding = CompanyProfile + primaryColor · toPdfBranding
     pdf.ts               # contentJson → PDF 바이트(server-only, puppeteer-core) → docs/PDF-RENDERING.md
     account.ts           # 거래처 검증·정규화(사업자번호)·DTO·목록 조회 조건 (F-101·102·103)
                          #   담당자는 다루지 않는다 — contact.ts 로 분리했다 (거래처-8)
@@ -374,6 +380,28 @@ src/
   `parseContentJson` 이 읽으면서 라벨로 추정해 채우고(음수 z 치유와 같은 선례) 다음 저장에 남는다.
   AI 조립부는 값 힌트(`spec.clientName`·브랜딩 회사명)로 배정한다. 조회는 `findMetaField()`
   하나이고 라벨 매칭은 역할이 없는 문서를 위한 **폴백일 뿐**이다.
+  **역할 조각은 역할마다 여러 개**이고 겹치면 **긴 조각이 이긴다**(`대표번호` 는 `대표`
+  보다 구체적이라 전화가 이긴다). 선언 순서에 맡기면 조각을 하나 더할 때마다 기존
+  판정이 조용히 뒤집힌다. 후보는 **블록별로 좁힌다**(`metaRolesFor`) — 거래처 블록의
+  `주소` 칸이 공급자 주소 역할을 차지하면 회사 주소가 거래처 자리에 채워진다.
+- **회사 정보(공급자 칸·로고·인감)는 `withCompanyDefaults()` 한 곳에서 채운다** (설정 7).
+  회사 정보는 문서의 **공급자 자리**에 그대로 박히는 값인데(상호·대표자·사업자등록번호
+  ·주소·대표 연락처·로고·인감), 예전에는 폴백이 **인쇄 렌더러 안에만** 있어서 캔버스에는
+  빈 칸이 보이는데 PDF 에만 값이 찍혔다 — 사용자가 화면에서 확인할 수 없는 내용이 고객에게
+  발송된다. 지금은 규칙이 문서 한 단계 위에 있고 **에디터 페이지·미리보기·PDF 가 같은
+  함수를 지난다.** 렌더러는 블록에 담긴 값만 그린다.
+  지키는 선은 넷이다. ① **적힌 값은 덮지 않는다**(빈 칸만 채운다), ② **역할로 지목한다**
+  (`MetaFieldRole` · 이미지의 `ImageRole`) — 역할 **없는** 빈 이미지 블록에는 아무것도
+  넣지 않는다(예전에는 빈 이미지면 무엇이든 로고가 찍혀 자리만 잡아 둔 칸에 로고가
+  인쇄됐다), ③ **블록을 만들지 않는다** — 블록을 놓는 것은 시드(`seedTemplate` ·
+  `buildDocFromSpec`)의 일이고, **인감이 등록되지 않은 조직에는 인감 블록 자체를 만들지
+  않는다**(빈 이미지 블록은 회색 자리표시자가 되어 견적서에 남는다), ④ 바뀔 것이 없으면
+  **같은 객체**를 돌려준다.
+  인감 자리는 `STAMP_BOX` 이고 겹침 순서는 `reorderZ(..., "front")` 로 정한다 —
+  z 를 손으로 계산하지 않는다. `Branding` 에 이메일 컬럼이 없으므로 공급자 블록의
+  `이메일` 칸은 **라벨만 두고 비워 둔다**(대표 연락처나 사용자 이메일을 억지로 넣지 않는다).
+  상호 폴백(조직명·사용자명)을 정하는 곳은 `toCompanyProfile()` 하나다 — 호출측마다
+  적으면 같은 조직의 문서가 경로에 따라 다른 공급자 이름을 갖는다.
 - **화면에서만 막은 것은 막은 것이 아니다 — 서버가 다시 판정한다.** 이미지 1MB 상한은
   인스펙터에만 있었고 서버는 `contentJson` 을 그대로 저장했다(이미지는 `dataUrl` 로 본문
   안에 들어간다). 본문 전체에 `MAX_CONTENT_JSON_BYTES` 상한을 두고 문서·양식 PATCH 가
