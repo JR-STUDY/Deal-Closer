@@ -269,7 +269,14 @@ export async function POST(req: NextRequest) {
         : null,
       // 회사 정보는 통째로 넘긴다 — 프롬프트(무엇을 쓸지)와 조립(어디에 넣을지)이
       // 같은 값을 봐야 한다. 상호 폴백을 정하는 곳도 `toCompanyProfile` 하나다
-      company: toCompanyProfile(branding, user.name),
+      /*
+        폴백은 **조직명**이다 — 공급자는 조직이지 사람이 아니다. 예전에는 여기만
+        `user.name` 이었고 에디터·미리보기·PDF 는 `org.name` 이라, 회사명을 비워 둔 조직에서
+        **AI 로 만든 문서는 공급자 상호가 담당자 이름**(`김레인`)으로 굳고 시드로 열린 문서는
+        조직명(`RAINMAKER Demo`)이 되어, 같은 조직의 문서가 경로에 따라 다른 상호를 주장했다.
+        조립이 값을 `contentJson` 에 써 넣으므로 나중에 회사명을 채워도 그 문서는 고쳐지지 않는다.
+      */
+      company: toCompanyProfile(branding, user.org.name),
       model: resolved.model,
     });
   } catch (error) {
