@@ -20,13 +20,16 @@ export async function PATCH(
 ) {
   const [{ id }, org] = await Promise.all([params, getCurrentOrg()]);
 
-  const preset = await prisma.promptPreset.findFirst({
-    where: { id, orgId: org.id },
-    select: { id: true },
-  });
+  // 본문 파싱은 조회와 독립이다 — 형제 목록은 404 를 지난 뒤에만 읽는다(없는 예시에
+  // 헛조회를 더하지 않는다)
+  const [preset, body] = await Promise.all([
+    prisma.promptPreset.findFirst({
+      where: { id, orgId: org.id },
+      select: { id: true },
+    }),
+    req.json().catch(() => null),
+  ]);
   if (!preset) return fail("예시를 찾을 수 없습니다.", 404);
-
-  const body = await req.json().catch(() => null);
 
   // 자기 자신은 중복 검사에서 뺀다 — 문구를 그대로 두고 순서만 고칠 수도 있다
   const siblings = await prisma.promptPreset.findMany({

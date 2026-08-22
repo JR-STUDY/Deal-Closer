@@ -30,8 +30,11 @@ export async function GET() {
 
 /** 예시 추가 */
 export async function POST(req: NextRequest) {
-  const org = await getCurrentOrg();
-  const body = await req.json().catch(() => null);
+  // 세션 조회와 본문 파싱은 서로 독립이다 (REACT_BEST_PRACTICES: 독립 조회는 병렬화)
+  const [org, body] = await Promise.all([
+    getCurrentOrg(),
+    req.json().catch(() => null),
+  ]);
 
   // 중복·개수 판정에 쓸 현재 목록을 먼저 읽는다 (같은 트랜잭션이 아니어도 되는 이유:
   // 예시가 하나 더 늘거나 같은 문구가 잠깐 겹치는 것은 데이터를 망가뜨리지 않는다)

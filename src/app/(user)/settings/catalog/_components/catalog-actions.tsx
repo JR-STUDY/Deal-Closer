@@ -37,7 +37,11 @@ export function CatalogActions({ categories }: { categories: string[] }) {
           categories={categories}
           title="새 품목 등록"
           description="카테고리와 품목명만 입력하시면 등록됩니다. 등록하시면 견적서 품목표에서 바로 고를 수 있습니다."
-          onSaved={() => router.refresh()}
+          // 닫기를 먼저, 새로 고침을 나중에 (`catalog-row-actions` 주석 참고)
+          onSaved={() => {
+            setIsCreating(false);
+            router.refresh();
+          }}
           onClose={() => setIsCreating(false)}
         />
       ) : null}

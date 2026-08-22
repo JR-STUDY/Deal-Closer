@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -52,7 +52,6 @@ export function ProfileTabs({
   roleLabel,
   sections,
 }: ProfileTabsProps) {
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   /** 모르는 값·없는 값은 첫 탭으로 떨어뜨린다 (캘린더의 잘못된 `month` 와 같은 처리) */
   const requested = searchParams.get("tab");
@@ -63,7 +62,12 @@ export function ProfileTabs({
   const selectTab = (value: string) => {
     const next = new URLSearchParams(searchParams);
     next.set("tab", value);
-    window.history.replaceState(null, "", `${pathname}?${next}`);
+    /*
+      **쿼리만 있는 상대 주소**를 쓴다 — 현재 경로를 기준으로 해석되므로 `usePathname()`
+      이 필요 없다. 경로는 핸들러에서만 쓸 값인데 렌더 중에 훅으로 읽으면 이 컴포넌트가
+      경로 변화까지 구독한다 (react-doctor `rerender-defer-reads-hook`).
+    */
+    window.history.replaceState(null, "", `?${next}`);
   };
   /*
     폭은 `max-w-5xl` 이다 — `회사 정보` 탭이 3열(입력 2열 + 미리보기) 격자를 쓰므로
