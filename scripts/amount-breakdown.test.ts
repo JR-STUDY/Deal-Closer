@@ -32,7 +32,7 @@ function unknown() {
   return { kind: "unknown" };
 }
 
-type Summary = { label: string; formula: string };
+type Summary = { label: string; formula: string; isTotal?: boolean };
 type Table = {
   rows: { quantity: number; unitPrice: number }[];
   summaries: Summary[];
@@ -257,6 +257,51 @@ check(
   amountBreakdown(PRESET, 92_000_000),
   unknown(),
   "본문에서 다시 계산한 총계가 넘겨받은 금액과 다르면 그 내역은 화면의 숫자를 설명하지 못한다",
+);
+
+/*
+ * 총계 행이 **마지막이 아닌** 문서 — 라벨과 나열이 표식을 따라간다.
+ *
+ * 예전에는 이 모듈이 "마지막 행이 총계" 라고 스스로 판단했다. 그러면 큰 글씨 금액
+ * (`itemTableGrandTotal` = 표식 행)과 내역의 `totalLabel`(마지막 행)이 **서로 다른 행**을
+ * 가리켜, 화면이 문서가 말하지 않은 금액 설명을 붙인다.
+ */
+const MARKED = docJson({
+  rows: ROWS,
+  summaries: [
+    { label: "공급가액", formula: "subtotal", isTotal: true },
+    { label: "부가세 (10%)", formula: "subtotal * 0.1" },
+  ],
+});
+check(
+  amountBreakdown(MARKED, 10_000_000),
+  {
+    kind: "rows",
+    totalLabel: "공급가액",
+    lines: [{ id: "sum-0-1", label: "부가세 (10%)", value: 1_000_000 }],
+    hidden: [],
+  },
+  "총계 표식이 앞줄에 있으면 그 행이 totalLabel 이고 나머지가 나열된다",
+);
+// 표식이 없는 예전 문서는 마지막 행이 총계다 (치유) — 위 문서의 금액과 다르다
+check(
+  amountBreakdown(
+    docJson({
+      rows: ROWS,
+      summaries: [
+        { label: "공급가액", formula: "subtotal" },
+        { label: "부가세 (10%)", formula: "subtotal * 0.1" },
+      ],
+    }),
+    1_000_000,
+  ),
+  {
+    kind: "rows",
+    totalLabel: "부가세 (10%)",
+    lines: [{ id: "sum-0-0", label: "공급가액", value: 10_000_000 }],
+    hidden: [],
+  },
+  "표식이 없으면 마지막 행이 총계다 — 예전 문서의 금액 해석을 바꾸지 않는다",
 );
 
 // 파싱 실패가 `부가세 별도`(subtotal) 로 새지 않는지 못박는다 — 근거 없는 주장이 된다

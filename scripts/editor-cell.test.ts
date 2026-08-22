@@ -300,6 +300,28 @@ check(
   "표시값을 되돌려 써도 같은 정수가 된다 (₩·쉼표를 걷어낸다)",
 );
 
+/*
+ * 소수점이 섞인 입력이 값을 **부풀리지 않는다**.
+ * 예전에는 숫자 아닌 글자를 지우는 방식이라 `1200000.5` → `12000005`(10배!)였고,
+ * 인스펙터(`Math.trunc(Number(v))`)와 답이 갈렸다. 지금은 `parseIntInput` 하나다.
+ */
+check(
+  (
+    writeCell(itemBlock(), { kind: "item", row: 0, field: "unitPrice" }, "1200000.5")
+      .props as BlockPropsMap["itemTable"]
+  ).rows[0].unitPrice,
+  1_200_000,
+  "소수점 뒤는 버린다 — 지우면 단가가 10배가 되고 부가세·합계까지 어긋난다",
+);
+check(
+  (
+    writeCell(itemBlock(), { kind: "item", row: 0, field: "quantity" }, "2.5")
+      .props as BlockPropsMap["itemTable"]
+  ).rows[0].quantity,
+  2,
+  "수량의 소수점도 버린다 (25 가 되면 금액이 10배다)",
+);
+
 // ─────────────────── ⑥ sameCell ───────────────────
 
 ok(sameCell({ kind: "cell", r: 1, c: 2 }, { kind: "cell", r: 1, c: 2 }), "같은 좌표는 같다");

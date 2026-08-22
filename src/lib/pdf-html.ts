@@ -18,6 +18,7 @@ import {
   pageCount,
   tableLayout,
   textFormat,
+  totalSummaryRow,
   FONT_FAMILIES,
   type Align,
   type Block,
@@ -287,18 +288,24 @@ function renderItemTable(props: BlockPropsMap["itemTable"]): string {
     })
     .join("");
 
-  // 요약(수식) 행이 있으면 그것이 합계를 대신한다 — 화면 렌더와 동일한 우선순위.
+  /*
+   * 요약(수식) 행이 있으면 그것이 합계를 대신한다 — 화면 렌더와 동일한 우선순위.
+   * 강조(`total` 클래스)는 **총계 표식이 붙은 행**에 준다. 예전 CSS 는
+   * `tfoot tr:last-child` 를 굵게 칠했는데, 그것은 "마지막 행이 총계" 라는 옛 규약을
+   * 인쇄 쪽에 한 번 더 적어 둔 것이라 표식과 어긋날 수 있었다.
+   */
+  const totalRowId = totalSummaryRow(props.summaryRows)?.id ?? null;
   const footRows =
     summaries.length > 0
-      ? summaries.map(
-          ({ row, value }) =>
-            `<tr><td class="label" colspan="${labelSpan}">${escapeHtml(
-              row.label,
-            )}</td><td class="num">${escapeHtml(formatKRW(value))}</td></tr>`,
-        )
+      ? summaries.map(({ row, value }) => {
+          const cls = row.id === totalRowId ? ' class="total"' : "";
+          return `<tr${cls}><td class="label" colspan="${labelSpan}">${escapeHtml(
+            row.label,
+          )}</td><td class="num">${escapeHtml(formatKRW(value))}</td></tr>`;
+        })
       : props.showTotal
         ? [
-            `<tr><td class="label" colspan="${labelSpan}">합계</td><td class="num">${escapeHtml(
+            `<tr class="total"><td class="label" colspan="${labelSpan}">합계</td><td class="num">${escapeHtml(
               formatKRW(calcItemTableTotal(rows)),
             )}</td></tr>`,
           ]
@@ -462,7 +469,7 @@ body{color:${PRINT_COLORS.text};font-family:${FONT_FAMILIES.sans};-webkit-print-
 .blk-items .name{font-weight:500}
 .blk-items .desc{font-size:11px;color:var(--muted-fg)}
 .blk-items tfoot .label{text-align:right}
-.blk-items tfoot tr:last-child{font-weight:600;color:var(--brand)}
+.blk-items tfoot tr.total{font-weight:600;color:var(--brand)}
 .blk-divider{display:flex;align-items:center;justify-content:center;width:100%;height:100%}
 .blk-image{display:block;width:100%;height:100%}
 `.trim();

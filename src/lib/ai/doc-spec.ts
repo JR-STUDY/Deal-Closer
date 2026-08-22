@@ -16,6 +16,7 @@ import {
   createBlock,
   uid,
   itemTableGrandTotal,
+  normalizeSummaryRows,
   type Block,
   type BlockPropsMap,
   type EditorDoc,
@@ -508,11 +509,18 @@ function fillItemTableBlock(block: Block, spec: DocSpec): void {
     }));
   }
   if (spec.summaryRows.length > 0) {
-    props.summaryRows = spec.summaryRows.map((r) => ({
-      id: uid(),
-      label: r.label,
-      formula: r.formula,
-    }));
+    /*
+     * 총계 표식을 **여기서 굳힌다** (마지막 행 = 프롬프트가 지시한 `합계 (VAT 포함)`).
+     * 모델은 표식을 만들지 않으므로, 굳혀 두지 않으면 사용자가 나중에 요약행을 하나
+     * 더할 때 문서 금액이 그 행으로 옮겨간다.
+     */
+    props.summaryRows = normalizeSummaryRows(
+      spec.summaryRows.map((r) => ({
+        id: uid(),
+        label: r.label,
+        formula: r.formula,
+      })),
+    );
   }
   block.h = itemTableHeight(props.rows.length, (props.summaryRows ?? []).length);
 }
@@ -742,11 +750,14 @@ export function buildDocFromSpec(
       quantity: it.quantity,
       unitPrice: it.unitPrice,
     }));
-    props.summaryRows = spec.summaryRows.map((r) => ({
-      id: uid(),
-      label: r.label,
-      formula: r.formula,
-    }));
+    // 총계 표식은 마지막 행(프롬프트가 지시한 `합계 (VAT 포함)`)에 굳힌다
+    props.summaryRows = normalizeSummaryRows(
+      spec.summaryRows.map((r) => ({
+        id: uid(),
+        label: r.label,
+        formula: r.formula,
+      })),
+    );
     itemTable.h = itemTableHeight(props.rows.length, props.summaryRows.length);
     blocks.push(itemTable);
     y += itemTable.h + 24;
