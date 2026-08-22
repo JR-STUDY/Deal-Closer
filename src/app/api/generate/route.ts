@@ -11,6 +11,7 @@ import type { PreparedFile } from "@/lib/ai/content";
 import { applyDocumentLinked } from "@/lib/opportunity-stage";
 import { syncOpportunityAmount } from "@/lib/opportunity-amount";
 import { primaryContact } from "@/lib/contact";
+import { toCompanyProfile } from "@/lib/branding";
 import {
   CREDITS_PER_GENERATION,
   DOCUMENT_TYPES,
@@ -266,8 +267,9 @@ export async function POST(req: NextRequest) {
             memo: opportunity.memo,
           }
         : null,
-      supplierName: branding?.companyName ?? user.name,
-      logoUrl: branding?.logoUrl ?? null,
+      // 회사 정보는 통째로 넘긴다 — 프롬프트(무엇을 쓸지)와 조립(어디에 넣을지)이
+      // 같은 값을 봐야 한다. 상호 폴백을 정하는 곳도 `toCompanyProfile` 하나다
+      company: toCompanyProfile(branding, user.name),
       model: resolved.model,
     });
   } catch (error) {

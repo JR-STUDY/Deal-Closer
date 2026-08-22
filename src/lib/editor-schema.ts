@@ -4,6 +4,7 @@
  * (서버·클라이언트 공용 순수 모듈 — server-only import 금지)
  */
 
+import type { CompanyProfile } from "./branding";
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "./constants";
 
 export const A4 = { w: 794, h: 1123 } as const; // A4 @96dpi(px)
@@ -173,7 +174,14 @@ export type CatalogOption = {
  * 옵셔널이다 — 예전 `contentJson` 에는 없으므로 `parseContentJson` 이 라벨로 추정해
  * 채워 주고(치유), 다음 저장에 함께 남는다. 필수로 만들면 예전 문서가 통째로 어긋난다.
  */
-export type MetaFieldRole = "clientName" | "supplierName";
+export type MetaFieldRole =
+  | "clientName"
+  | "supplierName"
+  | "supplierCeoName"
+  | "supplierBizRegNo"
+  | "supplierAddress"
+  | "supplierPhone"
+  | "supplierEmail";
 
 export type MetaField = {
   id: string;
@@ -183,11 +191,85 @@ export type MetaField = {
   role?: MetaFieldRole;
 };
 
-/** 역할별로 예전 문서에서 라벨을 추정할 때 쓰는 조각 (치유·폴백 전용) */
-const ROLE_LABEL_HINT: Record<MetaFieldRole, string> = {
-  clientName: "고객사",
-  supplierName: "상호",
+/**
+ * 역할별로 라벨을 추정할 때 쓰는 조각 (치유·폴백 전용).
+ *
+ * **역할마다 여러 조각을 둔다.** 라벨을 쓰는 주체가 둘이기 때문이다 — 사용자가 캔버스에서
+ * 고칠 수도 있고(`사업자등록번호`), **AI 생성 경로는 모델이 라벨을 정한다**(`사업자번호`
+ * ·`대표`·`수요기관`). 조각이 하나뿐이면 관례를 살짝 벗어난 라벨에서 곧바로 끊긴다.
+ *
+ * 겹치는 라벨의 승자는 **선언 순서가 아니라 조각 길이**로 정한다(`labelRoleGuess`) —
+ * `대표번호` 는 `대표번호`(4자, 전화)가 `대표`(2자, 대표자)를 이긴다. 순서에 맡기면
+ * 조각을 하나 더할 때마다 기존 판정이 조용히 뒤집힌다.
+ */
+const ROLE_LABEL_HINTS: Record<MetaFieldRole, readonly string[]> = {
+  clientName: ["고객사", "거래처", "발주처", "수요기관", "수신처"],
+  supplierName: ["상호", "공급자명", "회사명", "업체명"],
+  supplierCeoName: ["대표자", "대표이사", "대표"],
+  supplierBizRegNo: ["사업자등록번호", "사업자번호", "등록번호", "사업자"],
+  supplierAddress: ["사업장주소", "주소", "소재지"],
+  supplierPhone: ["대표번호", "전화번호", "연락처", "전화", "tel"],
+  supplierEmail: ["이메일", "e-mail", "email", "메일"],
 };
+
+/** 역할 전체 목록 (라벨 짐작의 기본 후보) */
+const ALL_META_ROLES = Object.keys(ROLE_LABEL_HINTS) as MetaFieldRole[];
+
+/** 라벨 비교용 정규화 — 공백을 없애고 소문자로 (`E-mail` · `대표 연락처`) */
+function normalizeRoleLabel(label: unknown): string {
+  return String(label ?? "").replace(/\s+/g, "").toLowerCase();
+}
+
+/** (role, 조각) 을 **조각이 긴 것부터** 늘어놓은 표 — 겹치는 라벨의 승자를 정한다 */
+const ROLE_LABEL_MATCHERS: readonly { role: MetaFieldRole; hint: string }[] = (
+  Object.keys(ROLE_LABEL_HINTS) as MetaFieldRole[]
+)
+  .flatMap((role) =>
+    ROLE_LABEL_HINTS[role].map((hint) => ({ role, hint: normalizeRoleLabel(hint) })),
+  )
+  .sort((a, b) => b.hint.length - a.hint.length);
+
+/**
+ * 라벨로 역할을 짐작한다 — 가장 **구체적인**(긴) 조각이 이긴다.
+ * `allowed` 밖 역할과 이미 쓰인 역할은 후보에서 뺀다.
+ */
+function labelRoleGuess(
+  label: unknown,
+  allowed: readonly MetaFieldRole[],
+  taken: ReadonlySet<unknown>,
+): MetaFieldRole | null {
+  const text = normalizeRoleLabel(label);
+  if (!text) return null;
+  const match = ROLE_LABEL_MATCHERS.find(
+    (m) => allowed.includes(m.role) && !taken.has(m.role) && text.includes(m.hint),
+  );
+  return match?.role ?? null;
+}
+
+/**
+ * 블록별로 **허용되는 역할**.
+ *
+ * 역할을 블록에 매어 두지 않으면 거래처 블록의 `주소` 칸이 `supplierAddress` 를
+ * 차지해, 회사 주소가 거래처 자리에 찍힌다(반대로 공급자 블록의 `고객사` 라벨이
+ * `clientName` 을 차지하면 문서 목록의 거래처명이 자기 회사 이름이 된다).
+ * 추정은 라벨이라는 약한 단서에 기대므로, 후보를 좁히는 것이 유일한 방어다.
+ */
+export const SUPPLIER_META_ROLES: readonly MetaFieldRole[] = [
+  "supplierName",
+  "supplierCeoName",
+  "supplierBizRegNo",
+  "supplierAddress",
+  "supplierPhone",
+  "supplierEmail",
+];
+export const CLIENT_META_ROLES: readonly MetaFieldRole[] = ["clientName"];
+
+/** 그 블록에서 쓸 수 있는 역할 목록 (공급자·거래처 블록만 역할을 갖는다) */
+export function metaRolesFor(type: BlockType): readonly MetaFieldRole[] {
+  if (type === "supplier") return SUPPLIER_META_ROLES;
+  if (type === "clientMeta") return CLIENT_META_ROLES;
+  return [];
+}
 
 /**
  * 역할에 해당하는 필드를 찾는다 — **역할이 먼저, 라벨은 폴백**이다.
@@ -202,8 +284,15 @@ export function findMetaField(
   if (!Array.isArray(fields)) return null;
   const byRole = fields.find((f) => f?.role === role);
   if (byRole) return byRole;
-  const hint = ROLE_LABEL_HINT[role];
-  return fields.find((f) => typeof f?.label === "string" && f.label.includes(hint)) ?? null;
+  /*
+   * 라벨 폴백 — 후보를 **전체 역할**로 두고 짐작한 결과가 이 역할일 때만 고른다.
+   * 이 역할만 후보로 두면 `대표번호` 가 `대표` 에 걸려 대표자 조회에 잡히고,
+   * 대표자 자리에 전화번호가 들어간다.
+   */
+  return (
+    fields.find((f) => labelRoleGuess(f?.label, ALL_META_ROLES, new Set()) === role) ??
+    null
+  );
 }
 
 /**
@@ -221,10 +310,12 @@ export function findMetaField(
 export function healMetaFieldRoles(
   fields: MetaField[],
   valueHints?: Partial<Record<MetaFieldRole, string>>,
+  /** 이 블록에서 허용되는 역할. 생략하면 전부 (`metaRolesFor` 로 좁혀 넘기는 것을 권한다) */
+  allowed?: readonly MetaFieldRole[],
 ): MetaField[] {
   if (!Array.isArray(fields)) return fields;
   const taken = new Set(fields.map((f) => f?.role).filter(Boolean));
-  const roles = Object.keys(ROLE_LABEL_HINT) as MetaFieldRole[];
+  const roles = allowed ?? ALL_META_ROLES;
   const norm = (v: unknown) => String(v ?? "").trim();
   let changed = false;
 
@@ -234,12 +325,10 @@ export function healMetaFieldRoles(
     return { ...f, role };
   };
 
-  // 1차: 라벨 조각 (예전 문서). 라벨이 관례를 따르는 경우가 대부분이다
+  // 1차: 라벨 조각 (예전 문서·AI 라벨). 가장 구체적인 조각이 이긴다
   let next = fields.map((f) => {
     if (!f || f.role) return f;
-    const role = roles.find(
-      (r) => !taken.has(r) && typeof f.label === "string" && f.label.includes(ROLE_LABEL_HINT[r]),
-    );
+    const role = labelRoleGuess(f.label, roles, taken);
     return role ? claim(f, role) : f;
   });
 
@@ -248,13 +337,42 @@ export function healMetaFieldRoles(
     next = next.map((f) => {
       if (!f || f.role || !norm(f.value)) return f;
       const role = roles.find(
-        (r) => !taken.has(r) && norm(valueHints[r]) !== "" && norm(valueHints[r]) === norm(f.value),
+        (r) =>
+          !taken.has(r) && norm(valueHints[r]) !== "" && norm(valueHints[r]) === norm(f.value),
       );
       return role ? claim(f, role) : f;
     });
   }
 
   return changed ? next : fields;
+}
+
+/** 이미지 블록이 채우는 자리 — 회사 로고 · 인감(직인) */
+export type ImageRole = "logo" | "stamp";
+
+/** 예전 문서의 이미지 역할을 `alt` 로 추정할 때 쓰는 조각 (치유 전용) */
+const IMAGE_ROLE_ALT_HINTS: Record<ImageRole, readonly string[]> = {
+  stamp: ["인감", "직인", "도장", "stamp"],
+  logo: ["로고", "logo"],
+};
+
+/**
+ * `alt` 로 이미지 역할을 추정한다 (이미 역할이 있으면 그대로).
+ *
+ * 라벨 추정과 같은 성격의 **폴백**이다 — `seedTemplate`·AI 조립부가 만든 로고 블록은
+ * 언제나 `alt="회사 로고"` 였으므로, 이 추정만으로 예전 문서의 로고 자리가 그대로 살아난다.
+ * 짐작할 수 없는 이미지는 역할 없이 남긴다(그냥 그림이다).
+ */
+export function healImageRole(
+  props: BlockPropsMap["image"],
+): BlockPropsMap["image"] {
+  if (props.role) return props;
+  const alt = String(props.alt ?? "").toLowerCase();
+  if (!alt) return props;
+  const role = (Object.keys(IMAGE_ROLE_ALT_HINTS) as ImageRole[]).find((r) =>
+    IMAGE_ROLE_ALT_HINTS[r].some((hint) => alt.includes(hint.toLowerCase())),
+  );
+  return role ? { ...props, role } : props;
 }
 
 /**
@@ -303,6 +421,16 @@ export type BlockPropsMap = {
     opacity: number;
     border: boolean;
     borderColor: string;
+    /**
+     * 이 이미지가 **무엇의 자리**인지. 없으면 그냥 그림이다.
+     *
+     * 회사 정보(로고·인감)를 채워 넣을 대상을 지목하는 데 쓴다 — 예전에는 대상이 없어서
+     * **비어 있는 이미지 블록이면 무엇이든** 로고로 채웠다. 그래서 사용자가 자리만 잡아 둔
+     * 빈 이미지 칸에 로고가 인쇄되고, 인감 칸을 지우면 그 자리에 로고가 찍혔다.
+     * `MetaFieldRole` 과 같은 이유로 **옵셔널**이며 `parseContentJson` 이 `alt` 로 추정해
+     * 채운다(예전 문서의 로고 블록은 `alt="회사 로고"` 였다).
+     */
+    role?: ImageRole;
   };
   divider: {
     orientation: "horizontal" | "vertical";
@@ -474,15 +602,22 @@ export function defaultProps(type: BlockType): AnyBlockProps {
     case "text":
       return textStyle();
     case "supplier":
+      /*
+       * 여섯 칸 **모두** 역할을 갖는다. 예전에는 `상호` 만 역할이 있어서 회사 정보를
+       * 채울 대상이 그 한 칸뿐이었다 — 실제 문서에서 공급자 6칸 중 5칸이 비어 있었던
+       * 원인이다(대표자·등록번호·주소·전화). `이메일` 은 역할만 두고 채우지 않는다:
+       * `Branding` 에 이메일 컬럼이 없다(스키마 추가는 별건이다). 라벨 줄은 남겨 두어
+       * 캔버스에서 바로 적어 넣을 수 있게 한다.
+       */
       return {
         labelWidth: 72,
         fields: [
           { id: uid(), label: "상호", value: "", role: "supplierName" as const },
-          { id: uid(), label: "대표자", value: "" },
-          { id: uid(), label: "등록번호", value: "" },
-          { id: uid(), label: "주소", value: "" },
-          { id: uid(), label: "전화", value: "" },
-          { id: uid(), label: "이메일", value: "" },
+          { id: uid(), label: "대표자", value: "", role: "supplierCeoName" as const },
+          { id: uid(), label: "등록번호", value: "", role: "supplierBizRegNo" as const },
+          { id: uid(), label: "주소", value: "", role: "supplierAddress" as const },
+          { id: uid(), label: "전화", value: "", role: "supplierPhone" as const },
+          { id: uid(), label: "이메일", value: "", role: "supplierEmail" as const },
         ],
       };
     case "clientMeta":
@@ -1039,7 +1174,9 @@ function healBlockMetaRoles(block: Block): Block["props"] {
   if (block.type !== "supplier" && block.type !== "clientMeta") return block.props;
   const props = block.props as BlockPropsMap["clientMeta"];
   if (!Array.isArray(props.fields)) return block.props;
-  const fields = healMetaFieldRoles(props.fields);
+  // 역할 후보를 **그 블록에서 쓰이는 것으로** 좁힌다 — 거래처 블록의 `주소` 칸이
+  // 공급자 주소 역할을 차지하면 회사 주소가 거래처 자리에 채워진다
+  const fields = healMetaFieldRoles(props.fields, undefined, metaRolesFor(block.type));
   return fields === props.fields ? block.props : { ...props, fields };
 }
 
@@ -1064,6 +1201,8 @@ function healBlockProps(block: Block): Block["props"] {
     return healBlockMetaRoles(block);
   }
   if (block.type === "itemTable") return healItemTableTotal(block);
+  // 이미지의 **자리**(로고·인감)도 같은 방식으로 채운다 (`alt` 로 추정)
+  if (block.type === "image") return healImageRole(block.props as BlockPropsMap["image"]);
   return block.props;
 }
 
@@ -1128,12 +1267,135 @@ export function extractClientName(doc: EditorDoc): string | null {
   return value ? value : null;
 }
 
+// ======================= 회사 정보(공급자) 반영 =======================
+
+/**
+ * 회사 정보 → 공급자 필드 역할별 값.
+ *
+ * `이메일` 은 없다 — `Branding` 에 이메일 컬럼이 없기 때문이다. 억지로 대표 연락처를
+ * 넣거나 사용자 이메일을 끌어오지 않는다(회사 대표 메일과 담당자 메일은 다른 값이다).
+ */
+export function companyMetaValues(
+  company: CompanyProfile,
+): Partial<Record<MetaFieldRole, string>> {
+  return {
+    supplierName: company.companyName ?? "",
+    supplierCeoName: company.ceoName ?? "",
+    supplierBizRegNo: company.bizRegNo ?? "",
+    supplierAddress: company.address ?? "",
+    supplierPhone: company.phone ?? "",
+  };
+}
+
+/**
+ * **빈** 공급자 칸과 **빈** 로고·인감 이미지에 회사 정보를 채운 문서.
+ *
+ * ## 왜 문서 단위인가
+ *
+ * 예전에는 이 폴백이 **인쇄 렌더러에만** 있었다(`renderFieldTable` 의 `fallbacks`,
+ * `renderImage` 의 `branding.logoUrl`). 그러면 캔버스는 빈 칸, PDF 는 채워진 칸이 되어
+ * "화면 렌더러와 인쇄 렌더러는 같은 값을 쓴다" 는 규칙이 깨진다 — 사용자가 화면에서
+ * 확인할 수 없는 내용이 고객에게 발송된다. 그래서 규칙을 **문서 한 단계 위**로 올려,
+ * 에디터·미리보기·PDF 가 모두 이 함수를 지난 같은 문서를 그린다.
+ *
+ * ## 지키는 선
+ *
+ * - **사용자가 적은 값은 절대 덮지 않는다.** 비어 있는 칸만 채운다.
+ * - **역할로 지목한다** (`MetaFieldRole` · `ImageRole`). 라벨·`alt` 문자열 비교는
+ *   사용자가 라벨을 고치는 순간 끊긴다.
+ * - **블록을 만들지 않는다.** 없는 인감 블록을 여기서 만들면 문서를 열 때마다 블록이
+ *   생겨난다. 블록을 놓는 것은 시드(`seedTemplate`·AI 조립)의 일이다.
+ * - 바뀔 것이 없으면 **같은 객체**를 돌려준다 (불필요한 리렌더·미저장 표시 방지).
+ *
+ * 채운 값은 다음 저장에 함께 남는다 — `MetaFieldRole`·음수 z 치유와 같은 선례다.
+ */
+export function withCompanyDefaults(
+  doc: EditorDoc,
+  company: CompanyProfile | null | undefined,
+): EditorDoc {
+  if (!company) return doc;
+  const values = companyMetaValues(company);
+  const images: Record<ImageRole, string> = {
+    logo: company.logoUrl ?? "",
+    stamp: company.stampUrl ?? "",
+  };
+  let changed = false;
+
+  const blocks = doc.blocks.map((block) => {
+    if (block.type === "supplier") {
+      const props = block.props as BlockPropsMap["supplier"];
+      if (!Array.isArray(props.fields)) return block;
+      let touched = false;
+      const fields = props.fields.map((f) => {
+        if (!f?.role || String(f.value ?? "").trim()) return f;
+        const value = values[f.role];
+        if (!value) return f;
+        touched = true;
+        return { ...f, value };
+      });
+      if (!touched) return block;
+      changed = true;
+      return { ...block, props: { ...props, fields } };
+    }
+    if (block.type === "image") {
+      const props = block.props as BlockPropsMap["image"];
+      if (!props.role || String(props.dataUrl ?? "").trim()) return block;
+      const dataUrl = images[props.role];
+      if (!dataUrl) return block;
+      changed = true;
+      return { ...block, props: { ...props, dataUrl } };
+    }
+    return block;
+  });
+
+  return changed ? { ...doc, blocks } : doc;
+}
+
+/**
+ * 인감 블록의 기본 자리·크기.
+ *
+ * 공급자 블록(x 437, w 317)의 **오른쪽 위**에 겹친다 — 국내 견적서에서 직인은 보통
+ * 상호·대표자 줄 끝에 찍힌다. 라벨 폭이 72px 이라 값은 x 509 부터 시작하고 상호·대표자·
+ * 등록번호는 짧아서, 오른쪽 68px 구간은 글자와 거의 겹치지 않는다. A4 우측 여백(40px)을
+ * 지켜 오른쪽 끝은 752px 이다.
+ *
+ * **좌표를 고정값으로 두는 이유**: 블록은 절대좌표이고 사용자가 옮길 수 있다.
+ * 시드는 "처음 놓이는 자리" 만 정하고 그 뒤로는 문서가 정답이다.
+ */
+export const STAMP_BOX = { x: 684, y: 126, w: 68, h: 68 } as const;
+
+/** 공급자 블록 한 줄의 높이 (인쇄 CSS `.blk-supplier` 의 11px × 1.5 + 여백 기준) */
+export const SUPPLIER_ROW_H = 22;
+
+/**
+ * 공급자 블록의 시드 높이.
+ *
+ * 주소는 한 줄에 담기지 않는 경우가 흔하다(값 열은 약 245px, 11px 글꼴로 20자 내외).
+ * 줄 수를 어림해 처음부터 담기는 높이로 놓는다 — 열자마자 잘림 경고가 뜨면 사용자가
+ * 자기 잘못인지 시드 탓인지 알 수 없다. 어림이 틀려도 `use-overflow` 의
+ * "내용에 맞추기" 가 남아 있으므로 **늘리는 쪽으로만** 후하게 잡는다.
+ */
+export function supplierBlockHeight(fields: MetaField[]): number {
+  const extraLines = fields.reduce((sum, f) => {
+    const len = String(f.value ?? "").length;
+    return sum + Math.min(4, Math.max(0, Math.ceil(len / 20) - 1));
+  }, 0);
+  return 12 + (fields.length + extraLines) * SUPPLIER_ROW_H;
+}
+
 /** contentJson 이 없는 문서를 위한 기본 문서 템플릿 시드. */
 export function seedTemplate(input: {
   type: string;
   clientName: string | null;
-  supplierName: string;
-  logoUrl?: string | null;
+  /**
+   * 회사 정보 — 공급자 칸·로고·인감의 출처 (설정 7).
+   *
+   * 예전에는 `supplierName` 문자열 하나와 `logoUrl` 만 받았고, 그래서 공급자 블록의
+   * `상호` 한 칸만 채워졌다(나머지 다섯 칸은 영구히 비어 있었다). 회사 정보를 통째로
+   * 받으면 그 구멍이 근본에서 사라지고, 상호 폴백(조직명·사용자명)을 정하는 곳도
+   * `toCompanyProfile` 한 곳으로 모인다.
+   */
+  company: CompanyProfile;
   items: {
     name: string;
     description: string | null;
@@ -1151,24 +1413,30 @@ export function seedTemplate(input: {
   const typeLabel =
     DOCUMENT_TYPE_LABELS[input.type as DocumentType] ?? "견적서";
 
-  // 로고 블록 — 브랜딩 로고(있으면)를 기본값으로. 원본 700×105 비율(≈6.67:1)에 맞춘 크기.
+  // 로고 블록 — 원본 700×105 비율(≈6.67:1)에 맞춘 크기. 값은 아래 withCompanyDefaults 가 채운다
   const logo = createBlock("image", { x: 40, y: 48 });
   logo.w = 200;
   logo.h = 30;
   const logoProps = logo.props as BlockPropsMap["image"];
   logoProps.alt = "회사 로고";
-  if (input.logoUrl) logoProps.dataUrl = input.logoUrl;
+  logoProps.role = "logo";
 
   const title = createBlock("title", { x: 247, y: 56 });
   // 문서 종류에 맞는 제목을 시드한다 (계약서/NDA/제안서에서 "견적서"로 뜨지 않도록).
   (title.props as BlockPropsMap["title"]).text = typeLabel;
 
+  /*
+   * 공급자 블록 — 여섯 칸 모두 `defaultProps` 가 역할을 갖고 나오므로, 값은 아래에서
+   * `withCompanyDefaults` 가 **역할로** 채운다. 라벨 문자열로 칸을 찾지 않는다.
+   */
   const supplier = createBlock("supplier", { x: 437, y: 130 });
   const supplierProps = supplier.props as BlockPropsMap["supplier"];
-  // 공급자명은 **역할**로 찾는다 — 라벨 문자열 비교는 라벨을 고치는 순간 끊긴다
-  const supplierNameField = findMetaField(supplierProps.fields, "supplierName");
-  supplierProps.fields = supplierProps.fields.map((f) =>
-    f.id === supplierNameField?.id ? { ...f, value: input.supplierName } : f,
+  const supplierValues = companyMetaValues(input.company);
+  supplier.h = supplierBlockHeight(
+    supplierProps.fields.map((f) => ({
+      ...f,
+      value: (f.role ? supplierValues[f.role] : "") ?? "",
+    })),
   );
 
   const clientMeta = createBlock("clientMeta", { x: 40, y: 130 });
@@ -1214,6 +1482,29 @@ export function seedTemplate(input: {
 
   const blocks: Block[] = [logo, title, supplier, clientMeta, itemTable, notice];
 
+  /*
+   * 인감(직인) — **인감이 등록된 조직에만** 블록을 놓는다.
+   *
+   * 값이 없는데 블록을 놓으면 캔버스에 "이미지 없음" 회색 자리표시자가 생기고, 그 문서를
+   * 그대로 발송하면 고객이 받는 견적서에 빈 사각형이 남는다. 인감은 있으면 찍고 없으면
+   * 아예 없는 것이 맞다(나중에 등록하면 새 문서부터 붙는다).
+   *
+   * 겹침 순서는 `reorderZ(..., "front")` 로 정한다 — z 를 손으로 계산하지 않는다.
+   * 예전 "맨 뒤로" 가 `min-1` 로 음수를 만들어 블록이 화면·PDF 에서 통째로 사라진 전례가
+   * 있고, 정규화(1..n)를 지키는 곳은 이 함수 하나다.
+   */
+  let stampId: string | null = null;
+  if (input.company.stampUrl) {
+    const stamp = createBlock("image", { x: STAMP_BOX.x, y: STAMP_BOX.y });
+    stamp.w = STAMP_BOX.w;
+    stamp.h = STAMP_BOX.h;
+    const stampProps = stamp.props as BlockPropsMap["image"];
+    stampProps.alt = "회사 인감";
+    stampProps.role = "stamp";
+    blocks.push(stamp);
+    stampId = stamp.id;
+  }
+
   // 하단 약관/안내 섹션(있을 때만) — 기타사항·기술지원 안내·특이사항 등
   if (input.notes?.length) {
     let y = 678;
@@ -1229,9 +1520,18 @@ export function seedTemplate(input: {
     }
   }
 
-  return {
-    version: 1,
-    canvas: { w: A4.w, h: A4.h, pages: 1 },
-    blocks,
-  };
+  /*
+   * 값은 **마지막에 한 번** 채운다. 블록마다 손으로 채우면 칸을 늘릴 때 배선을 하나 더
+   * 해야 하고(그래서 다섯 칸이 비어 있었다), 에디터·미리보기·PDF 가 쓰는 규칙과도
+   * 갈라진다. 시드는 자리만 놓고 값은 `withCompanyDefaults` 하나가 정한다.
+   */
+  return withCompanyDefaults(
+    {
+      version: 1,
+      canvas: { w: A4.w, h: A4.h, pages: 1 },
+      // 인감이 없으면 겹침 순서를 건드릴 이유가 없다 (모두 z=1 인 예전 모습 그대로)
+      blocks: stampId ? reorderZ(blocks, stampId, "front") : blocks,
+    },
+    input.company,
+  );
 }

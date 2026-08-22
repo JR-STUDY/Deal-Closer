@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentOrg } from "@/lib/session";
 import { parseContentJson, seedTemplate } from "@/lib/editor-schema";
-import { buildDocumentHtml } from "@/lib/pdf-html";
+import { buildDocumentHtml, toPdfBranding } from "@/lib/pdf-html";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -38,26 +38,22 @@ export async function GET(_req: NextRequest, { params }: Params) {
     });
   }
 
+  // 회사 정보(공급자 칸·로고·인감) 반영은 `buildDocumentHtml` 이 한 번에 한다 —
+  // 에디터 캔버스도 같은 `withCompanyDefaults` 를 지나므로 두 화면이 같게 보인다
+  const pdfBranding = toPdfBranding(branding, org.name);
   const doc =
     parseContentJson(document.contentJson) ??
     seedTemplate({
       type: document.type,
       clientName: document.clientName,
-      supplierName: branding?.companyName ?? org.name,
-      logoUrl: branding?.logoUrl ?? null,
+      company: pdfBranding,
       items: document.items,
     });
 
   const html = buildDocumentHtml({
     doc,
     title: document.title,
-    branding: branding
-      ? {
-          companyName: branding.companyName,
-          logoUrl: branding.logoUrl,
-          primaryColor: branding.primaryColor,
-        }
-      : null,
+    branding: pdfBranding,
   });
 
   return new Response(html, {

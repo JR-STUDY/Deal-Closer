@@ -8,9 +8,11 @@
 
 import "server-only";
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants";
+import type { CompanyProfile } from "@/lib/branding";
 import { text, type AiContentBlock } from "./blocks";
 import {
   describeDocument,
+  describeCompany,
   describeOpportunity,
   describeTemplate,
   type DocumentMeta,
@@ -181,8 +183,11 @@ export type GenerateContentInput = {
   client?: ClientInput | null;
   /** 연결된 영업 기회 + 거래처 (F-212). 있으면 client 보다 우선한다 */
   opportunity?: OpportunityContext | null;
-  /** 자사(공급자) 이름 — 양식이 없을 때 기본값으로 쓰인다 */
-  supplierName: string;
+  /**
+   * 자사(공급자) 회사 정보 — 문서의 공급자 자리에 그대로 들어간다 (설정 7).
+   * 예전에는 상호 문자열 하나였고, 그래서 나머지 칸은 모델이 지어내거나 비워 뒀다.
+   */
+  company: CompanyProfile;
   /** 오늘 날짜 문자열 ("2026. 08. 07") — 서버에서 주입한다 */
   today: string;
 };
@@ -200,10 +205,13 @@ export function buildGenerateContent(
         "아래 정보를 바탕으로 영업 문서 초안을 만들어 주세요.",
         "",
         `오늘 날짜: ${input.today}`,
-        `자사(공급자) 이름: ${input.supplierName}`,
         input.documentType
           ? `요청된 문서 종류: ${DOCUMENT_TYPE_LABELS[input.documentType]} (documentType=${input.documentType})`
           : "요청된 문서 종류: 지정되지 않음 — 요청 내용으로 판단해 주세요.",
+        "",
+        "# 자사(공급자) 정보",
+        "supplierFields 는 아래 사실만 씁니다. 없는 항목은 지어내지 말고 비워 두세요.",
+        describeCompany(input.company),
       ].join("\n"),
     ),
   );
@@ -310,8 +318,8 @@ export type TemplateSetupContentInput = {
   documentType?: DocumentType | null;
   /** 업로드한 양식 원본 파일 */
   sourceFile?: PreparedFile | null;
-  /** 자사(공급자) 이름 */
-  supplierName: string;
+  /** 자사(공급자) 회사 정보 */
+  company: CompanyProfile;
   today: string;
 };
 
@@ -329,11 +337,14 @@ export function buildTemplateSetupContent(
         "동시에 이 양식으로 문서를 만들 때 채워야 하는 변수 필드도 정의해 주세요.",
         "",
         `오늘 날짜: ${input.today}`,
-        `자사(공급자) 이름: ${input.supplierName}`,
         `양식 이름: ${input.name}`,
         input.documentType
           ? `문서 종류: ${DOCUMENT_TYPE_LABELS[input.documentType]} (documentType=${input.documentType})`
           : "문서 종류: 지정되지 않음 — 업로드된 양식으로 판단해 주세요.",
+        "",
+        "# 자사(공급자) 정보",
+        "supplierFields 는 아래 사실만 씁니다. 없는 항목은 지어내지 말고 비워 두세요.",
+        describeCompany(input.company),
       ].join("\n"),
     ),
   );

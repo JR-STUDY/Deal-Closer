@@ -20,10 +20,16 @@ import {
   type Block,
   type BlockPropsMap,
   type EditorDoc,
-  findMetaField,
+  companyMetaValues,
   healMetaFieldRoles,
+  metaRolesFor,
+  reorderZ,
+  STAMP_BOX,
+  supplierBlockHeight,
+  withCompanyDefaults,
   type MetaFieldRole,
 } from "@/lib/editor-schema";
+import type { CompanyProfile } from "@/lib/branding";
 import {
   DOCUMENT_TYPES,
   DOCUMENT_TYPE_LABELS,
@@ -470,7 +476,9 @@ function assignMetaRoles(
 ): void {
   const props = block.props as BlockPropsMap["clientMeta"];
   if (!Array.isArray(props.fields)) return;
-  props.fields = healMetaFieldRoles(props.fields, valueHints);
+  // 후보는 그 블록에서 쓰이는 역할로 좁힌다 — 공급자 블록의 `고객사` 라벨이
+  // 거래처명 역할을 차지하면 문서 목록의 거래처가 자기 회사 이름이 된다
+  props.fields = healMetaFieldRoles(props.fields, valueHints, metaRolesFor(block.type));
 }
 
 function fillMetaBlock(block: Block, specFields: SpecField[]): void {
@@ -619,7 +627,11 @@ function hasNoteHeading(doc: EditorDoc, heading: string): boolean {
  * 단, 요청에서 새로 나온 안내문(특약·결제조건 등)이 양식에 없으면 문서 맨 아래에 덧붙인다.
  * 그러지 않으면 사용자가 프롬프트로 요청한 조건이 조용히 사라진다.
  */
-export function fillTemplateDoc(base: EditorDoc, spec: DocSpec): EditorDoc {
+export function fillTemplateDoc(
+  base: EditorDoc,
+  spec: DocSpec,
+  company?: CompanyProfile | null,
+): EditorDoc {
   const doc = cloneDoc(base);
   for (const block of doc.blocks) {
     if (block.type === "clientMeta") {
@@ -632,6 +644,13 @@ export function fillTemplateDoc(base: EditorDoc, spec: DocSpec): EditorDoc {
       assignMetaRoles(block, { clientName: spec.clientName });
     } else if (block.type === "itemTable") {
       fillItemTableBlock(block, spec);
+    } else if (block.type === "supplier" && company) {
+      /*
+       * 양식의 공급자 정보는 양식이 정답이므로 **덮지 않는다** — 다만 양식이 비워 둔
+       * 칸에는 회사 정보를 채운다. 역할을 먼저 배정해야 라벨이 `사업자번호`·`대표`
+       * 처럼 관례를 벗어난 양식에서도 칸을 찾을 수 있다(AI 세팅은 라벨을 모델이 정한다).
+       */
+      assignMetaRoles(block, companyMetaValues(company));
     }
   }
 
@@ -662,7 +681,8 @@ export function fillTemplateDoc(base: EditorDoc, spec: DocSpec): EditorDoc {
     }
   }
 
-  return withPageCount(doc);
+  // 빈 공급자 칸·빈 로고·빈 인감을 회사 정보로 채운다 (에디터·인쇄와 같은 함수)
+  return withPageCount(withCompanyDefaults(doc, company));
 }
 
 /** 기본 거래처 메타 필드 (스펙이 비어 있을 때) */
@@ -681,17 +701,17 @@ function defaultClientFields(spec: DocSpec): SpecField[] {
  */
 export function buildDocFromSpec(
   spec: DocSpec,
-  opts: { supplierName: string; logoUrl?: string | null },
+  opts: { company: CompanyProfile },
 ): EditorDoc {
   const blocks: Block[] = [];
 
-  // 로고 (브랜딩 로고가 있을 때만 이미지 값을 채운다)
+  // 로고 — 값은 마지막에 `withCompanyDefaults` 가 역할(`logo`)로 채운다
   const logo = createBlock("image", { x: 40, y: 48 });
   logo.w = 200;
   logo.h = 30;
   const logoProps = logo.props as BlockPropsMap["image"];
   logoProps.alt = "회사 로고";
-  if (opts.logoUrl) logoProps.dataUrl = opts.logoUrl;
+  logoProps.role = "logo";
   blocks.push(logo);
 
   // 대제목
@@ -699,7 +719,15 @@ export function buildDocFromSpec(
   (heading.props as BlockPropsMap["title"]).text = spec.headingText;
   blocks.push(heading);
 
-  // 공급자 정보 — 스펙이 없으면 브랜딩 회사명만 채운 기본 필드
+  /*
+   * 공급자 정보.
+   *
+   * 스펙에 공급자 필드가 있으면(업로드 원본에서 뽑은 라벨) 그 구성을 쓰고, 없으면
+   * `defaultProps` 의 여섯 칸(상호·대표자·등록번호·주소·전화·이메일)을 쓴다.
+   * **값은 채우지 않는다** — 회사 정보 반영은 아래 `withCompanyDefaults` 한 곳이다.
+   * 예전에는 여기서 `상호` 한 칸만 채웠고, 그래서 AI 로 만든 문서의 공급자 정보가
+   * 상호 말고는 전부 비어 있었다.
+   */
   const supplier = createBlock("supplier", { x: 437, y: 130 });
   const supplierProps = supplier.props as BlockPropsMap["supplier"];
   if (spec.supplierFields.length > 0) {
@@ -708,15 +736,29 @@ export function buildDocFromSpec(
       label: f.label,
       value: f.value,
     }));
-  } else {
-    // 공급자명 필드는 **역할**로 찾는다 (라벨 문자열 비교는 라벨을 고치면 끊긴다)
-    const target = findMetaField(supplierProps.fields, "supplierName");
-    supplierProps.fields = supplierProps.fields.map((f) =>
-      f.id === target?.id ? { ...f, value: opts.supplierName } : f,
-    );
   }
-  assignMetaRoles(supplier, { supplierName: opts.supplierName });
-  supplier.h = Math.max(140, 12 + supplierProps.fields.length * FIELD_ROW_HEIGHT);
+  /*
+   * 역할 배정에 **값 힌트로 회사 정보를 넘긴다.** 모델이 라벨을 정하므로(`사업자번호`
+   * ·`대표`) 라벨 조각만으로는 칸을 못 찾는데, 원본에서 뽑은 값이 우리 회사 정보와
+   * 같으면 그것이 어느 칸인지 알 수 있다.
+   */
+  assignMetaRoles(supplier, companyMetaValues(opts.company));
+  /*
+   * 높이는 **채워질 값**을 보고 정한다 (에디터 시드와 같은 `supplierBlockHeight`).
+   * 주소는 한 줄에 담기지 않는 일이 흔해서, 칸 수만 세면 문서를 열자마자 잘림 경고가 뜬다.
+   */
+  const companyValues = companyMetaValues(opts.company);
+  supplier.h = Math.max(
+    140,
+    supplierBlockHeight(
+      supplierProps.fields.map((f) => ({
+        ...f,
+        value:
+          String(f.value ?? "").trim() ||
+          (f.role ? (companyValues[f.role] ?? "") : ""),
+      })),
+    ),
+  );
   blocks.push(supplier);
 
   // 거래처·문서 메타
@@ -782,11 +824,37 @@ export function buildDocFromSpec(
     y += section.h + 12;
   }
 
-  return withPageCount({
-    version: 1,
-    canvas: { w: A4.w, h: A4.h, pages: 1 },
-    blocks,
-  });
+  /*
+   * 인감(직인) — 등록된 조직에만 블록을 놓는다. 값이 없는데 블록을 놓으면 캔버스에
+   * "이미지 없음" 회색 자리표시자가 남고 그대로 발송된다. 겹침 순서는 `reorderZ` 로
+   * 정한다(z 를 손으로 계산하지 않는다 — 음수 z 는 블록을 통째로 사라지게 했다).
+   */
+  let stampId: string | null = null;
+  if (opts.company.stampUrl) {
+    const stamp = createBlock("image", {
+      x: STAMP_BOX.x,
+      y: STAMP_BOX.y,
+    });
+    stamp.w = STAMP_BOX.w;
+    stamp.h = STAMP_BOX.h;
+    const stampProps = stamp.props as BlockPropsMap["image"];
+    stampProps.alt = "회사 인감";
+    stampProps.role = "stamp";
+    blocks.push(stamp);
+    stampId = stamp.id;
+  }
+
+  // 값 채우기는 에디터·인쇄와 **같은 함수** 한 곳이다
+  return withPageCount(
+    withCompanyDefaults(
+      {
+        version: 1,
+        canvas: { w: A4.w, h: A4.h, pages: 1 },
+        blocks: stampId ? reorderZ(blocks, stampId, "front") : blocks,
+      },
+      opts.company,
+    ),
+  );
 }
 
 /** 양식이 있으면 채우고, 없으면 새로 조립한다 */
@@ -794,16 +862,13 @@ export function specToEditorDoc(
   spec: DocSpec,
   opts: {
     base?: EditorDoc | null;
-    supplierName: string;
-    logoUrl?: string | null;
+    /** 회사 정보 — 공급자 칸·로고·인감의 출처 (`toCompanyProfile` 로 만든다) */
+    company: CompanyProfile;
   },
 ): EditorDoc {
   return opts.base
-    ? fillTemplateDoc(opts.base, spec)
-    : buildDocFromSpec(spec, {
-        supplierName: opts.supplierName,
-        logoUrl: opts.logoUrl,
-      });
+    ? fillTemplateDoc(opts.base, spec, opts.company)
+    : buildDocFromSpec(spec, { company: opts.company });
 }
 
 /**

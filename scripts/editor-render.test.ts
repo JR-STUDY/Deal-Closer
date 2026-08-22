@@ -11,6 +11,7 @@
  *  ⑤ 인쇄 HTML 과 화면이 같은 글꼴 스택을 쓴다
  *  ⑥ 인쇄 HTML 의 합계/요약행 우선순위가 `itemTableGrandTotal` 과 일치한다
  *  ⑦ 페이지 컨테이너가 stacking context 다 (isolation)
+ *  ⑧ 회사 정보(공급자·로고·인감) 반영이 **화면과 인쇄에서 같은 함수**를 지난다
  */
 
 import assert from "node:assert/strict";
@@ -20,13 +21,15 @@ import {
   itemTableGrandTotal,
   parseContentJson,
   reorderZ,
+  seedTemplate,
   uid,
+  withCompanyDefaults,
   FONT_FAMILIES,
   type Block,
   type BlockPropsMap,
   type EditorDoc,
 } from "../src/lib/editor-schema";
-import { buildDocumentHtml } from "../src/lib/pdf-html";
+import { buildDocumentHtml, toPdfBranding } from "../src/lib/pdf-html";
 
 let checks = 0;
 function check(actual: unknown, expected: unknown, message: string) {
@@ -206,6 +209,83 @@ ok(
 ok(
   !html.includes(">합계</td><td class=\"num\">₩10,000,000"),
   "요약행이 있으면 기본 '합계' 행을 따로 찍지 않는다",
+);
+
+// ── ⑧ 회사 정보 반영 — 화면과 인쇄가 같은 값을 그린다 ──
+/*
+ * 예전에는 이 폴백이 **인쇄 렌더러에만** 있었다(`renderFieldTable` 의 fallbacks,
+ * `renderImage` 의 branding.logoUrl). 그러면 캔버스는 빈 칸, PDF 는 채워진 칸이 되어
+ * 사용자가 화면에서 확인할 수 없는 내용이 고객에게 발송된다. 지금은 문서 한 단계 위의
+ * `withCompanyDefaults` 하나가 규칙이고, `buildDocumentHtml` 도 그 함수를 지난다.
+ */
+const brandingRecord = {
+  companyName: "(주)지란지교소프트",
+  ceoName: "박승애",
+  bizRegNo: "111-11-11111",
+  address: "대전광역시 유성구 테크노중앙로 74",
+  phone: "042-000-0000",
+  logoUrl: "data:image/png;base64,LOGO",
+  stampUrl: "data:image/png;base64,STAMP",
+  primaryColor: "#4F46E5",
+};
+const branding = toPdfBranding(brandingRecord, "폴백조직");
+check(branding.companyName, "(주)지란지교소프트", "상호 폴백은 실제 값이 있으면 쓰이지 않는다");
+check(
+  toPdfBranding(null, "폴백조직").companyName,
+  "폴백조직",
+  "회사 정보가 없으면 호출측이 준 이름을 쓴다 (문서를 못 만들게 하지 않는다)",
+);
+
+// 캔버스가 그릴 문서(에디터 페이지가 하는 것과 같은 처리)
+const canvasDoc = withCompanyDefaults(
+  seedTemplate({ type: "QUOTE", clientName: "다올테크", company: branding, items: [] }),
+  branding,
+);
+const brandedHtml = buildDocumentHtml({
+  doc: canvasDoc,
+  title: "회사 정보 문서",
+  branding,
+});
+for (const value of [
+  brandingRecord.ceoName,
+  brandingRecord.bizRegNo,
+  brandingRecord.address,
+  brandingRecord.phone,
+]) {
+  ok(
+    brandedHtml.includes(value),
+    `인쇄 HTML 에 공급자 정보가 찍힌다 — ${value} (예전에는 6칸 중 5칸이 비어 있었다)`,
+  );
+}
+ok(
+  brandedHtml.includes(brandingRecord.stampUrl),
+  "인감이 인쇄 HTML 에 찍힌다 — 찍히지 않으면 인감을 등록할 이유가 없다",
+);
+
+/*
+ * **핵심 정합 검사**: 이미 회사 정보가 반영된 문서를 인쇄해도 결과가 같아야 한다.
+ * 인쇄 쪽에만 폴백이 있으면 두 HTML 이 달라진다.
+ */
+/** 본문(<body>)만 비교한다 — 제목 메타데이터·주색은 브랜딩에서 정당하게 갈린다 */
+const bodyOf = (html: string) => html.slice(html.indexOf("<body>"));
+check(
+  bodyOf(buildDocumentHtml({ doc: canvasDoc, title: "회사 정보 문서", branding })),
+  bodyOf(
+    buildDocumentHtml({ doc: canvasDoc, title: "회사 정보 문서", branding: null }),
+  ),
+  "회사 정보가 이미 반영된 문서는 브랜딩을 넘기든 말든 같은 본문을 그린다 (화면 = 인쇄)",
+);
+
+// 역할 없는 빈 이미지 블록에는 로고를 넣지 않는다 —
+// 예전에는 빈 이미지면 무엇이든 로고가 찍혀서, 자리만 잡아 둔 칸에 로고가 인쇄됐다
+const emptyImage = createBlock("image", { x: 0, y: 0 });
+ok(
+  !buildDocumentHtml({
+    doc: docOf([emptyImage], 1),
+    title: "빈 이미지",
+    branding,
+  }).includes(brandingRecord.logoUrl),
+  "역할 없는 빈 이미지 블록에 로고를 채우지 않는다",
 );
 
 console.log(`✅ 렌더 정합 검증 통과 — ${checks}건`);

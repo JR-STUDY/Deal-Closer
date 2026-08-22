@@ -15,6 +15,7 @@ import {
   type EditorDoc,
 } from "@/lib/editor-schema";
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants";
+import type { CompanyProfile } from "@/lib/branding";
 import { formatKRW } from "@/lib/format";
 
 /**
@@ -52,6 +53,28 @@ export type OpportunityContext = {
   previousOpportunityName?: string | null;
   memo?: string | null;
 };
+
+/**
+ * 자사(공급자) 정보를 프롬프트용 텍스트로 (설정 7).
+ *
+ * 예전에는 **상호 하나만** 넘겼다. 그래서 모델이 만든 공급자 필드는 상호 말고는 전부
+ * 빈칸이거나 모델이 지어낸 값이었다 — 사업자등록번호를 지어내면 그 견적서는 세금계산서와
+ * 맞지 않는다. 회사 설정에 있는 사실을 그대로 주고 **없는 값은 비워 두라고** 지시한다.
+ *
+ * 비어 있는 항목은 줄 자체를 넣지 않는다 — `대표자: (없음)` 은 모델에게 "없음" 이라는
+ * 값을 주는 것으로 읽힐 수 있다.
+ */
+export function describeCompany(company: CompanyProfile): string {
+  const lines = [`상호: ${company.companyName}`];
+  const add = (label: string, value: string | null | undefined) => {
+    if (value?.trim()) lines.push(`${label}: ${value.trim()}`);
+  };
+  add("대표자", company.ceoName);
+  add("사업자등록번호", company.bizRegNo);
+  add("주소", company.address);
+  add("대표 연락처", company.phone);
+  return lines.join("\n");
+}
 
 /** 기회·거래처를 프롬프트용 텍스트로 */
 export function describeOpportunity(ctx: OpportunityContext): string {
