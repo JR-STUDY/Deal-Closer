@@ -113,9 +113,21 @@ export function DetailShell({
     openedBy.current = id;
     setActiveId(id);
     setIsOpen(true);
-    // 키보드로도 드로어 안으로 들어가야 한다 — 열릴 때 초점을 패널로 옮긴다 (ACC_*)
+    /*
+     * 키보드로도 드로어 안으로 들어가야 한다 — 열릴 때 초점을 패널로 옮긴다 (ACC_*).
+     *
+     * **`preventScroll` 없이 `focus()` 하면 화면이 통째로 튄다.** 이 시점의 드로어는
+     * 아직 `translate-x-full` 상태(전환 시작 전)라 시각적으로 바깥칸(`overflow-hidden`)
+     * 밖에 있고, 브라우저는 초점 받은 요소를 보이게 하려고 **바깥칸을 가로로 스크롤한다**
+     * — `overflow:hidden` 도 프로그램으로는 스크롤되므로 막히지 않는다.
+     * 실측: 열자마자 바깥칸 `scrollLeft` 가 0 → 544(드로어 폭)로 뛰어 본문이 x=336 →
+     * -208 로 끌려갔고, 전환이 진행돼 `scrollWidth` 가 줄면 그 값이 다시 0 으로 깎이며
+     * 본문이 제자리로 튕겨 돌아왔다. 초점만 옮기면 되므로 스크롤은 거절한다.
+     */
     if (wasClosed) {
-      requestAnimationFrame(() => drawerRef.current?.focus());
+      requestAnimationFrame(() =>
+        drawerRef.current?.focus({ preventScroll: true }),
+      );
     }
   };
 
