@@ -1,6 +1,10 @@
 /**
  * 메일 발송 이력(EmailLog) 목록 — 조회 조건·정렬·표시 판정 **순수 함수** (F-234 · 메일-1).
  *
+ * 열람에 관해서는 **"무엇으로 보여줄 것인가"** 만 다룬다(표시 상태·라벨·안내 문구).
+ * "어떻게 기록되는가"(추적 픽셀 주소·태그·최초 열람 규칙)는 `@/lib/email-tracking` 이며,
+ * 판정을 두 모듈에 나눠 두지 않는다 — 목록과 상세가 서로 다른 말을 하기 시작한다.
+ *
  * `src/lib/opportunity.ts`(목록 조회 조건) + `src/lib/opportunity-sort.ts`(정렬)와 같은 설계다 —
  * 검색·필터·정렬 상태는 **URL 쿼리(`?q=&status=&opened=&sort=&dir=&page=`)** 로만 주고받고,
  * 서버 컴포넌트가 그 값을 그대로 Prisma 조건으로 바꿔 쓴다. 새로고침·뒤로가기·주소 공유에서
@@ -77,6 +81,61 @@ export function emailOpenState(log: {
   return log.openedAt ? "opened" : "unopened";
 }
 
+/*
+ * ── 낱말: "열람 여부" 가 아니라 "열람 확인" 이다 ──
+ *
+ * 오픈 트래킹은 **원리적으로 부정확하다.** 기록은 수신자의 메일 앱이 본문의 1×1 추적
+ * 이미지를 불러왔을 때만 남는다.
+ *   - 거짓 음성: 대부분의 메일 앱이 이미지를 기본으로 차단한다 → **읽었는데 기록이 없다.**
+ *   - 거짓 양성: 메일 앱·보안 프록시가 이미지를 미리 불러온다(Gmail 이미지 프록시) →
+ *     **열어보지 않았는데 열람으로 잡힌다.**
+ *
+ * 그래서 화면은 **확인된 것만 주장한다** — 기록이 있으면 "열람 확인", 없으면 "기록 없음"
+ * 이다. `미열람`(=읽지 않았다)이라고 적으면 우리가 알 수 없는 사실을 단정하는 것이고,
+ * 담당자는 그 단정을 근거로 고객에게 다시 연락한다. 이 프로젝트가 금액에 대해 지키는
+ * 태도("틀린 말을 하는 것이 아무 말도 하지 않는 것보다 나쁘다")와 같은 규칙이다.
+ *
+ * 라벨·안내 문구를 **여기 한 곳**에 둔다 — 목록 머리글·셀 툴팁·상세 필드·툴바 필터가
+ * 같은 낱말을 써야 한다(툴바는 클라이언트 컴포넌트이므로 상수를 그쪽에 두지 않는다 —
+ * AGENTS.md "서버가 읽는 상수는 use client 파일에서 export 하지 않는다").
+ */
+
+/** 목록 머리글·상세 필드 이름 */
+export const EMAIL_OPEN_COLUMN_LABEL = "열람 확인";
+
+/** 셀에 적는 낱말 (실패 건은 열람을 논하지 않는다) */
+export const EMAIL_OPEN_STATE_LABELS: Record<EmailOpenState, string> = {
+  failed: "—",
+  opened: "열람 확인",
+  unopened: "기록 없음",
+};
+
+/**
+ * ⓘ 안내 — 무엇을 근거로 적는지, 왜 부정확한지 (정책 COPY-TONE).
+ *
+ * **마지막 문장은 실제 전송(F-233)이 붙는 날 지운다** — 그때부터는 픽셀이 함께 나가므로
+ * 사실이 아니게 된다. 앞의 두 문장(양방향 부정확)은 그때도 그대로 남는다.
+ */
+export const EMAIL_OPEN_HINT =
+  "열람은 수신자의 메일 앱이 본문의 추적 이미지를 불러올 때만 기록됩니다. " +
+  "그래서 확인된 열람만 사실로 볼 수 있습니다 — 이미지를 차단하면 읽어도 기록이 남지 " +
+  "않고(대부분의 메일 앱이 기본으로 차단합니다), 반대로 메일 앱·보안 프록시가 이미지를 " +
+  "미리 불러오면 열어보지 않아도 열람으로 잡힙니다. " +
+  "또한 실제 메일 전송이 연동되기 전까지는 추적 이미지가 함께 나가지 않아 기록이 쌓이지 않습니다.";
+
+/** 열람 기록이 없는 칸의 툴팁 — "읽지 않았다" 로 단정하지 않는다 */
+export const EMAIL_OPEN_UNOPENED_TOOLTIP =
+  "열람 기록이 없습니다. 읽지 않았다는 뜻은 아닙니다 — 수신자의 메일 앱이 이미지를 " +
+  "차단하면 읽어도 기록이 남지 않습니다.";
+
+/** 열람 기록이 있는 칸의 툴팁에 덧붙이는 단서 — 거짓 양성을 숨기지 않는다 */
+export const EMAIL_OPEN_OPENED_CAVEAT =
+  "메일 앱이 이미지를 미리 불러온 기록일 수도 있습니다.";
+
+/** 발송이 실패한 칸의 툴팁 */
+export const EMAIL_OPEN_FAILED_TOOLTIP =
+  "발송이 실패해 열람을 확인할 수 없습니다.";
+
 // ────────────────────────── 수신자 ──────────────────────────
 
 /**
@@ -96,9 +155,19 @@ export function recipientList(recipients: string): string[] {
 
 // ────────────────────────── 검색·필터 ──────────────────────────
 
-/** 열람 여부 필터 — 정렬 대상이 아니라 걸러내는 조건이다 (아래 정렬 주석 참고) */
+/** 열람 확인 필터 — 정렬 대상이 아니라 걸러내는 조건이다 (아래 정렬 주석 참고) */
 export const EMAIL_OPEN_FILTERS = ["opened", "unopened"] as const;
 export type EmailOpenFilter = (typeof EMAIL_OPEN_FILTERS)[number];
+
+/**
+ * 필터 라벨 — 표시 라벨과 같은 낱말을 쓴다.
+ * `unopened` 를 "미열람" 이라고 적지 않는다 — 걸러내는 것은 **기록이 없는 건**이고,
+ * 그것이 곧 읽지 않은 건은 아니다 (위 낱말 주석 참고).
+ */
+export const EMAIL_OPEN_FILTER_LABELS: Record<EmailOpenFilter, string> = {
+  opened: "열람 확인됨",
+  unopened: "열람 기록 없음",
+};
 
 export function isEmailOpenFilter(value: string): value is EmailOpenFilter {
   return (EMAIL_OPEN_FILTERS as readonly string[]).includes(value);
@@ -153,7 +222,7 @@ export function emailLogsWhere(
 ): Prisma.EmailLogWhereInput {
   const where: Prisma.EmailLogWhereInput = { document: { orgId } };
   if (filters.status) where.status = filters.status;
-  // 열람 시각의 유무가 곧 열람 여부다 (`openCount` 는 몇 번 열었는지일 뿐이다)
+  // 열람 시각의 유무가 곧 "확인된 열람" 이다 (`openCount` 는 몇 번 불렸는지일 뿐이다)
   if (filters.opened === "opened") where.openedAt = { not: null };
   if (filters.opened === "unopened") where.openedAt = null;
   if (filters.query) {
@@ -172,7 +241,7 @@ export function emailLogsWhere(
  * 정렬할 수 있는 컬럼.
  *
  * **자연스러운 순서가 있는 값만 연다** (기회 목록과 같은 기준).
- * - `상태`·`열람 여부` 는 값이 두세 가지뿐이라 정렬해도 "성공 뭉치 / 실패 뭉치" 가 되고,
+ * - `상태`·`열람 확인` 은 값이 두세 가지뿐이라 정렬해도 "성공 뭉치 / 실패 뭉치" 가 되고,
  *   보려던 것(실패한 건만)은 **필터가 더 정확히** 해결한다 — 그래서 툴바 필터로 두었다.
  * - `받는 사람` 은 세미콜론으로 이어 붙인 다중 값이라 첫 주소로만 서고, 특정 수신자를 찾는
  *   목적은 검색어가 맡는다.

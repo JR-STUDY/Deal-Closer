@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import {
   EMAIL_LOG_DETAIL_SELECT,
+  EMAIL_OPEN_COLUMN_LABEL,
+  EMAIL_OPEN_HINT,
   recipientList,
 } from "@/lib/email-log";
 import { DOCUMENT_TYPE_LABELS, isDocumentType } from "@/lib/constants";
@@ -182,13 +184,12 @@ export default async function SentMailDetailPage({
                     </span>
                   )}
                 </Field>
+                {/* 목록과 같은 낱말·같은 안내를 쓴다 (문구는 `@/lib/email-log` 한 곳) */}
                 <Field
-                  label="열람 여부"
+                  label={EMAIL_OPEN_COLUMN_LABEL}
                   hint={
-                    <InfoHint label="열람 여부 기준 안내">
-                      수신자가 메일 본문의 추적 이미지를 불러오면 열람 시각이
-                      기록됩니다. 현재는 추적 이미지 삽입이 연동되지 않아 대부분
-                      ‘미열람’ 으로 표시됩니다.
+                    <InfoHint label="열람 확인 기준 안내">
+                      {EMAIL_OPEN_HINT}
                     </InfoHint>
                   }
                 >

@@ -10,6 +10,7 @@ import {
 import { parseRecipients } from "@/lib/validation";
 import { applyDocumentSent } from "@/lib/opportunity-stage";
 import { syncOpportunityAmount } from "@/lib/opportunity-amount";
+import { newTrackingId, readAppBaseUrl } from "@/lib/email-tracking";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -52,6 +53,11 @@ function describeTransition(
  * 단계 전이는 반드시 `@/lib/opportunity-stage` 를 경유한다 (AGENTS.md 규칙).
  * 실제 메일 전송(어댑터 연결)·PDF 첨부는 Phase 5(F-232 · F-233) 범위라 여기서는
  * 이력만 남긴다.
+ *
+ * **오픈 트래킹(F-234)**: 이력마다 추측 불가능한 `trackingId` 를 만들어 저장한다. 그 id 를
+ * 가리키는 추적 픽셀을 본문에 얹는 것은 **전송 조립부**의 일이며(위 이유로 아직 없다)
+ * `withTrackingPixel(html, baseUrl, log.trackingId)` 한 줄이면 된다 —
+ * 자세한 규칙은 `@/lib/email-tracking` 주석 참고.
  */
 export async function POST(req: NextRequest, { params }: Params) {
   const [{ id }, user] = await Promise.all([params, getCurrentUser()]);
@@ -93,6 +99,21 @@ export async function POST(req: NextRequest, { params }: Params) {
     return fail("폐기된 문서는 발송할 수 없습니다.");
   }
 
+  /*
+   * 추적 식별자는 **발송마다 새로** 만든다 (`@unique` — 이력 1건과 1:1).
+   * 기본 주소를 여기서 미리 확인해 두는 이유: 주소가 없으면 픽셀을 만들 수 없어 이 발송의
+   * 열람은 영원히 기록되지 않는다. 발송 시점에 그 사실을 말해 둔다 —
+   * 조용히 넘기면 나중에 화면의 "열람 기록 없음" 을 수신자 탓으로 읽게 된다
+   * (`mailer.ts` 가 자격증명 없을 때 이유를 남기는 것과 같은 판단).
+   */
+  const trackingId = newTrackingId();
+  const baseUrl = readAppBaseUrl();
+  if (baseUrl.error) {
+    console.info(
+      `[mail-track] ${baseUrl.error} 추적 픽셀을 만들 수 없어 이 발송의 열람은 기록되지 않습니다.`,
+    );
+  }
+
   const { log, transition, amountSync } = await prisma.$transaction(async (tx) => {
     const created = await tx.emailLog.create({
       data: {
@@ -103,6 +124,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         body: body.body ?? null,
         attachmentName: `${doc.title}.pdf`,
         status: "SENT",
+        trackingId,
       },
     });
 

@@ -12,6 +12,11 @@ import {
   type NormalizedMail,
   type SendMailInput,
 } from "../src/lib/mailer";
+import {
+  newTrackingId,
+  trackingPixelTag,
+  withTrackingPixel,
+} from "../src/lib/email-tracking";
 
 /**
  * 메일 전송 어댑터 최소 검증 (Phase 0-3).
@@ -469,6 +474,87 @@ assert.equal(payload.attachments?.[0].content_type, "application/pdf");
     line.includes("re_test_key"),
   );
   assert.equal(leaked, false, "자격증명이 로그·메시지로 새면 안 된다");
+}
+
+// ── 10. 오픈 트래킹: 추적 픽셀은 **html 본문에만** 실려 나간다 (F-234) ──
+
+/*
+ * 실제 발송 없이(fetch 스텁) 확인한다 — 제공자 요청 본문의 `html` 에 픽셀이 그대로 들어가고
+ * `text` 에는 들어가지 않는다. 텍스트 파트에 태그를 넣으면 이미지가 아니라 **글자**로
+ * 보이고(`<img …>` 가 그대로 읽힌다) 열람은 여전히 기록되지 않는다.
+ *
+ * 이것이 실전송 조립부(F-233)가 붙을 자리의 계약이다:
+ *   sendMail({ text: 본문, html: withTrackingPixel(본문HTML, baseUrl, log.trackingId) })
+ */
+{
+  const rec = recorder();
+  const stub = stubFetch([jsonResponse(200, { id: "resend_track_1" })]);
+  const trackingId = newTrackingId();
+  const baseUrl = "https://app.example.com";
+  const pixel = trackingPixelTag(baseUrl, trackingId);
+  const signature = '<div class="sig">홍길동 · 영업팀</div>';
+  const html = withTrackingPixel(
+    `<!doctype html><html><body><p>${BASE_TEXT}</p>${signature}</body></html>`,
+    baseUrl,
+    trackingId,
+  );
+
+  const result = await sendMail(
+    { ...baseInput, html },
+    {
+      config: config(),
+      fetchImpl: stub.impl,
+      sleep: rec.sleep,
+      logger: rec.logger,
+    },
+  );
+  assert.equal(result.status, "sent");
+
+  const payload = JSON.parse(String(stub.calls[0].init.body)) as {
+    html?: string;
+    text?: string;
+  };
+  assert.ok(payload.html?.includes(pixel), "html 본문에 추적 픽셀이 실려 나간다");
+  assert.ok(
+    (payload.html?.indexOf(pixel) ?? -1) > (payload.html?.indexOf(signature) ?? -1),
+    "픽셀은 서명 뒤(본문 맨 끝)에 온다",
+  );
+  assert.equal(
+    payload.text?.includes("<img"),
+    false,
+    "텍스트 파트에는 태그를 넣지 않는다 (글자로 그대로 보인다)",
+  );
+  assert.ok(
+    payload.html?.includes(`/api/mail/track/${trackingId}`),
+    "픽셀 주소는 추적 라우트 + 그 발송의 식별자를 가리킨다",
+  );
+}
+
+// 기본 주소가 없으면 픽셀 없이 나간다 — 깨진 이미지가 고객 메일에 박히지 않는다
+{
+  const rec = recorder();
+  const stub = stubFetch([jsonResponse(200, { id: "resend_track_2" })]);
+  const html = withTrackingPixel(
+    "<html><body><p>본문</p></body></html>",
+    null,
+    newTrackingId(),
+  );
+  const result = await sendMail(
+    { ...baseInput, html },
+    {
+      config: config(),
+      fetchImpl: stub.impl,
+      sleep: rec.sleep,
+      logger: rec.logger,
+    },
+  );
+  assert.equal(result.status, "sent");
+  const payload = JSON.parse(String(stub.calls[0].init.body)) as { html?: string };
+  assert.equal(
+    payload.html?.includes("<img"),
+    false,
+    "기본 주소가 없으면 픽셀을 넣지 않는다",
+  );
 }
 
 console.log("mailer tests passed ✅");

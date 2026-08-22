@@ -8,7 +8,8 @@
  * ③ 같은 컬럼을 두 번 누르면 원래대로 돌아온다 ·
  * ④ 정렬을 바꾸면 page 가 1로 되돌아가고 검색·필터는 그대로 실려 간다 ·
  * ⑤ 모든 정렬의 마지막 기준이 `{ id: "asc" }` 다 (페이지를 넘길 때 행이 겹치거나 빠지지 않게) ·
- * ⑥ 발송 실패 건은 "미열람" 이 아니라 "실패" 로 판정된다 ·
+ * ⑥ 발송 실패 건은 열람을 논하지 않는다("실패" 로 판정된다) ·
+ * ⑥' 화면 낱말이 **확인된 것만 주장한다** ("미열람" = 읽지 않았다고 단정하지 않는다) ·
  * ⑦ 목록 select 에 본문(body)이 들어가지 않는다.
  */
 
@@ -21,6 +22,11 @@ import {
   EMAIL_LOG_STATUSES,
   EMAIL_LOG_STATUS_LABELS,
   EMAIL_OPEN_FILTERS,
+  EMAIL_OPEN_FILTER_LABELS,
+  EMAIL_OPEN_HINT,
+  EMAIL_OPEN_OPENED_CAVEAT,
+  EMAIL_OPEN_STATE_LABELS,
+  EMAIL_OPEN_UNOPENED_TOOLTIP,
   SORT_DIR_PARAM,
   SORT_PARAM,
   emailLogOrderBy,
@@ -360,5 +366,58 @@ for (const field of [
     `목록 select 에 ${field} 가 들어 있다`,
   );
 }
+
+// ────────────────────── 낱말: 확인된 것만 주장한다 ──────────────────────
+/*
+ * 오픈 트래킹은 원리적으로 부정확하다 — 이미지 차단으로 거짓 음성, 프리페치·프록시로
+ * 거짓 양성이 모두 생긴다. 그래서 화면은 "열람 여부"·"미열람" 이라고 쓰지 않는다.
+ * 문구가 되돌아가면 이 검사가 잡는다.
+ */
+check(
+  EMAIL_OPEN_STATE_LABELS.opened,
+  "열람 확인",
+  "기록이 있으면 '열람 확인' 이다",
+);
+check(
+  EMAIL_OPEN_STATE_LABELS.unopened,
+  "기록 없음",
+  "기록이 없으면 '기록 없음' 이다 — '미열람' 은 읽지 않았다는 단정이다",
+);
+for (const [key, label] of Object.entries({
+  ...EMAIL_OPEN_STATE_LABELS,
+  ...EMAIL_OPEN_FILTER_LABELS,
+})) {
+  check(
+    label.includes("미열람"),
+    false,
+    `'미열람' 을 쓰지 않는다 (${key}: ${label})`,
+  );
+}
+check(
+  EMAIL_OPEN_FILTERS.every((value) => Boolean(EMAIL_OPEN_FILTER_LABELS[value])),
+  true,
+  "모든 열람 필터에 라벨이 있다",
+);
+// 안내는 **양방향 부정확**을 모두 말한다 (한쪽만 적으면 반대쪽을 사실로 믿는다)
+check(
+  EMAIL_OPEN_HINT.includes("차단"),
+  true,
+  "안내가 거짓 음성(이미지 차단)을 밝힌다",
+);
+check(
+  EMAIL_OPEN_HINT.includes("미리 불러오"),
+  true,
+  "안내가 거짓 양성(프리페치·프록시)을 밝힌다",
+);
+check(
+  EMAIL_OPEN_UNOPENED_TOOLTIP.includes("읽지 않았다는 뜻은 아닙니다"),
+  true,
+  "기록 없음 툴팁이 '읽지 않았다' 로 단정하지 않는다고 밝힌다",
+);
+check(
+  EMAIL_OPEN_OPENED_CAVEAT.includes("미리 불러온"),
+  true,
+  "열람 기록 툴팁도 프리페치 가능성을 함께 적는다",
+);
 
 console.log(`email-log: ${checks} checks passed`);

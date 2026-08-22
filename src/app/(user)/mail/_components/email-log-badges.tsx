@@ -3,6 +3,10 @@ import { cn } from "@/lib/utils";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import {
   EMAIL_LOG_STATUS_LABELS,
+  EMAIL_OPEN_FAILED_TOOLTIP,
+  EMAIL_OPEN_OPENED_CAVEAT,
+  EMAIL_OPEN_STATE_LABELS,
+  EMAIL_OPEN_UNOPENED_TOOLTIP,
   emailOpenState,
   isEmailLogStatus,
   type EmailOpenState,
@@ -38,11 +42,14 @@ export function EmailStatusBadge({ status }: { status: string }) {
 }
 
 /**
- * 열람 여부 한 칸 — 목록의 좁은 칸에 맞춰 **날짜만** 보이고 정확한 시각·열람 횟수는 툴팁으로
+ * 열람 확인 한 칸 — 목록의 좁은 칸에 맞춰 **날짜만** 보이고 정확한 시각·기록 횟수는 툴팁으로
  * 접는다 (기회 목록의 최근 수정일 칸과 같은 방식).
  *
- * 발송이 실패한 건에는 "미열람" 을 적지 않는다 — 나가지 않은 메일의 미열람은 사실이지만
- * "보냈는데 아직 안 봤다" 로 읽힌다. 판정은 `emailOpenState()` 한 곳이다.
+ * **확인된 것만 주장한다.** 기록이 없을 때 "미열람"(=읽지 않았다)이라고 적지 않는다 —
+ * 이미지를 차단한 메일 앱에서는 읽어도 기록이 남지 않으므로 우리가 알 수 없는 사실이다.
+ * 반대로 기록이 있어도 프록시가 미리 불러온 것일 수 있어 툴팁이 그 단서를 함께 적는다.
+ * 발송이 실패한 건은 열람을 아예 논하지 않는다. 낱말·문구는 `@/lib/email-log` 한 곳이고
+ * 판정은 `emailOpenState()` 한 곳이다.
  *
  * `inRow` 를 주면 트리거를 행 덮개 위로 올린다 (`RowLink` 의 `::after` 아래에서는 툴팁이
  * 열리지 않는다). 상세 화면에서는 덮개가 없으므로 주지 않는다.
@@ -59,11 +66,10 @@ export function OpenStateCell({
 
   if (state === "failed") {
     return (
-      <HintTooltip
-        className={triggerClass}
-        content="발송이 실패해 열람 여부를 알 수 없습니다."
-      >
-        <span className="text-muted-foreground">—</span>
+      <HintTooltip className={triggerClass} content={EMAIL_OPEN_FAILED_TOOLTIP}>
+        <span className="text-muted-foreground">
+          {EMAIL_OPEN_STATE_LABELS.failed}
+        </span>
       </HintTooltip>
     );
   }
@@ -73,9 +79,9 @@ export function OpenStateCell({
     return (
       <HintTooltip
         className={triggerClass}
-        content={`${formatDateTime(log.openedAt)} 최초 열람 · 총 ${formatNumber(
+        content={`${formatDateTime(log.openedAt)} 최초 열람 기록 · 총 ${formatNumber(
           Math.max(1, log.openCount),
-        )}회 열람`}
+        )}회 기록 · ${EMAIL_OPEN_OPENED_CAVEAT}`}
       >
         <span className="tabular-nums">{formatDate(log.openedAt)}</span>
       </HintTooltip>
@@ -85,9 +91,11 @@ export function OpenStateCell({
   return (
     <HintTooltip
       className={triggerClass}
-      content="수신자가 아직 메일을 열지 않았습니다. 본문에 삽입된 추적 이미지를 불러오면 열람 시각이 기록됩니다."
+      content={EMAIL_OPEN_UNOPENED_TOOLTIP}
     >
-      <span className="text-muted-foreground">미열람</span>
+      <span className="text-muted-foreground">
+        {EMAIL_OPEN_STATE_LABELS.unopened}
+      </span>
     </HintTooltip>
   );
 }
