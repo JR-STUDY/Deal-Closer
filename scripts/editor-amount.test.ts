@@ -123,7 +123,7 @@ check(
 const seededWithAmount = seedTemplate({
   type: "CONTRACT",
   clientName: "커머스",
-  supplierName: "레인메이커",
+  company: { companyName: "레인메이커" },
   items: [],
   amount: 12_000_000,
 });
@@ -148,7 +148,7 @@ check(
     seedTemplate({
       type: "NDA",
       clientName: "누리테크",
-      supplierName: "레인메이커",
+      company: { companyName: "레인메이커" },
       items: [],
       amount: 0,
     }),
@@ -163,7 +163,7 @@ check(
     seedTemplate({
       type: "QUOTE",
       clientName: "다올테크",
-      supplierName: "레인메이커",
+      company: { companyName: "레인메이커" },
       items: [
         { name: "라이선스", description: null, quantity: 2, unitPrice: 1_000_000 },
       ],

@@ -174,12 +174,22 @@ async function withInlinedAssets(doc: EditorDoc): Promise<EditorDoc> {
   return { ...doc, blocks };
 }
 
-async function withInlinedLogo(
+/**
+ * 브랜딩 이미지(로고·인감)를 브라우저가 읽을 수 있는 값으로 바꾼다.
+ *
+ * **둘을 함께 처리한다.** 예전에는 로고만 인라인했는데, 인감이 붙은 뒤로는 한쪽만
+ * 처리하면 `/stamp.png` 같은 루트 상대경로가 헤드리스 브라우저에서 빈 이미지가 된다
+ * (도메인이 없으므로 받아올 곳이 없다). 두 값의 처리 규칙은 같으므로 함께 둔다.
+ */
+async function withInlinedBrandingImages(
   branding: PdfBranding | null | undefined,
 ): Promise<PdfBranding | null> {
   if (!branding) return null;
-  const logoUrl = await resolveImageSrc(branding.logoUrl);
-  return { ...branding, logoUrl: logoUrl || null };
+  const [logoUrl, stampUrl] = await Promise.all([
+    resolveImageSrc(branding.logoUrl),
+    resolveImageSrc(branding.stampUrl),
+  ]);
+  return { ...branding, logoUrl: logoUrl || null, stampUrl: stampUrl || null };
 }
 
 /** 컨테이너처럼 샌드박스를 못 쓰는 환경용 탈출구 (기본은 샌드박스 유지) */
@@ -243,7 +253,7 @@ export async function renderDocumentPdf(
 
   const [doc, branding] = await Promise.all([
     withInlinedAssets(input.doc),
-    withInlinedLogo(input.branding),
+    withInlinedBrandingImages(input.branding),
   ]);
   const html = buildDocumentHtml({ doc, title: input.title, branding });
 

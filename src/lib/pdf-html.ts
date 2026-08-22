@@ -19,23 +19,48 @@ import {
   tableLayout,
   textFormat,
   totalSummaryRow,
+  withCompanyDefaults,
   FONT_FAMILIES,
   type Align,
   type Block,
   type BlockPropsMap,
   type EditorDoc,
   type FontFamily,
-  findMetaField,
-  type MetaFieldRole,
 } from "./editor-schema";
+import {
+  DEFAULT_PRIMARY_COLOR as BRANDING_DEFAULT_PRIMARY_COLOR,
+  toCompanyProfile,
+  type BrandingCompanyRecord,
+  type CompanyProfile,
+} from "./branding";
 import { formatKRW } from "./format";
 
-/** 조직 브랜딩 (Prisma `Branding` 모델의 인쇄 관련 필드) */
-export type PdfBranding = {
-  companyName: string | null;
-  logoUrl: string | null;
+/**
+ * 조직 브랜딩 (Prisma `Branding` 모델의 인쇄 관련 필드).
+ *
+ * 회사 정보를 **통째로** 받는다. 예전에는 `companyName`·`logoUrl`·`primaryColor` 셋만
+ * 있어서 인쇄 경로가 인감·대표자·사업자등록번호·주소·전화를 아예 볼 수 없었다 —
+ * 로고와 인감은 견적서에 찍히지 않으면 아무 쓸모가 없다.
+ *
+ * 필드를 **필수(nullable)** 로 둔다. 옵셔널로 두면 호출측이 하나를 빠뜨려도 타입 검사가
+ * 통과하고 런타임에만 값이 사라진다(확정 문서 판정의 `rootId`·`version` 과 같은 이유).
+ * 대신 조립은 `toPdfBranding` 한 곳에서 한다.
+ */
+export type PdfBranding = CompanyProfile & {
+  companyName: string;
   primaryColor: string;
 };
+
+/** Prisma `Branding` 행(또는 없음) → 인쇄용 브랜딩. 상호 폴백은 호출측이 준다 */
+export function toPdfBranding(
+  record: (BrandingCompanyRecord & { primaryColor: string }) | null | undefined,
+  fallbackCompanyName: string,
+): PdfBranding {
+  return {
+    ...toCompanyProfile(record, fallbackCompanyName),
+    primaryColor: record?.primaryColor || BRANDING_DEFAULT_PRIMARY_COLOR,
+  };
+}
 
 export type DocumentHtmlInput = {
   doc: EditorDoc;
@@ -44,8 +69,11 @@ export type DocumentHtmlInput = {
   branding?: PdfBranding | null;
 };
 
-/** Branding.primaryColor 기본값 (prisma/schema.prisma 와 동일) */
-export const DEFAULT_PRIMARY_COLOR = "#4F46E5";
+/**
+ * Branding.primaryColor 기본값.
+ * 값은 `@/lib/branding` 이 단일 소스다 — 두 곳에 적으면 한쪽만 바뀐다.
+ */
+export const DEFAULT_PRIMARY_COLOR = BRANDING_DEFAULT_PRIMARY_COLOR;
 
 /** 화면의 Tailwind 토큰을 인쇄용 실제 색으로 고정한 값 */
 const PRINT_COLORS = {
@@ -213,35 +241,26 @@ function renderText(props: BlockPropsMap["text"]): string {
 }
 
 /**
- * 값이 빈 필드에만 적용할 대체값 — 사용자가 입력한 값은 절대 덮어쓰지 않는다.
- * 대상은 **역할**로 지목한다(`findMetaField`) — 예전에는 라벨 문자열로 찾아서
- * 사용자가 `상호` 라벨을 고치면 폴백이 조용히 끊겼다.
+ * 라벨/값 2열 표 (공급자·거래처 메타 공용).
+ *
+ * **회사 정보 폴백은 여기 없다.** 예전에는 이 함수가 빈 `상호` 칸을 브랜딩 회사명으로
+ * 메웠는데, 그러면 캔버스에는 빈 칸이 보이는데 PDF 에만 값이 찍혀 화면과 인쇄가 갈라진다
+ * (사용자가 확인할 수 없는 내용이 고객에게 발송된다). 지금은 `withCompanyDefaults` 가
+ * **문서 단계에서** 한 번 채우고, 에디터·미리보기·PDF 가 같은 문서를 그린다.
  */
-type FieldFallback = { role: MetaFieldRole; value: string };
-
-/** 라벨/값 2열 표 (공급자·거래처 메타 공용) */
 function renderFieldTable(
   props: BlockPropsMap["supplier"] | BlockPropsMap["clientMeta"],
   className: string,
-  fallbacks: FieldFallback[] = [],
 ): string {
   const fields = Array.isArray(props.fields) ? props.fields : [];
   const labelWidth = px(clamp(props.labelWidth, 0, MAX_CANVAS_SIZE));
-  // 폴백 대상 필드를 역할로 미리 찾아 둔다 (필드 id 로 비교하면 라벨과 무관해진다)
-  const fallbackByFieldId = new Map(
-    fallbacks
-      .map((c) => [findMetaField(fields, c.role)?.id, c.value] as const)
-      .filter((pair): pair is readonly [string, string] => typeof pair[0] === "string"),
-  );
   const rows = fields
-    .map((f) => {
-      const label = String(f.label ?? "");
-      const value =
-        String(f.value ?? "").trim() || (fallbackByFieldId.get(f.id) ?? "");
-      return `<tr><th${styleAttr({ width: labelWidth })}>${escapeHtml(
-        label,
-      )}</th><td>${escapeHtml(value)}</td></tr>`;
-    })
+    .map(
+      (f) =>
+        `<tr><th${styleAttr({ width: labelWidth })}>${escapeHtml(
+          String(f.label ?? ""),
+        )}</th><td>${escapeHtml(String(f.value ?? ""))}</td></tr>`,
+    )
     .join("");
   return `<table class="blk-table ${className}"><tbody>${rows}</tbody></table>`;
 }
@@ -358,16 +377,14 @@ function renderTable(props: BlockPropsMap["table"]): string {
 }
 
 /**
- * 이미지 블록. 비어 있으면 브랜딩 로고로 대체한다
- * (`seedTemplate` 이 로고 블록에 Branding.logoUrl 을 시드하는 것과 같은 의도).
- * 화면과 달리 "이미지 없음" 자리표시자는 넣지 않는다 — 고객 발송용 인쇄물이기 때문이다.
+ * 이미지 블록.
+ *
+ * 로고·인감 폴백은 `withCompanyDefaults` 가 문서 단계에서 이미 채웠으므로 여기서는
+ * 블록에 담긴 값만 그린다. 화면과 달리 "이미지 없음" 자리표시자는 넣지 않는다 —
+ * 고객 발송용 인쇄물에 회색 사각형이 남으면 안 된다.
  */
-function renderImage(
-  props: BlockPropsMap["image"],
-  branding: PdfBranding | null,
-): string {
-  const src =
-    sanitizeImageSrc(props.dataUrl) || sanitizeImageSrc(branding?.logoUrl);
+function renderImage(props: BlockPropsMap["image"]): string {
+  const src = sanitizeImageSrc(props.dataUrl);
   if (!src) return "";
   const style = styleAttr({
     "object-fit": props.fit === "cover" ? "cover" : "contain",
@@ -392,7 +409,7 @@ function renderDivider(props: BlockPropsMap["divider"]): string {
   return `<div class="blk-divider"><div${style}></div></div>`;
 }
 
-function renderBlockContent(block: Block, branding: PdfBranding | null): string {
+function renderBlockContent(block: Block): string {
   switch (block.type) {
     case "title":
       return renderTitle(block.props as BlockPropsMap["title"]);
@@ -402,9 +419,6 @@ function renderBlockContent(block: Block, branding: PdfBranding | null): string 
       return renderFieldTable(
         block.props as BlockPropsMap["supplier"],
         "blk-supplier",
-        branding?.companyName
-          ? [{ role: "supplierName" as const, value: branding.companyName }]
-          : [],
       );
     case "clientMeta":
       return renderFieldTable(
@@ -416,7 +430,7 @@ function renderBlockContent(block: Block, branding: PdfBranding | null): string 
     case "table":
       return renderTable(block.props as BlockPropsMap["table"]);
     case "image":
-      return renderImage(block.props as BlockPropsMap["image"], branding);
+      return renderImage(block.props as BlockPropsMap["image"]);
     case "divider":
       return renderDivider(block.props as BlockPropsMap["divider"]);
     default:
@@ -426,11 +440,7 @@ function renderBlockContent(block: Block, branding: PdfBranding | null): string 
 
 // ============================ 페이지 조립 ============================
 
-function renderPage(
-  doc: EditorDoc,
-  pageIndex: number,
-  branding: PdfBranding | null,
-): string {
+function renderPage(doc: EditorDoc, pageIndex: number): string {
   const boxes = blocksOnPage(doc, pageIndex)
     .map((b) => {
       const style = styleAttr({
@@ -440,7 +450,7 @@ function renderPage(
         height: px(b.h),
         "z-index": String(Math.trunc(Number(b.z) || 1)),
       });
-      return `<div class="blk"${style}>${renderBlockContent(b, branding)}</div>`;
+      return `<div class="blk"${style}>${renderBlockContent(b)}</div>`;
     })
     .join("");
   return `<div class="page">${boxes}</div>`;
@@ -481,18 +491,25 @@ body{color:${PRINT_COLORS.text};font-family:${FONT_FAMILIES.sans};-webkit-print-
  *
  * 브랜딩 반영 지점:
  * - `primaryColor` → 품목표 헤더 밑줄·합계 행 강조색 (레이아웃을 바꾸지 않는 위치만)
- * - `logoUrl` → 비어 있는 이미지 블록의 대체 이미지
- * - `companyName` → PDF 제목 메타데이터, 공급자 블록의 빈 "상호" 값
+ * - 회사 정보(상호·대표자·사업자등록번호·주소·전화·로고·인감) → **빈** 공급자 칸과
+ *   **빈** 로고·인감 이미지. 판정은 `withCompanyDefaults` 순수 함수 하나이고
+ *   에디터 캔버스도 같은 함수를 지난다 — 화면과 인쇄가 같은 값을 그려야 한다.
+ * - `companyName` → PDF 제목 메타데이터
  */
 export function buildDocumentHtml(input: DocumentHtmlInput): string {
-  const { doc, title } = input;
+  const { title } = input;
   const branding = input.branding ?? null;
+  /*
+   * 회사 정보 반영은 **여기서 한 번** 한다. 렌더러마다 폴백을 흩어 두면(예전 방식)
+   * 캔버스에 없는 값이 PDF 에만 찍힌다. 호출부가 잊어도 되도록 이 함수가 책임진다.
+   */
+  const doc = withCompanyDefaults(input.doc, branding);
   const brand = safeHexColor(branding?.primaryColor, DEFAULT_PRIMARY_COLOR);
   const width = clamp(doc.canvas.w, 1, MAX_CANVAS_SIZE);
   const height = clamp(doc.canvas.h, 1, MAX_CANVAS_SIZE);
 
   const pages = Array.from({ length: pageCount(doc) }, (_, i) =>
-    renderPage(doc, i, branding),
+    renderPage(doc, i),
   ).join("");
 
   const docTitle = branding?.companyName

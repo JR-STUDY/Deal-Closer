@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { StageBadge } from "@/components/status-badge";
+import {
+  EMAIL_OPEN_COLUMN_LABEL,
+  EMAIL_OPEN_STATE_LABELS,
+} from "@/lib/email-log";
 import { formatDate, formatDateTime, formatKRW } from "@/lib/format";
 
 /**
@@ -108,7 +112,7 @@ export function AccountEmailList({
 }) {
   if (emailLogs.length === 0) {
     return (
-      <EmptyPanel message="이 거래처로 발송된 메일이 아직 없습니다. 문서를 발송하면 발송 시각과 열람 여부가 여기에 남습니다." />
+      <EmptyPanel message="이 거래처로 발송된 메일이 아직 없습니다. 문서를 발송하면 발송 시각과 열람 확인이 여기에 남습니다." />
     );
   }
 
@@ -126,11 +130,17 @@ export function AccountEmailList({
             {log.document.title} · 수신 {log.recipients}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
+            {/*
+             * 열람은 **확인된 것만** 주장한다 — 기록이 없다고 "읽지 않았다" 로 적지 않는다.
+             * 추적 이미지를 차단하면 읽어도 기록이 남지 않으므로 그 문장은 틀린 말이 된다
+             * (낱말은 발송 이력 화면과 같은 `@/lib/email-log` 상수를 쓴다 — 같은 사실을
+             *  두 화면이 다른 말로 적으면 사용자가 둘 중 무엇을 믿을지 알 수 없다).
+             */}
             {log.status === "FAILED"
               ? "발송 실패"
               : log.openedAt
-                ? `열람 ${formatDateTime(log.openedAt)}`
-                : "아직 열람하지 않았습니다."}
+                ? `${EMAIL_OPEN_STATE_LABELS.opened} ${formatDateTime(log.openedAt)}`
+                : `${EMAIL_OPEN_COLUMN_LABEL} ${EMAIL_OPEN_STATE_LABELS.unopened}`}
           </p>
         </li>
       ))}

@@ -4,6 +4,7 @@ import { PrismaClient } from "../src/generated/prisma/client";
 import {
   seedTemplate,
   calcItemTableTotal,
+  findMetaField,
   type BlockPropsMap,
 } from "../src/lib/editor-schema";
 // 확정 문서 판정은 런타임과 **같은 순수 함수**를 쓴다 (기회-6) — 시드가 화면과 다른 숫자를
@@ -337,9 +338,13 @@ const QUOTE_NOTES: { heading: string; lines: string[] }[] = [
 
 /**
  * 블록 캔버스 표준 양식 문서(contentJson) 생성.
- * - seedTemplate 로 기본 레이아웃(로고·제목·공급자·거래처·품목표·안내)을 만들고,
- * - 공급자 블록에 회사 정보를 채운다. contact 가 주어지면 전화·이메일도 채운다
- *   (개인 문서: 발신 담당자 정보 반영 / 공용 표준 양식: 비워 둠).
+ * - seedTemplate 로 기본 레이아웃(로고·제목·공급자·거래처·품목표·인감·안내)을 만든다.
+ * - 공급자 정보는 **`seedTemplate` 이 회사 정보(CompanyProfile)로 채운다** — 예전에는
+ *   여기서 라벨(`values[f.label]`)로 칸을 찾아 채웠는데, 그 방식은 사용자가 라벨을
+ *   `사업자번호` 로 고치는 순간 끊긴다(AGENTS.md 의 `MetaFieldRole` 규칙).
+ * - contact 가 주어지면 전화·이메일을 발신 담당자 값으로 채운다
+ *   (개인 문서: 담당자 정보 반영 / 공용 표준 양식: 비워 둠). 이메일은 `Branding` 에
+ *   컬럼이 없어 회사 정보로는 채울 수 없으므로 **역할로** 찾아 넣는다.
  */
 function buildStandardForm(input: {
   type: "QUOTE" | "CONTRACT";
@@ -355,28 +360,28 @@ function buildStandardForm(input: {
   const doc = seedTemplate({
     type: input.type,
     clientName: input.clientName,
-    supplierName: SUPPLIER.상호,
-    logoUrl: SUPPLIER_LOGO,
+    company: {
+      companyName: SUPPLIER.상호,
+      ceoName: SUPPLIER.대표자,
+      bizRegNo: SUPPLIER.등록번호,
+      address: SUPPLIER.주소,
+      // 공용 표준 양식은 전화를 비워 둔다 (발신 담당자별로 다르다)
+      phone: input.contact?.phone ?? null,
+      logoUrl: SUPPLIER_LOGO,
+      stampUrl: SUPPLIER_STAMP,
+    },
     items: input.items,
     // 견적서 양식에만 하단 약관/안내 섹션을 붙인다 (계약서는 계약 문구 유지)
     notes: input.type === "QUOTE" ? QUOTE_NOTES : undefined,
   });
 
   const supplier = doc.blocks.find((b) => b.type === "supplier");
-  if (supplier) {
+  if (supplier && input.contact?.email) {
     const props = supplier.props as BlockPropsMap["supplier"];
-    const values: Record<string, string> = {
-      상호: SUPPLIER.상호,
-      대표자: SUPPLIER.대표자,
-      등록번호: SUPPLIER.등록번호,
-      주소: SUPPLIER.주소,
-      전화: input.contact?.phone ?? "",
-      이메일: input.contact?.email ?? "",
-    };
-    props.fields = props.fields.map((f) => ({
-      ...f,
-      value: values[f.label] ?? f.value,
-    }));
+    const target = findMetaField(props.fields, "supplierEmail");
+    props.fields = props.fields.map((f) =>
+      f.id === target?.id ? { ...f, value: input.contact!.email } : f,
+    );
   }
 
   // 계약서는 견적 안내 문구 대신 계약 표준 양식 안내로 교체한다.
