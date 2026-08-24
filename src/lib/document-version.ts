@@ -57,29 +57,41 @@ export function multiVersionRootIds<T extends VersionedDoc>(docs: T[]): Set<stri
  * 있으면 남은 버전도 후보가 아니다. 그 판정을 여기 한 곳에 둔다 — 목록(후보 조회)과
  * 저장(연결 검증)이 다른 조건을 쓰면 목록에는 뜨는데 저장에서 거부당한다.
  *
- * ## `NOT`/`notIn` 만으로는 v1 이 전부 사라진다
+ * ## 묶음 키를 목록으로 나열하지 않는다
  *
- * 묶음 키는 `rootId ?? id` 라서 **v1 은 `rootId` 가 NULL** 이다. 그런데 Prisma 의 부정
- * 필터(`NOT`·`not`·`notIn`)는 **NULL 인 행을 돌려주지 않는다** — `NULL NOT IN (…)` 이
- * SQL 에서 참이 아니라 NULL 이기 때문이다. 그래서 예전
- * `NOT: [{ id: { in } }, { rootId: { in } }]` 는 붙지 않은 문서까지 통째로 걸러냈다
- * (실측: 후보 38건이 **0건**으로 나와 "연결할 수 있는 문서가 없습니다" 만 떴다.
- * 저장소 문서 56건 중 55건이 `rootId = NULL` 이었다).
+ * 처음에는 붙은 문서를 먼저 조회해 묶음 키를 모으고 `notIn` 으로 뺐다. 두 번 깨졌다.
  *
- * 그래서 NULL 분기를 **명시적으로** 적는다. 제외할 묶음이 없으면 조건 자체를 붙이지
- * 않는다 — 빈 배열에 부정 필터를 걸면 같은 함정을 다시 밟을 자리가 생긴다.
+ * ① **v1 이 전부 사라졌다.** 묶음 키는 `rootId ?? id` 라서 v1 은 `rootId` 가 NULL 인데,
+ *    Prisma 의 부정 필터(`NOT`·`not`·`notIn`)는 **NULL 인 행을 돌려주지 않는다**
+ *    (`NULL NOT IN (…)` 이 SQL 에서 참이 아니라 NULL 이다). 저장소 문서 56건 중 55건이
+ *    v1 이던 시점에 후보 38건이 **0건**으로 나왔다.
+ * ② **데이터가 늘자 쿼리가 죽었다.** NULL 분기를 더해 ①을 고쳤지만, 목록 방식은 붙은
+ *    문서 수만큼 바인딩이 늘어난다. 문서가 1,200건인 시연 데이터에서 `id`·`rootId` 두
+ *    조건에 각각 그 목록이 들어가 SQLite 의 한계를 넘었다(`P2029` → 500).
+ *
+ * 그래서 목록을 만들지 않고 **관계로 묻는다** — "내 묶음에 기회가 붙은 형제가 있는가".
+ * 조회 왕복도 하나 줄고, 데이터가 아무리 늘어도 조건의 크기는 그대로다.
+ *
+ * 두 갈래를 함께 봐야 한다: 내가 뿌리(v1)면 **내 후속 버전들**을, 내가 후속 버전이면
+ * **뿌리와 그 형제들**을 본다. 한쪽만 보면 반대 방향으로 붙은 형제를 놓친다.
  */
-export function unlinkedVersionGroupWhere(
-  linkedRootIds: readonly string[],
-): Prisma.DocumentWhereInput {
-  if (linkedRootIds.length === 0) return {};
-  const ids = [...linkedRootIds];
+export function unlinkedVersionGroupWhere(): Prisma.DocumentWhereInput {
+  /** 어느 기회에든 붙어 있는 형제가 하나도 없다 */
+  const noLinkedSibling = {
+    none: { opportunityId: { not: null } },
+  } satisfies Prisma.DocumentListRelationFilter;
+
   return {
     AND: [
-      // 뿌리 문서(v1)는 자기 id 가 묶음 키다
-      { id: { notIn: ids } },
-      // 후속 버전은 rootId 가 묶음 키다. NULL(=v1)은 위 줄이 이미 판정했다.
-      { OR: [{ rootId: null }, { rootId: { notIn: ids } }] },
+      // 내가 뿌리(v1)인 경우 — 내 뒤로 만들어진 버전들
+      { versions: noLinkedSibling },
+      // 내가 후속 버전인 경우 — 뿌리 자신과 뿌리의 다른 버전들
+      {
+        OR: [
+          { rootId: null },
+          { root: { opportunityId: null, versions: noLinkedSibling } },
+        ],
+      },
     ],
   };
 }

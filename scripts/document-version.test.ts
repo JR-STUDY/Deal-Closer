@@ -55,51 +55,63 @@ check(
   "버전이 2개 이상인 묶음만 배지 대상이다",
 );
 
-// ─────────────────── 연결되지 않은 묶음 조건 (NULL 함정) ───────────────────
+// ─────────────────── 연결되지 않은 묶음 조건 (NULL · 규모 함정) ───────────────────
 
-check(
-  unlinkedVersionGroupWhere([]),
-  {},
-  "제외할 묶음이 없으면 조건을 붙이지 않는다 — 빈 배열에 부정 필터를 걸지 않는다",
-);
-
-const where = unlinkedVersionGroupWhere(["linked-root"]);
+/*
+ * 이 조건은 두 번 깨졌다. 둘 다 "묶음 키를 목록으로 모아 `notIn` 으로 뺀다" 는 방식
+ * 때문이었다 — v1 은 `rootId` 가 NULL 이라 부정 필터에서 사라지고(후보 38건 → 0건),
+ * 붙은 문서가 늘면 바인딩 한계를 넘어 쿼리 자체가 죽는다(문서 1,200건에서 P2029).
+ * 그래서 여기서 보는 것은 모양이 아니라 **성질**이다: 목록을 받지 않고, 두 방향의
+ * 형제를 모두 보고, NULL(v1)을 명시적으로 통과시킨다.
+ */
+const where = unlinkedVersionGroupWhere();
 
 check(
   where,
   {
     AND: [
-      { id: { notIn: ["linked-root"] } },
-      { OR: [{ rootId: null }, { rootId: { notIn: ["linked-root"] } }] },
+      { versions: { none: { opportunityId: { not: null } } } },
+      {
+        OR: [
+          { rootId: null },
+          {
+            root: {
+              opportunityId: null,
+              versions: { none: { opportunityId: { not: null } } },
+            },
+          },
+        ],
+      },
     ],
   },
-  "묶음 제외 조건은 rootId 가 NULL 인 v1 을 명시적으로 통과시킨다",
+  "묶음 조건은 두 방향의 형제를 보고 v1(rootId=null)을 통과시킨다",
 );
 
-/*
- * 아래는 표현이 아니라 **성질**을 본다 — 조건 모양을 손대도 이 성질이 깨지면 실패한다.
- * `rootId: { notIn: [...] }` 하나만 남기는 회귀(=옛 `NOT` 판)를 막는 자리다.
- */
-const rootIdBranch = (where.AND as { OR?: unknown[] }[])[1]?.OR;
+// 목록을 받지 않는다 — 인자를 받는 순간 호출측이 다시 붙은 문서를 모아 오게 된다
+check(
+  unlinkedVersionGroupWhere.length,
+  0,
+  "묶음 조건은 인자를 받지 않는다 (붙은 문서 목록을 만들지 않는다)",
+);
+
+// 조건 어디에도 `in`·`notIn` 이 없어야 한다 — 규모에 따라 커지는 조건이 다시 들어오면
+// 데이터가 늘었을 때만 터지는 회귀가 되어, 개발용 소량 DB 에서는 눈에 띄지 않는다.
+const serialized = JSON.stringify(where);
 assert.ok(
-  Array.isArray(rootIdBranch) &&
-    rootIdBranch.some(
-      (one) => JSON.stringify(one) === JSON.stringify({ rootId: null }),
-    ),
-  "rootId 조건에는 반드시 `{ rootId: null }` 분기가 있어야 한다 (Prisma 의 부정 필터는 NULL 행을 돌려주지 않는다)",
+  !/"(not)?[iI]n"/.test(serialized),
+  "묶음 조건에 in·notIn 목록이 있으면 안 된다 (붙은 문서 수만큼 바인딩이 늘어난다)",
 );
 passed += 1;
 
-// 여러 묶음을 제외해도 같은 모양을 유지한다 (배열만 늘어난다)
-check(
-  unlinkedVersionGroupWhere(["a", "b"]),
-  {
-    AND: [
-      { id: { notIn: ["a", "b"] } },
-      { OR: [{ rootId: null }, { rootId: { notIn: ["a", "b"] } }] },
-    ],
-  },
-  "제외 대상이 여러 개여도 조건 모양은 같다",
+// v1 을 통과시키는 분기가 남아 있는지 — Prisma 의 부정 필터는 NULL 행을 돌려주지 않는다
+const rootBranch = (where.AND as { OR?: unknown[] }[])[1]?.OR;
+assert.ok(
+  Array.isArray(rootBranch) &&
+    rootBranch.some(
+      (one) => JSON.stringify(one) === JSON.stringify({ rootId: null }),
+    ),
+  "rootId 조건에는 반드시 `{ rootId: null }` 분기가 있어야 한다",
 );
+passed += 1;
 
 console.log(`document-version: ${passed} checks passed`);

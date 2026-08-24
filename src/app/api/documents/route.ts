@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentOrg, getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 import { ACTIVE_DOCUMENT_STATUSES } from "@/lib/constants";
-import { rootIdOf, unlinkedVersionGroupWhere } from "@/lib/document-version";
+import { unlinkedVersionGroupWhere } from "@/lib/document-version";
 
 /**
  * GET /api/documents?status=&type=&q=&linkable=1 — 문서 목록 (SQLite)
@@ -16,8 +16,10 @@ import { rootIdOf, unlinkedVersionGroupWhere } from "@/lib/document-version";
  *    거부당해, 사용자는 왜 안 되는지 모른 채 같은 시도를 반복한다.
  *
  * 묶음 제외 조건은 **`unlinkedVersionGroupWhere` 순수 함수 하나**가 정한다. 이 라우트가
- * 직접 `NOT` 을 적었을 때 Prisma 의 부정 필터가 `rootId = NULL`(=v1) 인 행을 통째로
- * 떨어뜨려 후보가 **0건**이 됐다 — 그 함정을 함수 주석과 테스트로 못박아 두었다.
+ * 붙은 문서의 묶음 키를 먼저 모아 `NOT`/`notIn` 으로 뺐을 때 두 번 깨졌다 — v1 이
+ * 통째로 사라졌고(부정 필터는 NULL 행을 돌려주지 않는다), 고친 뒤에도 문서가 1,200건인
+ * 시연 데이터에서 바인딩 한계를 넘어 500 이 났다. 지금은 목록을 만들지 않고 관계로
+ * 묻는다(그 사정은 함수 주석에 적어 두었다).
  */
 export async function GET(req: NextRequest) {
   const org = await getCurrentOrg();
@@ -26,17 +28,6 @@ export async function GET(req: NextRequest) {
   const type = searchParams.get("type") ?? undefined;
   const q = searchParams.get("q") ?? undefined;
   const linkableOnly = searchParams.get("linkable") === "1";
-
-  // 어느 기회엔가 붙어 있는 문서들의 묶음 키 — 후보에서 통째로 제외할 대상이다.
-  // `linkable=1` 일 때만 조회한다 (보관함 목록은 이 제약과 무관하다).
-  const linkedRootIds = linkableOnly
-    ? await prisma.document
-        .findMany({
-          where: { orgId: org.id, opportunityId: { not: null } },
-          select: { id: true, rootId: true },
-        })
-        .then((docs) => [...new Set(docs.map(rootIdOf))])
-    : [];
 
   const documents = await prisma.document.findMany({
     where: {
@@ -48,7 +39,7 @@ export async function GET(req: NextRequest) {
         ? {
             opportunityId: null,
             status: { in: [...ACTIVE_DOCUMENT_STATUSES] },
-            ...unlinkedVersionGroupWhere(linkedRootIds),
+            ...unlinkedVersionGroupWhere(),
           }
         : {}),
     },
