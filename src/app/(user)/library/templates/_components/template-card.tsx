@@ -200,6 +200,8 @@ export function TemplateCard({ template }: { template: TemplateCardData }) {
         open={previewOpen}
         onOpenChange={setPreviewOpen}
         previewUrl={`/api/templates/${template.id}/preview`}
+        // 표준 양식에는 문서 PDF 개념이 없다 — 값이 빈 껍데기라 내려받을 결과물이 아니다
+        pdfUrl={null}
         editHref={`/editor/template/${template.id}`}
       />
 

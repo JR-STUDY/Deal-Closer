@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Send, FileText, PenLine, Eye } from "lucide-react";
+import { Send, FileText, PenLine, Eye, Download } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,9 @@ import {
 } from "@/components/ui/dialog";
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/lib/constants";
 import { formatKRW } from "@/lib/format";
+// 첨부 파일 이름은 서버(첨부·다운로드)와 **같은 순수 함수**로 만든다 — 화면에 보이는 이름과
+// 실제로 나가는 파일 이름이 갈라지면 담당자가 무엇을 보냈는지 확인할 방법이 없다.
+import { documentPdfFileName } from "@/lib/document-file";
 import { parseRecipients } from "@/lib/validation";
 import {
   applyTemplateVariables,
@@ -82,9 +85,15 @@ type SenderClientProps = {
 /**
  * 이메일 발송 폼 — 헤더의 발송하기 버튼과 본문 입력값 상태를 함께 관리한다.
  *
- * 발송하면 `POST /api/documents/:id/send` 가 발송 이력(EmailLog)·문서 상태·연결된 기회의
- * 단계 전이를 한 트랜잭션으로 처리한다 (F-113 · F-114). 실제 메일 전송과 PDF 첨부는
- * Phase 5(F-232 · F-233) 범위라 아직 붙지 않았다 — 화면에서도 그렇게 안내한다.
+ * 발송하면 `POST /api/documents/:id/send` 가 PDF 를 렌더해 첨부하고(F-232) 메일을
+ * 실제로 보낸 뒤(F-233) 발송 이력(EmailLog)·문서 상태·연결된 기회의 단계 전이를
+ * 처리한다 (F-113 · F-114).
+ *
+ * **결과 문구는 서버가 준 것을 그대로 띄운다** (`delivery.message`). 화면이 문장을 새로
+ * 만들면 서버가 실제로 한 일과 무관한 말이 사용자에게 간다 — 예전에 "발송 처리했습니다
+ * (실제 메일 전송은 준비 중입니다)" 를 화면이 스스로 적고 있었던 것이 그 예다.
+ * 자격증명이 없거나 `MAIL_DRY_RUN` 이면 서버가 **건너뛴 사실과 이유**를 문구에 담아 주고,
+ * 화면은 성공(초록) 대신 안내(info) toast 로 구분한다 — 보낸 척하지 않는다.
  */
 export function SenderClient({
   document,
@@ -98,7 +107,8 @@ export function SenderClient({
   const router = useRouter();
   const typeLabel =
     DOCUMENT_TYPE_LABELS[document.type as DocumentType] ?? document.type;
-  const attachmentName = `[${typeLabel}] ${document.title}.pdf`;
+  const attachmentName = documentPdfFileName(document);
+  const pdfHref = `/api/documents/${document.id}/pdf`;
 
   // 선택된 발신 계정 — 셀렉트로 바로 전환하고 선택은 즉시 저장(PATCH /api/mail-preference)한다
   const [selectedValue, setSelectedValue] = useState<string | null>(
@@ -274,6 +284,14 @@ export function SenderClient({
       toast.error("발신 계정을 먼저 연동해주세요.");
       return;
     }
+    // 참조도 수신자와 **같은 함수**로 검증한다 — 서버도 다시 검증하지만, 여기서 걸러
+    // 주지 않으면 PDF 렌더까지 다 돌고 나서야 형식 오류를 알게 된다.
+    const ccParsed = parseRecipients(cc);
+    if (ccParsed.invalid.length > 0) {
+      toast.error(`올바르지 않은 참조 형식: ${ccParsed.invalid.join(", ")}`);
+      return;
+    }
+    const ccValid = ccParsed.valid;
 
     setRecipientError(null);
     setIsSending(true);
@@ -281,10 +299,14 @@ export function SenderClient({
       const res = await fetch(`/api/documents/${document.id}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // 참조·서명 포함 여부도 함께 보낸다 — 화면에 있는 값이 실제 발송에 반영돼야 한다
+        // (예전에는 둘을 보내지 않아 CC 를 입력해도 아무 곳으로도 가지 않았다).
         body: JSON.stringify({
           recipients: valid.join("; "),
+          cc: ccValid.join("; "),
           subject: composedSubject,
           body: composedBody,
+          includeSignature,
         }),
       });
       const json = await res.json().catch(() => null);
@@ -292,10 +314,19 @@ export function SenderClient({
         throw new Error(json?.error ?? "발송에 실패했습니다.");
       }
 
-      // toast 는 루트 레이아웃의 Toaster 가 띄우므로 아래 화면 이동에도 사라지지 않는다.
-      toast.success(
-        `${valid.length}명에게 발송 처리했습니다. (실제 메일 전송은 준비 중입니다)`,
-      );
+      /*
+       * 결과 문구는 서버가 정한다. 실제로 나갔으면 성공, 건너뛴 리허설이면 안내로 띄워
+       * **색이 아니라 문구와 종류로** 구분한다 (정책 ACC_*).
+       * toast 는 루트 레이아웃의 Toaster 가 띄우므로 아래 화면 이동에도 사라지지 않는다.
+       */
+      const delivery = json?.data?.delivery as
+        | { delivered?: boolean; message?: string }
+        | null
+        | undefined;
+      const message =
+        delivery?.message ?? `${valid.length}명에게 메일을 발송했습니다.`;
+      if (delivery?.delivered === false) toast.info(message);
+      else toast.success(message);
 
       // 단계가 어떻게 됐는지 서버가 알려준다 (F-113) — 담당자가 결과를 바로 알 수 있게 띄운다
       const stage = json?.data?.stage as { message?: string } | null | undefined;
@@ -547,14 +578,28 @@ export function SenderClient({
               <CardTitle className="text-base">첨부 파일</CardTitle>
             </CardHeader>
             <CardContent>
+              {/*
+                크기를 적지 않는다 — PDF 는 발송 시점에 서버가 렌더하므로 지금은 알 수 없다
+                (예전에는 `1.2 MB` 가 고정 문구로 박혀 있어 실제와 무관한 값을 주장했다).
+                대신 **바로 내려받아 확인**할 길을 준다: 발송 첨부와 같은 재료·같은 렌더러를
+                쓰는 라우트라 여기서 받은 파일이 고객에게 가는 파일과 같다 (F-223 · F-232).
+              */}
               <div className="flex items-center gap-3 rounded-lg border p-3">
                 <FileText className="size-8 shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
+                  <p className="truncate text-sm font-medium" title={attachmentName}>
                     {attachmentName}
                   </p>
-                  <p className="text-xs text-muted-foreground">1.2 MB</p>
+                  <p className="text-xs text-muted-foreground">
+                    발송할 때 이 문서를 PDF 로 만들어 첨부합니다.
+                  </p>
                 </div>
+                <Button asChild variant="outline" size="sm" className="shrink-0">
+                  <a href={pdfHref}>
+                    <Download className="size-4" aria-hidden="true" />
+                    PDF 다운로드
+                  </a>
+                </Button>
               </div>
             </CardContent>
           </Card>

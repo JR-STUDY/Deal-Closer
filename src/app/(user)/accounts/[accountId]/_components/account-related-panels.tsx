@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { StageBadge } from "@/components/status-badge";
 import {
+  EMAIL_LOG_STATUS_LABELS,
   EMAIL_OPEN_COLUMN_LABEL,
   EMAIL_OPEN_STATE_LABELS,
+  emailOpenState,
+  type EmailLogStatus,
 } from "@/lib/email-log";
 import { formatDate, formatDateTime, formatKRW } from "@/lib/format";
 
@@ -135,9 +138,11 @@ export function AccountEmailList({
              * 추적 이미지를 차단하면 읽어도 기록이 남지 않으므로 그 문장은 틀린 말이 된다
              * (낱말은 발송 이력 화면과 같은 `@/lib/email-log` 상수를 쓴다 — 같은 사실을
              *  두 화면이 다른 말로 적으면 사용자가 둘 중 무엇을 믿을지 알 수 없다).
+             * 판정도 `emailOpenState()` 를 쓴다 — `status === "FAILED"` 만 손으로 걸러 두면
+             * 상태가 늘어날 때(건너뜀) 이 화면만 "열람 기록 없음" 이라고 말한다.
              */}
-            {log.status === "FAILED"
-              ? "발송 실패"
+            {emailOpenState(log) === "not-sent"
+              ? `발송 ${EMAIL_LOG_STATUS_LABELS[log.status as EmailLogStatus] ?? log.status}`
               : log.openedAt
                 ? `${EMAIL_OPEN_STATE_LABELS.opened} ${formatDateTime(log.openedAt)}`
                 : `${EMAIL_OPEN_COLUMN_LABEL} ${EMAIL_OPEN_STATE_LABELS.unopened}`}

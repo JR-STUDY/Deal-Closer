@@ -25,6 +25,7 @@ import {
   EMAIL_OPEN_FILTER_LABELS,
   EMAIL_OPEN_HINT,
   EMAIL_OPEN_OPENED_CAVEAT,
+  EMAIL_OPEN_NOT_SENT_TOOLTIP,
   EMAIL_OPEN_STATE_LABELS,
   EMAIL_OPEN_UNOPENED_TOOLTIP,
   SORT_DIR_PARAM,
@@ -34,7 +35,9 @@ import {
   emailLogSortParams,
   emailLogSortStateOf,
   emailLogsWhere,
+  emailNotSentTooltip,
   emailOpenState,
+  emailWasDelivered,
   hasEmailLogFilter,
   isDefaultEmailLogSort,
   isEmailLogSortKey,
@@ -60,17 +63,30 @@ const LIST = "/mail/sent";
 const FILTERED = { q: "견적", status: "SENT", opened: "unopened" };
 
 // ────────────────────────── 상태 값 ──────────────────────────
-check([...EMAIL_LOG_STATUSES], ["SENT", "FAILED"], "발송 상태는 두 가지다");
+/*
+ * 세 가지다 (F-233). `SKIPPED` 는 어댑터가 전송을 건너뛴 리허설(자격증명 없음 ·
+ * `MAIL_DRY_RUN`)이고, 이 값이 없으면 라우트가 결과를 모른 채 `SENT` 를 적게 된다.
+ */
+check(
+  [...EMAIL_LOG_STATUSES],
+  ["SENT", "SKIPPED", "FAILED"],
+  "발송 상태는 성공·건너뜀·실패 세 가지다",
+);
 check(
   EMAIL_LOG_STATUS_LABELS,
-  { SENT: "성공", FAILED: "실패" },
-  "상태 라벨은 성공·실패다",
+  { SENT: "성공", SKIPPED: "건너뜀", FAILED: "실패" },
+  "상태 라벨은 성공·건너뜀·실패다",
 );
 for (const value of EMAIL_LOG_STATUSES) {
   check(isEmailLogStatus(value), true, `"${value}" 는 발송 상태다`);
 }
 for (const value of ["sent", "DRAFT", "VOID", "", "OPENED"]) {
   check(isEmailLogStatus(value), false, `"${value}" 는 발송 상태가 아니다`);
+}
+// 나간 것은 SENT 하나뿐이다 — 모르는 값은 "나가지 않았다" 로 떨어뜨린다 (덜 주장한다)
+check(emailWasDelivered("SENT"), true, "SENT 만 실제로 나간 상태다");
+for (const value of ["SKIPPED", "FAILED", "PENDING", ""]) {
+  check(emailWasDelivered(value), false, `"${value}" 는 나간 상태가 아니다`);
 }
 
 // ────────────────────────── 열람 판정 ──────────────────────────
@@ -85,16 +101,38 @@ check(
   "unopened",
   "성공 + 열람 시각 없음 → 미열람",
 );
-// 나가지 않은 메일의 "미열람" 은 "보냈는데 아직 안 봤다" 로 읽힌다 — 실패는 따로 판정한다
+// 나가지 않은 메일의 "미열람" 은 "보냈는데 아직 안 봤다" 로 읽힌다 — 따로 판정한다
 check(
   emailOpenState({ status: "FAILED", openedAt: null }),
-  "failed",
-  "실패한 건은 미열람이 아니라 실패다",
+  "not-sent",
+  "실패한 건은 미열람이 아니라 '나가지 않음' 이다",
 );
 check(
   emailOpenState({ status: "FAILED", openedAt: OPENED_AT }),
-  "failed",
-  "실패한 건은 열람 시각이 남아 있어도 실패로 본다",
+  "not-sent",
+  "실패한 건은 열람 시각이 남아 있어도 나가지 않은 것으로 본다",
+);
+// 건너뛴 건도 나가지 않았다 — 예전에는 FAILED 만 걸러서 이 건이 "기록 없음" 으로 보였다
+check(
+  emailOpenState({ status: "SKIPPED", openedAt: null }),
+  "not-sent",
+  "건너뛴 건은 '기록 없음' 이 아니라 '나가지 않음' 이다",
+);
+// 툴팁은 **왜** 확인할 수 없는지 상태별로 다르게 말한다 (지어내지 않는다)
+check(
+  emailNotSentTooltip("FAILED").includes("실패"),
+  true,
+  "실패 툴팁이 실패했다고 밝힌다",
+);
+check(
+  emailNotSentTooltip("SKIPPED").includes("보내지 않아"),
+  true,
+  "건너뜀 툴팁이 보내지 않았다고 밝힌다",
+);
+check(
+  emailNotSentTooltip("WHATEVER"),
+  EMAIL_OPEN_NOT_SENT_TOOLTIP,
+  "모르는 상태는 뭉뚱그린 문장으로 떨어진다",
 );
 
 // ────────────────────────── 수신자 목록 ──────────────────────────
@@ -173,11 +211,25 @@ check(
   { document: { orgId: ORG }, openedAt: { not: null } },
   "열람 필터 — 열람 시각이 있는 건",
 );
+/*
+ * `열람 기록 없음` 은 **나갔는데 기록이 없는 건**이다. 발송 성공까지 함께 걸지 않으면
+ * 실패·건너뜀 건도 걸려 나오는데, 그 행들은 목록에서 `—` 로 그려진다 —
+ * 고른 낱말과 화면에 뜨는 행이 어긋난다.
+ */
 check(
   emailLogsWhere(ORG, parseEmailLogFilters({ opened: "unopened" })),
-  { document: { orgId: ORG }, openedAt: null },
-  "미열람 필터 — 열람 시각이 없는 건",
+  { document: { orgId: ORG }, openedAt: null, AND: [{ status: "SENT" }] },
+  "열람 기록 없음 필터 — 나갔는데 열람 시각이 없는 건",
 );
+{
+  // 상태 필터를 **덮어쓰지 않는다** — 덮으면 고르지도 않은 성공 건이 목록에 뜬다
+  const where = emailLogsWhere(
+    ORG,
+    parseEmailLogFilters({ status: "FAILED", opened: "unopened" }),
+  );
+  check(where.status, "FAILED", "고른 상태 필터가 그대로 남는다");
+  check(where.AND, [{ status: "SENT" }], "열람 조건은 AND 로 얹힌다 (모순이면 0건)");
+}
 check(
   emailLogsWhere(ORG, parseEmailLogFilters({ q: "견적" })),
   {

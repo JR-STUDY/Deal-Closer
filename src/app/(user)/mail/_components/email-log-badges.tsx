@@ -3,10 +3,10 @@ import { cn } from "@/lib/utils";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import {
   EMAIL_LOG_STATUS_LABELS,
-  EMAIL_OPEN_FAILED_TOOLTIP,
   EMAIL_OPEN_OPENED_CAVEAT,
   EMAIL_OPEN_STATE_LABELS,
   EMAIL_OPEN_UNOPENED_TOOLTIP,
+  emailNotSentTooltip,
   emailOpenState,
   isEmailLogStatus,
   type EmailOpenState,
@@ -21,11 +21,14 @@ import { ROW_LINK_ABOVE } from "@/components/list-row-link";
  * 갈라진다(`@/components/status-badge` 가 문서 상태·기회 단계에 하는 역할과 같다).
  * 상태 판정 자체는 `@/lib/email-log` 순수 함수가 하고 여기서는 **그리기만** 한다.
  *
- * 색은 문서 상태 배지와 같은 계열을 쓴다 — 성공=emerald · 실패=rose. 라이트·다크 각각
- * 지정해 명도대비를 지키고(ACC_*), **색만으로 구분하지 않도록** 글자로도 성공·실패를 적는다.
+ * 색은 문서 상태 배지와 같은 계열을 쓴다 — 성공=emerald · 실패=rose · 건너뜀=slate.
+ * 라이트·다크 각각 지정해 명도대비를 지키고(ACC_*), **색만으로 구분하지 않도록** 글자로도
+ * 성공·건너뜀·실패를 적는다. 건너뜀을 실패색(rose)으로 칠하지 않는다 — 의도한 리허설이라
+ * 고칠 것이 없는데 경고로 읽히고, 정작 실패한 건과 한눈에 구분되지 않는다.
  */
 const STATUS_STYLES: Record<string, string> = {
   SENT: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300",
+  SKIPPED: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-200",
   FAILED: "bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-300",
 };
 
@@ -48,8 +51,9 @@ export function EmailStatusBadge({ status }: { status: string }) {
  * **확인된 것만 주장한다.** 기록이 없을 때 "미열람"(=읽지 않았다)이라고 적지 않는다 —
  * 이미지를 차단한 메일 앱에서는 읽어도 기록이 남지 않으므로 우리가 알 수 없는 사실이다.
  * 반대로 기록이 있어도 프록시가 미리 불러온 것일 수 있어 툴팁이 그 단서를 함께 적는다.
- * 발송이 실패한 건은 열람을 아예 논하지 않는다. 낱말·문구는 `@/lib/email-log` 한 곳이고
- * 판정은 `emailOpenState()` 한 곳이다.
+ * 메일이 나가지 않은 건(실패·건너뜀)은 열람을 아예 논하지 않는다 — 툴팁이 **왜** 확인할 수
+ * 없는지 상태별로 밝힌다. 낱말·문구는 `@/lib/email-log` 한 곳이고 판정은
+ * `emailOpenState()` 한 곳이다.
  *
  * `inRow` 를 주면 트리거를 행 덮개 위로 올린다 (`RowLink` 의 `::after` 아래에서는 툴팁이
  * 열리지 않는다). 상세 화면에서는 덮개가 없으므로 주지 않는다.
@@ -64,11 +68,14 @@ export function OpenStateCell({
   const state: EmailOpenState = emailOpenState(log);
   const triggerClass = cn("inline-block", inRow && ROW_LINK_ABOVE);
 
-  if (state === "failed") {
+  if (state === "not-sent") {
     return (
-      <HintTooltip className={triggerClass} content={EMAIL_OPEN_FAILED_TOOLTIP}>
+      <HintTooltip
+        className={triggerClass}
+        content={emailNotSentTooltip(log.status)}
+      >
         <span className="text-muted-foreground">
-          {EMAIL_OPEN_STATE_LABELS.failed}
+          {EMAIL_OPEN_STATE_LABELS["not-sent"]}
         </span>
       </HintTooltip>
     );

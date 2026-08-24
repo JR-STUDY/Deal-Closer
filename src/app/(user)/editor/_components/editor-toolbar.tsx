@@ -5,6 +5,7 @@ import {
   Send,
   Save,
   Eye,
+  Download,
   Plus,
   Minus,
   Undo2,
@@ -152,6 +153,24 @@ export function EditorToolbar({
         <Eye className="size-4" />
         미리보기
       </Button>
+
+      {/*
+        PDF 다운로드 (F-223) — 발송 첨부와 **같은 재료·같은 렌더러**를 쓰는 라우트다
+        (`@/lib/document-render` → `@/lib/pdf`). 그래서 여기서 내려받아 확인한 파일이
+        고객에게 첨부되는 파일과 같다.
+        **표준 양식에는 두지 않는다** — 양식은 값이 빈 껍데기라 "문서 PDF" 라는 개념이 없다.
+        `<a download>` 이 아니라 그냥 링크다: 파일명은 서버가 `Content-Disposition` 으로
+        정하므로(한글 파일명 `filename*` 포함) 화면이 다시 정할 이유가 없다.
+        저장하지 않은 편집은 담기지 않는다 — 서버가 저장된 `contentJson` 을 렌더한다.
+      */}
+      {documentId ? (
+        <Button asChild variant="outline" className="shrink-0">
+          <a href={`/api/documents/${documentId}/pdf`}>
+            <Download className="size-4" />
+            PDF 다운로드
+          </a>
+        </Button>
+      ) : null}
 
       {/* AI 부분 재작성 (F-215) — 결과는 새 버전으로 저장된다 (문서 전용) */}
       {locked || !documentId ? null : (

@@ -464,7 +464,10 @@ model EmailLog {
   subject        String
   body           String?
   attachmentName String?
-  status         String   @default("SENT") // SENT | FAILED
+  // SENT | SKIPPED | FAILED — 전송 어댑터(`@/lib/mailer`)의 결과를 그대로 옮긴다 (F-233).
+  // SKIPPED = 자격증명 없는 개발 환경 · MAIL_DRY_RUN 으로 **의도적으로 보내지 않은** 건.
+  // 값 목록·라벨은 `@/lib/email-log` 의 EMAIL_LOG_STATUSES 가 단일 소스다.
+  status         String   @default("SENT")
   sentAt         DateTime @default(now())
   // ── 오픈 트래킹 (F-234) ──
   // trackingId: 본문에 삽입하는 추적 픽셀 URL 의 식별자. 수신자가 본문을 열면 서버가 openedAt 을 기록한다.
