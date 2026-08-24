@@ -47,10 +47,37 @@ const DAYS_PER_WEEK = 7;
  */
 const WEEK_DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"] as const;
 
-export const WEEK_DAY_LABELS: readonly string[] = Array.from(
+/**
+ * 요일 머리글 한 칸 — 라벨과 **요일 번호**를 함께 든다.
+ *
+ * 번호를 같이 주는 이유: 토·일을 색으로 구분하려면 화면이 "이 칸이 무슨 요일인가"를 알아야
+ * 하는데, 열 순번은 `WEEK_START_DAY` 가 바뀌면 요일과 어긋난다. 라벨 문자열("토")로 판단하는
+ * 방법도 있지만 그러면 낱말을 바꾸는 순간 색이 조용히 사라진다.
+ */
+export type WeekDayHead = { label: string; weekday: number };
+
+export const WEEK_DAYS: readonly WeekDayHead[] = Array.from(
   { length: DAYS_PER_WEEK },
-  (_, index) => WEEK_DAY_NAMES[(WEEK_START_DAY + index) % DAYS_PER_WEEK],
+  (_, index) => {
+    const weekday = (WEEK_START_DAY + index) % DAYS_PER_WEEK;
+    return { label: WEEK_DAY_NAMES[weekday], weekday };
+  },
 );
+
+/** 요일 머리글 문자열만 — 기존 소비처·테스트가 쓰는 형태를 그대로 유지한다 */
+export const WEEK_DAY_LABELS: readonly string[] = WEEK_DAYS.map(
+  (head) => head.label,
+);
+
+/**
+ * 주말 구분 — 색 표기의 **단일 기준**이다 (평일은 null).
+ * 머리글과 날짜 숫자가 각자 판단하면 한쪽만 고쳤을 때 열과 셀의 색이 어긋난다.
+ */
+export function weekendKind(weekday: number): "sunday" | "saturday" | null {
+  if (weekday === 0) return "sunday";
+  if (weekday === 6) return "saturday";
+  return null;
+}
 
 // ─────────────────────────── 달 · 쿼리 파라미터 ───────────────────────────
 

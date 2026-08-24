@@ -161,8 +161,15 @@ export const PERIOD_UNIT_LABELS: Record<PeriodUnit, string> = {
   quarter: "분기",
 };
 
-/** 주 시작 요일 (0=일 … 6=토). 업무 주간 기준이라 월요일로 둔다. */
-export const WEEK_START_DAY = 1;
+/**
+ * 주 시작 요일 (0=일 … 6=토).
+ *
+ * **일요일로 둔다.** 국내 달력 표기가 일요일 시작이라 캘린더 격자가 그 감각을 따라야 한다.
+ * 이 값 하나를 캘린더 격자(`@/lib/calendar`)와 기간 필터의 "주간"(F-406)이 **함께** 쓴다 —
+ * 둘을 따로 두면 달력에서 한 주로 묶여 보이는 구간과 "이번 주" 집계 구간이 어긋나,
+ * 같은 화면의 두 숫자가 서로 다른 주를 말하게 된다.
+ */
+export const WEEK_START_DAY = 0;
 
 /** 기간 구간. `start` 이상 `end` 미만 (end 는 배타) — 경계 날짜의 중복 집계를 막는다. */
 export type DateRange = { start: Date; end: Date };

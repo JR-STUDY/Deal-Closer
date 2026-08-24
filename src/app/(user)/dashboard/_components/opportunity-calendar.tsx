@@ -3,9 +3,10 @@ import { CalendarDays, ChevronLeft, ChevronRight, Circle, CircleCheck, CircleX }
 import { formatKRW } from "@/lib/format";
 import {
   CALENDAR_OUTCOME_LABELS,
-  WEEK_DAY_LABELS,
+  WEEK_DAYS,
   foldDayEvents,
   monthLabel,
+  weekendKind,
   type CalendarDay,
   type CalendarEvent,
   type CalendarGrid,
@@ -38,6 +39,37 @@ const OUTCOME_ICONS: Record<CalendarOutcome, typeof Circle> = {
   won: CircleCheck,
   lost: CircleX,
 };
+
+/**
+ * 요일 색 — 국내 달력 관행대로 **일요일 빨강 · 토요일 파랑**이다.
+ *
+ * 색이 유일한 신호가 아니다: 요일은 머리글 글자(일·토)와 격자 위치가 이미 말해 주고,
+ * 색은 훑을 때 주말 경계가 먼저 눈에 띄게 거들 뿐이다 (ACC_*).
+ * 어두운 테마에서는 채도를 낮춘 밝은 색으로 바꿔 대비를 지킨다.
+ */
+const WEEKEND_HEAD_TONE = {
+  sunday: "text-red-600 dark:text-red-400",
+  saturday: "text-blue-600 dark:text-blue-400",
+  weekday: "text-muted-foreground",
+} as const;
+
+/**
+ * 날짜 숫자의 색. 앞뒤 달에서 끌어온 칸은 **흐리게** 유지하되 주말 색조는 남긴다 —
+ * 전부 회색으로 눕히면 격자 좌우 끝의 주말 열이 끊겨 보이고, 그대로 진하게 두면
+ * 이번 달 날짜와 구별이 사라진다.
+ */
+function dayTone(weekday: number, inMonth: boolean): string {
+  const kind = weekendKind(weekday);
+  if (!kind) return inMonth ? "text-foreground" : "text-muted-foreground";
+  if (kind === "sunday") {
+    return inMonth
+      ? "text-red-600 dark:text-red-400"
+      : "text-red-600/50 dark:text-red-400/50";
+  }
+  return inMonth
+    ? "text-blue-600 dark:text-blue-400"
+    : "text-blue-600/50 dark:text-blue-400/50";
+}
 
 /**
  * 결말별 아이콘 색. 수주·실주는 상태색(good·critical)이고 진행 중은 중립이다.
@@ -125,13 +157,16 @@ export function OpportunityCalendar({
           </caption>
           <thead>
             <tr className="bg-muted/50">
-              {WEEK_DAY_LABELS.map((day) => (
+              {WEEK_DAYS.map(({ label, weekday }) => (
                 <th
-                  key={day}
+                  key={label}
                   scope="col"
-                  className="border-b border-border px-2 py-1.5 text-center text-xs font-medium text-muted-foreground"
+                  className={cn(
+                    "border-b border-border px-2 py-1.5 text-center text-xs font-medium",
+                    WEEKEND_HEAD_TONE[weekendKind(weekday) ?? "weekday"],
+                  )}
                 >
-                  {day}
+                  {label}
                 </th>
               ))}
             </tr>
@@ -238,7 +273,9 @@ function DayCell({ cell }: { cell: CalendarDay }) {
           className={cn(
             "inline-flex size-5 items-center justify-center rounded-full text-xs tabular-nums",
             cell.isToday && "bg-primary font-semibold text-primary-foreground",
-            !cell.isToday && (cell.inMonth ? "text-foreground" : "text-muted-foreground"),
+            // 오늘은 채워진 원 안의 글자라 주말 색을 덮어쓰지 않는다 — 겹치면 대비가 무너진다.
+            !cell.isToday &&
+              dayTone(cell.date.getDay(), cell.inMonth),
           )}
         >
           {cell.day}

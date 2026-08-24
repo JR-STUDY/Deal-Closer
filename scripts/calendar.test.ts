@@ -14,7 +14,9 @@ import {
   CALENDAR_OUTCOME_LABELS,
   DAY_EVENT_LIMIT,
   MONTH_PARAM,
+  WEEK_DAYS,
   WEEK_DAY_LABELS,
+  weekendKind,
   calendarGrid,
   dayKey,
   foldDayEvents,
@@ -129,26 +131,35 @@ check(
 );
 
 // ────────────────────────── 주 시작 요일 ──────────────────────────
-// 머리글은 `WEEK_START_DAY`(월요일)부터 돌아야 한다 — 손으로 적어 두면 여기만 어긋난다.
+// 머리글은 `WEEK_START_DAY`(일요일)부터 돌아야 한다 — 손으로 적어 두면 여기만 어긋난다.
 check(WEEK_DAY_LABELS.length, 7, "요일 머리글은 7칸");
-check(WEEK_START_DAY, 1, "업무 주간 기준이라 주는 월요일에 시작한다");
+check(WEEK_START_DAY, 0, "국내 달력 표기대로 주는 일요일에 시작한다");
 check(
   [...WEEK_DAY_LABELS],
-  ["월", "화", "수", "목", "금", "토", "일"],
+  ["일", "월", "화", "수", "목", "금", "토"],
   "머리글이 주 시작 요일부터 돌아간다",
+);
+// 색 표기의 단일 기준 — 머리글과 날짜 숫자가 같은 함수를 본다
+check(weekendKind(0), "sunday", "일요일은 빨강 계열로 표기한다");
+check(weekendKind(6), "saturday", "토요일은 파랑 계열로 표기한다");
+check(weekendKind(3), null, "평일은 주말 색을 쓰지 않는다");
+check(
+  WEEK_DAYS.map((head) => head.weekday),
+  [0, 1, 2, 3, 4, 5, 6],
+  "머리글이 요일 번호를 함께 든다 (열 순번으로 색을 정하지 않는다)",
 );
 
 // ────────────────────────── 그리드 구간 ──────────────────────────
-// 2026-08: 1일이 토요일 → 앞으로 5칸(7/27~7/31)을 끌어오고 6주로 그려진다.
+// 2026-08: 1일이 토요일 → 앞으로 6칸(7/26~7/31)을 끌어오고 6주로 그려진다.
 const augRange = gridRange({ year: 2026, month: 8 });
-check(dayKey(augRange.start), "2026-07-27", "그리드는 그 주의 월요일에서 시작한다");
-check(dayKey(augRange.end), "2026-09-07", "구간 끝은 배타적이다 (마지막 칸 다음 날)");
+check(dayKey(augRange.start), "2026-07-26", "그리드는 그 주의 일요일에서 시작한다");
+check(dayKey(augRange.end), "2026-09-06", "구간 끝은 배타적이다 (마지막 칸 다음 날)");
 
 const augGrid = calendarGrid({ target: { year: 2026, month: 8 }, opportunities: [], today: TODAY });
 check(augGrid.weeks.length, 6, "8월은 6주로 그려진다");
 check(augGrid.weeks.every((week) => week.length === 7), true, "모든 주가 7칸이다");
-check(flatKeys(augGrid.weeks)[0], "2026-07-27", "첫 칸은 지난 달에서 끌어온 날");
-check(flatKeys(augGrid.weeks).at(-1), "2026-09-06", "마지막 칸은 다음 달에서 끌어온 날");
+check(flatKeys(augGrid.weeks)[0], "2026-07-26", "첫 칸은 지난 달에서 끌어온 날");
+check(flatKeys(augGrid.weeks).at(-1), "2026-09-05", "마지막 칸은 다음 달에서 끌어온 날");
 check(
   flatKeys(augGrid.weeks).length,
   new Set(flatKeys(augGrid.weeks)).size,
@@ -170,7 +181,7 @@ check(
 );
 check(
   augCells.filter((cell) => !cell.inMonth).map((cell) => cell.key),
-  ["2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05", "2026-09-06"],
+  ["2026-07-26", "2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05"],
   "월 경계를 넘는 칸은 앞뒤 달에서만 온다",
 );
 check(
@@ -179,20 +190,22 @@ check(
   "오늘 칸은 하나뿐이다",
 );
 
-// 2026-02: 1일이 일요일 → 5주. 짧은 달에 빈 주를 한 줄 남기지 않는다.
+// 2026-02: 1일이 일요일이고 28일 → 딱 4주. 짧은 달에 빈 주를 한 줄 남기지 않는다.
 const febGrid = calendarGrid({ target: { year: 2026, month: 2 }, opportunities: [], today: TODAY });
-check(febGrid.weeks.length, 5, "2026년 2월은 5주");
-check(flatKeys(febGrid.weeks)[0], "2026-01-26", "2월 그리드의 첫 칸");
-check(flatKeys(febGrid.weeks).at(-1), "2026-03-01", "2월 그리드의 마지막 칸");
-
-// 2021-02: 1일이 월요일이고 28일 → 딱 4주 (앞뒤에서 끌어오는 칸이 없다)
-const feb2021 = calendarGrid({ target: { year: 2021, month: 2 }, opportunities: [], today: TODAY });
-check(feb2021.weeks.length, 4, "주 시작 요일에 시작하는 28일 달은 4주");
+check(febGrid.weeks.length, 4, "2026년 2월은 4주");
+check(flatKeys(febGrid.weeks)[0], "2026-02-01", "2월 그리드의 첫 칸");
+check(flatKeys(febGrid.weeks).at(-1), "2026-02-28", "2월 그리드의 마지막 칸");
 check(
-  feb2021.weeks.flat().every((cell) => cell.inMonth),
+  febGrid.weeks.flat().every((cell) => cell.inMonth),
   true,
   "4주 그리드에는 다른 달 칸이 없다",
 );
+
+// 2021-02: 1일이 월요일 → 앞에서 한 칸(1/31 일요일)을 끌어와 5주가 된다.
+// 주 시작을 바꾸면 같은 달의 주 수가 달라진다는 것을 못박아 둔다.
+const feb2021 = calendarGrid({ target: { year: 2021, month: 2 }, opportunities: [], today: TODAY });
+check(feb2021.weeks.length, 5, "월요일에 시작하는 28일 달은 일요일 시작 기준 5주");
+check(flatKeys(feb2021.weeks)[0], "2021-01-31", "앞 달의 일요일 한 칸을 끌어온다");
 check(feb2021.weeks.flat().some((cell) => cell.isToday), false, "다른 달에는 오늘 칸이 없다");
 
 // 윤년 2월 29일도 칸을 얻는다
