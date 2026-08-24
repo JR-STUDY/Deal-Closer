@@ -32,11 +32,29 @@ import { WEEK_START_DAY, isWithinRange, monthRange, type DateRange } from "./pip
 /** 보고 있는 달을 담는 쿼리 키 (`?month=YYYY-MM`) */
 export const MONTH_PARAM = "month";
 
+/**
+ * 전용 캘린더 페이지 주소.
+ *
+ * 대시보드 카드의 `전체 보기`, 사이드바의 하위 항목, 그 페이지 자신의 월 이동 링크가
+ * **같은 문자열**을 봐야 한다 — 세 곳에 손으로 적어 두면 주소를 옮길 때 하나가 남는다.
+ * `영업 기회` 묶음 아래인 이유는 캘린더가 보여주는 것이 기회의 마감일이기 때문이다.
+ */
+export const CALENDAR_HREF = "/opportunities/calendar";
+
 /** 캘린더가 보여줄 달. `month` 는 1~12 다 (Date 의 0-based 와 섞이지 않게 사람 기준으로 둔다). */
 export type CalendarMonth = { year: number; month: number };
 
 /** 한 칸에 그대로 보여줄 일정 수. 넘치는 만큼은 `+N건` 으로 접는다. */
 export const DAY_EVENT_LIMIT = 2;
+
+/**
+ * 컴팩트 캘린더(대시보드 카드)의 한 칸에 보여줄 **표식** 수.
+ *
+ * 컴팩트 칸은 기회명 대신 결말 아이콘만 놓으므로 같은 폭에 더 많이 들어간다.
+ * 밀도마다 상한을 **하나씩 정해 둔다** — 화면이 `slice` 를 직접 하면 어떤 날은 2개,
+ * 어떤 날은 3개가 보이는 상태가 생긴다.
+ */
+export const COMPACT_DAY_EVENT_LIMIT = 3;
 
 /** 그리드 한 주의 칸 수 */
 const DAYS_PER_WEEK = 7;

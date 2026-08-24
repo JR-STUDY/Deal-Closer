@@ -14,16 +14,15 @@ import {
   DOCUMENT_STATUS_LABELS,
 } from "@/lib/constants";
 import {
+  CALENDAR_HREF,
   MONTH_PARAM,
-  calendarGrid,
-  gridRange,
   isSameMonth,
   monthHref,
   monthOf,
-  monthRevenue,
   parseMonthParam,
   shiftMonth,
 } from "@/lib/calendar";
+import { loadOpportunityCalendar } from "@/lib/opportunity-calendar";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, DocTypeBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -44,7 +43,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TrendChart, StatusChart } from "./_components/dashboard-charts";
-import { OpportunityCalendar } from "./_components/opportunity-calendar";
+import { OpportunityCalendar } from "@/components/opportunity/opportunity-calendar";
 
 /** 대시보드가 스스로 다루는 쿼리는 보고 있는 달 하나뿐이다 (`?month=YYYY-MM`) */
 type DashboardSearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -65,12 +64,10 @@ export default async function DashboardPage({
   // 캘린더가 보여줄 달 — 잘못된 값이면 `parseMonthParam` 이 이번 달로 떨어뜨린다
   const today = new Date();
   const month = parseMonthParam(firstParam(query[MONTH_PARAM]), today);
-  // 조회 범위는 **그리드 구간**이다 — 그 달만 읽으면 같은 주에 걸친 앞뒤 달 칸이 늘 비어 보인다
-  const calendarRange = gridRange(month);
 
   // 폐기(VOID) 문서는 대시보드 집계·목록에서 제외 (정책: ACTIVE_DOCUMENT_STATUSES)
   const activeWhere = { orgId: org.id, status: { not: "VOID" } };
-  const [docs, recent, wallet, closingOpportunities] = await Promise.all([
+  const [docs, recent, wallet, calendar] = await Promise.all([
     prisma.document.findMany({
       where: activeWhere,
       select: { createdAt: true, amount: true, status: true },
@@ -82,25 +79,10 @@ export default async function DashboardPage({
       include: { author: true },
     }),
     prisma.creditWallet.findUnique({ where: { orgId: org.id } }),
-    prisma.opportunity.findMany({
-      where: {
-        orgId: org.id,
-        expectedCloseDate: { gte: calendarRange.start, lt: calendarRange.end },
-      },
-      select: {
-        id: true,
-        name: true,
-        stage: true,
-        expectedAmount: true,
-        expectedCloseDate: true,
-      },
-      orderBy: [{ expectedCloseDate: "asc" }, { id: "asc" }],
-    }),
+    // 조회 범위·합계 기준은 `@/lib/opportunity-calendar` 하나가 정한다 —
+    // 전용 캘린더 페이지와 같은 함수를 써야 두 화면이 같은 그림을 그린다
+    loadOpportunityCalendar({ orgId: org.id, month, today }),
   ]);
-
-  // 그리드·합계 계산은 `@/lib/calendar` 순수 함수만 한다 (화면은 그리기만 한다)
-  const calendar = calendarGrid({ target: month, opportunities: closingOpportunities, today });
-  const calendarRevenue = monthRevenue(closingOpportunities, month);
 
   // ── 집계 (단일 조회에서 파생) ──
   type ActiveStatus = (typeof ACTIVE_DOCUMENT_STATUSES)[number];
@@ -259,9 +241,16 @@ export default async function DashboardPage({
           </Card>
         </div>
 
+        {/*
+          대시보드에서는 **컴팩트**다 (기회 하루 1~3건인 데이터에서 full 캘린더가 한 화면을
+          다 먹었다). 칸마다 기회명을 감추는 대신 `전체 보기` 로 전용 페이지를 준다 —
+          보고 있던 달을 그대로 이어 가도록 `?month=` 를 함께 넘긴다.
+        */}
         <OpportunityCalendar
-          grid={calendar}
-          revenue={calendarRevenue}
+          grid={calendar.grid}
+          revenue={calendar.revenue}
+          density="compact"
+          fullViewHref={monthHref(CALENDAR_HREF, {}, month, today)}
           prevHref={monthHref("/dashboard", {}, shiftMonth(month, -1), today)}
           nextHref={monthHref("/dashboard", {}, shiftMonth(month, 1), today)}
           todayHref={monthHref("/dashboard", {}, monthOf(today), today)}

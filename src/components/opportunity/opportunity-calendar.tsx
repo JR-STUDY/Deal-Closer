@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  ArrowRight,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -11,6 +12,8 @@ import {
 import { formatKRW } from "@/lib/format";
 import {
   CALENDAR_OUTCOME_LABELS,
+  COMPACT_DAY_EVENT_LIMIT,
+  DAY_EVENT_LIMIT,
   WEEK_DAYS,
   foldDayEvents,
   monthLabel,
@@ -37,7 +40,21 @@ import { cn } from "@/lib/utils";
  * JS 없이도 동작하며 새 탭·주소 복사가 그대로 된다 (목록 정렬 머리글과 같은 이유).
  * 칸이 넘칠 때 펼치는 것도 `<details>` 라 클라이언트 훅이 필요 없다.
  *
- * 계산(그리드·배치·합계)은 하지 않는다 — `@/lib/calendar` 순수 함수가 단독으로 정한다.
+ * 계산(그리드·배치·합계)은 하지 않는다 — `@/lib/calendar` 순수 함수가 단독으로 정하고,
+ * 조회는 `@/lib/opportunity-calendar` 하나를 지난다.
+ *
+ * 대시보드 카드와 전용 페이지가 **함께 쓰므로** 공용 컴포넌트다 (한때 대시보드의
+ * `_components/` 에 있었다 — co-locate 는 그 화면만 쓰는 조각의 규칙이다).
+ *
+ * ## 밀도는 둘, 컴포넌트는 하나다
+ *
+ * `full` 은 전용 페이지(`/opportunities/calendar`)에서 칸마다 기회명·금액을 보여주고,
+ * `compact` 는 대시보드 카드에서 **결말 아이콘만** 놓아 달 전체를 한 눈에 담는다.
+ * 시연 데이터(하루 1~3건)에서 full 캘린더는 대시보드 한 화면을 다 먹었다.
+ *
+ * 그래도 **컴포넌트를 둘로 나누지 않는다.** 갈리는 것은 칸 안의 내용뿐이고, 격자·요일
+ * 머리글·주말 색·월 이동·금액 타일은 완전히 같다 — 나누면 한쪽만 손봤을 때 두 캘린더가
+ * 조용히 어긋난다(라벨/값 2열 표를 렌더러 하나로 둔 것과 같은 판단).
  */
 
 /** 결말별 표시 — **모양(아이콘)과 라벨**로 먼저 구분하고 색은 거든다 (ACC_*) */
@@ -89,9 +106,23 @@ const OUTCOME_ICON_CLASS: Record<CalendarOutcome, string> = {
   lost: "text-rose-600 dark:text-rose-400",
 };
 
+/**
+ * 칸을 어떻게 채울지.
+ *  - `full`: 기회명·금액을 링크로 (전용 페이지)
+ *  - `compact`: 결말 아이콘만 (대시보드 카드)
+ */
+export type CalendarDensity = "full" | "compact";
+
 export type OpportunityCalendarProps = {
   grid: CalendarGrid;
   revenue: MonthRevenue;
+  /** 기본은 `full` — 밀도를 줄이는 쪽이 명시적으로 고르게 둔다 */
+  density?: CalendarDensity;
+  /**
+   * 전용 캘린더 페이지 주소. 주면 헤더 오른쪽에 "전체 보기" 를 놓는다 —
+   * 컴팩트 칸은 기회명을 감추므로 **더 볼 수 있는 곳**이 화면에 있어야 한다.
+   */
+  fullViewHref?: string;
   /** 이전 달 · 다음 달 · 이번 달 주소 (계산은 `@/lib/calendar` 의 `monthHref`) */
   prevHref: string;
   nextHref: string;
@@ -103,12 +134,15 @@ export type OpportunityCalendarProps = {
 export function OpportunityCalendar({
   grid,
   revenue,
+  density = "full",
+  fullViewHref,
   prevHref,
   nextHref,
   todayHref,
   isCurrentMonth,
 }: OpportunityCalendarProps) {
   const label = monthLabel(grid.target);
+  const isCompact = density === "compact";
 
   return (
     <Card>
@@ -157,8 +191,21 @@ export function OpportunityCalendar({
             )}
           </nav>
 
-          {/* 오른쪽 칸은 비워 둔다 — 가운데 칸을 실제 중앙에 세우는 것이 이 칸의 일이다 */}
-          <div aria-hidden="true" className="hidden sm:block" />
+          {/*
+            오른쪽 칸 — 가운데 칸을 실제 중앙에 세우는 것이 이 칸의 첫 일이고, 컴팩트일
+            때는 "전체 보기" 가 여기 앉는다. 양쪽이 같은 `1fr` 이라 링크가 들어와도
+            가운데 정렬은 그대로다.
+          */}
+          <div className="hidden justify-end sm:flex">
+            {fullViewHref ? (
+              <Button asChild variant="ghost" size="sm">
+                <Link href={fullViewHref}>
+                  전체 보기
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         <MonthRevenueSummary label={label} revenue={revenue} />
@@ -167,7 +214,10 @@ export function OpportunityCalendar({
       <CardContent>
         <table className="w-full table-fixed border-collapse overflow-hidden rounded-lg border border-border">
           <caption className="sr-only">
-            {label} 에 마감 예정인 영업 기회입니다. 날짜 칸의 기회명을 누르면 상세로 이동합니다.
+            {label} 에 마감 예정인 영업 기회입니다.{" "}
+            {isCompact
+              ? "날짜 칸의 표식을 누르면 그 기회 상세로 이동합니다."
+              : "날짜 칸의 기회명을 누르면 상세로 이동합니다."}
           </caption>
           <thead>
             <tr className="bg-muted/50">
@@ -189,7 +239,7 @@ export function OpportunityCalendar({
             {grid.weeks.map((week) => (
               <tr key={week[0]?.key}>
                 {week.map((cell) => (
-                  <DayCell key={cell.key} cell={cell} />
+                  <DayCell key={cell.key} cell={cell} density={density} />
                 ))}
               </tr>
             ))}
@@ -279,21 +329,40 @@ function MonthRevenueSummary({
   );
 }
 
-/** 날짜 칸 하나 — 넘치는 일정은 `<details>` 로 접는다 (JS 없이 펼쳐진다) */
-function DayCell({ cell }: { cell: CalendarDay }) {
-  const { visible, hiddenCount } = foldDayEvents(cell.events);
+/**
+ * 날짜 칸 하나.
+ *
+ * `full` 은 기회명 카드를 쌓고 넘치는 만큼을 `<details>` 로 접는다(JS 없이 펼쳐진다).
+ * `compact` 는 결말 아이콘만 한 줄로 놓는다 — 접는 장치를 두지 않는다. 40px 칸 안에서
+ * 펼쳐지면 아래 주(週)를 덮고, 컴팩트의 목적은 "이 날 무슨 일이 있는지" 이지 그 자리에서
+ * 다 읽는 것이 아니다(전체는 헤더의 `전체 보기` 로 간다).
+ */
+function DayCell({
+  cell,
+  density,
+}: {
+  cell: CalendarDay;
+  density: CalendarDensity;
+}) {
+  const isCompact = density === "compact";
+  const { visible, hiddenCount } = foldDayEvents(
+    cell.events,
+    isCompact ? COMPACT_DAY_EVENT_LIMIT : DAY_EVENT_LIMIT,
+  );
 
   return (
     <td
       className={cn(
-        "h-24 space-y-1 border border-border align-top p-1.5",
+        "border border-border align-top",
         cell.inMonth ? "bg-card" : "bg-muted/30",
+        isCompact ? "h-12 p-1" : "h-24 space-y-1 p-1.5",
       )}
     >
       <div className="flex items-center justify-between gap-1">
         <span
           className={cn(
-            "inline-flex size-5 items-center justify-center rounded-full text-xs tabular-nums",
+            "inline-flex items-center justify-center rounded-full tabular-nums",
+            isCompact ? "size-4 text-[11px]" : "size-5 text-xs",
             cell.isToday && "bg-primary font-semibold text-primary-foreground",
             // 오늘은 채워진 원 안의 글자라 주말 색을 덮어쓰지 않는다 — 겹치면 대비가 무너진다.
             !cell.isToday &&
@@ -303,31 +372,90 @@ function DayCell({ cell }: { cell: CalendarDay }) {
           {cell.day}
           {cell.isToday ? <span className="sr-only">(오늘)</span> : null}
         </span>
-        {cell.events.length > 0 ? (
+        {/*
+          건수는 `full` 에만 적는다. 컴팩트는 표식 자체가 개수를 보여주므로 숫자를 겹쳐
+          적으면 좁은 칸에서 날짜와 뒤섞여 읽힌다.
+        */}
+        {!isCompact && cell.events.length > 0 ? (
           <span className="text-[10px] text-muted-foreground tabular-nums">
             {cell.events.length}건
           </span>
         ) : null}
       </div>
 
-      {visible.map((event) => (
-        <EventLink key={event.id} event={event} />
-      ))}
+      {isCompact ? (
+        <div className="mt-0.5 flex items-center gap-0.5">
+          {visible.map((event) => (
+            <EventDot key={event.id} event={event} />
+          ))}
+          {hiddenCount > 0 ? (
+            <span
+              className="text-[10px] text-muted-foreground tabular-nums"
+              // 감춘 것이 무엇인지 커서를 올리면 알 수 있다 — 링크는 아니다(전체 보기로 간다)
+              title={cell.events
+                .slice(visible.length)
+                .map((event) => event.name)
+                .join("\n")}
+            >
+              +{hiddenCount}
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          {visible.map((event) => (
+            <EventLink key={event.id} event={event} />
+          ))}
 
-      {hiddenCount > 0 ? (
-        <details className="group">
-          <summary className="cursor-pointer list-none rounded px-1 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
-            <span className="group-open:hidden">+{hiddenCount}건 더 보기</span>
-            <span className="hidden group-open:inline">접기</span>
-          </summary>
-          <div className="mt-1 space-y-1">
-            {cell.events.slice(visible.length).map((event) => (
-              <EventLink key={event.id} event={event} />
-            ))}
-          </div>
-        </details>
-      ) : null}
+          {hiddenCount > 0 ? (
+            <details className="group">
+              <summary className="cursor-pointer list-none rounded px-1 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+                <span className="group-open:hidden">+{hiddenCount}건 더 보기</span>
+                <span className="hidden group-open:inline">접기</span>
+              </summary>
+              <div className="mt-1 space-y-1">
+                {cell.events.slice(visible.length).map((event) => (
+                  <EventLink key={event.id} event={event} />
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </>
+      )}
     </td>
+  );
+}
+
+/**
+ * 컴팩트 칸의 일정 한 건 — **아이콘 하나가 곧 링크**다.
+ *
+ * 아이콘만 두고 이름을 감추므로 두 가지를 지킨다. ① 결말은 색이 아니라 **모양**으로
+ * 구분한다(ACC_*) — 색만 다르면 컴팩트에서는 판별할 단서가 아예 없다. ② 링크의 접근성
+ * 이름에 **기회명·금액·결말**을 모두 담는다. 화면 낭독기에게 "링크"만 읽히면 이 칸은
+ * 통과할 수 없는 자리가 된다.
+ *
+ * 크기는 `size-5`(20px) 를 지킨다 — 아이콘은 12px 이지만 누를 자리가 그만큼이면
+ * 손가락·마우스로 맞히기 어렵다.
+ */
+function EventDot({ event }: { event: CalendarEvent }) {
+  const Icon = OUTCOME_ICONS[event.outcome];
+  const outcomeLabel = CALENDAR_OUTCOME_LABELS[event.outcome];
+  const amountLabel =
+    event.amount > 0 ? formatKRW(event.amount) : "확정 문서 없음 · ₩0";
+  const description = `${event.name} · ${amountLabel} · ${outcomeLabel}`;
+
+  return (
+    <Link
+      href={event.href}
+      title={description}
+      aria-label={description}
+      className="inline-flex size-5 shrink-0 items-center justify-center rounded hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      <Icon
+        className={cn("size-3", OUTCOME_ICON_CLASS[event.outcome])}
+        aria-hidden="true"
+      />
+    </Link>
   );
 }
 

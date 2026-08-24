@@ -1,4 +1,6 @@
 import type { LucideIcon } from "lucide-react";
+// 전용 캘린더 주소는 `@/lib/calendar` 가 정한다 — 사이드바·대시보드·그 페이지가 같은 값을 본다
+import { CALENDAR_HREF } from "./calendar";
 import {
   LayoutDashboard,
   Building2,
@@ -40,7 +42,22 @@ export type NavItem = {
 export const userNav: NavItem[] = [
   { href: "/dashboard", label: "대시보드", icon: LayoutDashboard },
   { href: "/accounts", label: "거래처", icon: Building2 },
-  { href: "/opportunities", label: "영업 기회", icon: Target },
+  {
+    /*
+      묶음 부모는 첫 하위 항목과 같은 곳을 가리킨다 — 묶음 자체를 위한 페이지를 만들지 않는다.
+
+      캘린더를 여기 두는 이유는 그 화면이 보여주는 것이 **기회의 마감일**이기 때문이다.
+      대시보드에도 같은 캘린더가 있지만 그쪽은 컴팩트(결말 아이콘만)이고, 칸을 읽고 눌러
+      들어가는 일은 이 하위 페이지가 맡는다.
+    */
+    href: "/opportunities",
+    label: "영업 기회",
+    icon: Target,
+    children: [
+      { href: "/opportunities", label: "기회 목록" },
+      { href: CALENDAR_HREF, label: "마감 캘린더" },
+    ],
+  },
   { href: "/generator", label: "새 문서 생성", icon: Sparkles },
   {
     href: "/library",
