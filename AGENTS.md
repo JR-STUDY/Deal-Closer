@@ -85,7 +85,8 @@ pnpm doctor:staged  # staged 파일만 빠르게 점검 (수동)
 ```
 prisma/
   schema.prisma        # 도메인 스키마 (단일 소스)
-  seed.ts              # 데모 시드
+  seed.ts              # 데모 시드 — 손으로 적은 12건은 **특수 케이스 전시장**이다
+  seed-demo-pipeline.ts # 시연용 **대량** 데이터 (올해 전 날짜 + 내년 갱신) — 만드는 것은 **분포**다
   migrations/          # 마이그레이션 이력 (커밋)
 src/
   app/
@@ -230,6 +231,24 @@ src/
 - **금액은 원(KRW) 단위 정수(Int)** 로 저장한다 (정책 FORM_CURRENCY_KRW).
 - DB 접근은 **반드시 `src/lib/db.ts` 의 `prisma` 싱글톤**을 사용한다 (직접 `new PrismaClient()` 금지 — dev 리로드 커넥션 누수).
 - 생성된 Client(`src/generated/prisma`)와 `dev.db` 는 커밋하지 않는다. `pnpm install` 시 `postinstall` 이 Client 를 자동 생성한다.
+- **시드는 두 층이다 — 목적이 다르므로 섞지 않는다.** `seed.ts` 가 손으로 적는 기회 12건은
+  **특수 케이스 전시장**이다(확정 문서 수동 고정 · 폐기 문서를 낀 기회 · 확정 문서 없음 ·
+  발송 이력 · 버전 2개). `seed-demo-pipeline.ts` 가 만드는 것은 **분포**다 — 올해 1~12월의
+  **모든 날짜**에 기회 1~3건을 놓고(빈 날을 만들지 않는다), 내년은 그 수주 건에서 이어지는
+  **갱신 기회**로 채운다. 캘린더를 넘길 때 빈 달이 없고 차트가 12개월 내내 값을 가져야
+  시연이 성립한다.
+  **대량 생성기는 금액을 스스로 정하지 않는다** — 기회에 문서를 붙여 두기만 하고,
+  `expectedAmount`·`confirmedDocumentId` 는 `seed.ts` 가 이어서 도는 두 패스(품목 보정
+  10-3-1 · 확정 문서 재판정 10-4)가 정한다(기회-6). 그래서 **호출은 그 두 패스보다 먼저**
+  와야 한다 — 순서가 뒤집히면 대량 기회만 `₩0` 으로 남는다. 시드가 금액을 손으로 적으면
+  화면이 계산한 값과 어긋난 데이터가 만들어지고 "왜 이 금액인지" 를 설명할 수 없다.
+  분포는 **결정적**이다(고정 씨앗 PRNG) — `db:reset` 마다 데이터가 달라지면 시연 중에 본
+  화면을 다시 만들 수 없다. 연도만 실행 시점을 따른다(날짜를 박아 두면 해가 바뀌는 순간
+  데모가 통째로 과거가 된다).
+- **`prisma migrate reset` 은 AI 에이전트가 그냥 실행할 수 없다** (Prisma 7). 에이전트가
+  부른 것을 감지하면 거부하고, 사용자의 명시적 동의문을
+  `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION` 에 실어야 통과한다. 사람이 직접 돌릴
+  때는 `pnpm db:reset` 이 그대로 동작한다.
 - **시드 명령은 `prisma.config.ts` 의 `migrations.seed` 가 정의한다** (Prisma 7). `package.json` 의
   `"prisma": { "seed": ... }` 는 더 이상 읽히지 않고, `prisma migrate reset` 도 **시드를 자동 실행하지
   않는다**(`--skip-seed` 옵션 자체가 사라졌다). 그래서 `db:reset` 이 `prisma migrate reset && prisma db seed`

@@ -10,6 +10,9 @@ import {
 // 확정 문서 판정은 런타임과 **같은 순수 함수**를 쓴다 (기회-6) — 시드가 화면과 다른 숫자를
 // 만들어 내면 "왜 이 금액인지" 를 설명할 수 없다.
 import { resolveConfirmedDocument } from "../src/lib/confirmed-document";
+// 시연용 대량 데이터(올해 전 날짜 + 내년 갱신)는 별도 모듈이다 — 손으로 적은 12건은
+// **특수 케이스 전시장**이고 저쪽이 만드는 것은 **분포**라, 목적이 다른 둘을 섞지 않는다.
+import { seedDemoPipeline } from "./seed-demo-pipeline";
 
 const adapter = new PrismaBetterSqlite3({
   url: process.env.DATABASE_URL ?? "file:./dev.db",
@@ -1884,6 +1887,23 @@ async function main() {
   }
 
   /*
+   * 10-3-2) 시연용 대량 파이프라인 — 올해 1~12월의 **모든 날짜**에 기회를 놓고,
+   * 내년은 그 수주 건에서 이어지는 **갱신 기회**로 채운다 (F-115 · F-302).
+   *
+   * 위의 12건만으로는 캘린더를 넘길 때 빈 달이 나오고 차트가 몇 점만 찍힌다.
+   * 규칙은 `prisma/seed-demo-pipeline.ts` 가 정한다 — 이 호출이 **아래 두 패스보다
+   * 먼저** 와야 한다: 문서 품목 보정(10-3-1)과 확정 문서 재판정(10-4)이 저쪽이 만든
+   * 문서까지 함께 훑어 금액을 도출한다. 순서가 뒤집히면 대량 기회만 `₩0` 으로 남는다.
+   */
+  const demo = await seedDemoPipeline({
+    prisma,
+    orgId: org.id,
+    // 담당자를 나눠 붙인다 — 목록·상세의 영업 담당자 칸이 한 사람으로 굳지 않게
+    ownerIds: [rep.id, leader.id],
+    today: new Date(),
+  });
+
+  /*
    * 10-3-1) 금액만 있는 문서에 **근거 품목**을 만든다.
    *
    * 문서 금액은 품목표에서 도출된다(`deriveAmount`). 금액 컬럼만 채우고 품목을 비워 두면
@@ -2030,6 +2050,17 @@ async function main() {
     정책: await prisma.policy.count(),
   };
   console.log("✅ seeding 완료:", counts);
+  console.log("🎬 시연용 대량 데이터:", {
+    거래처: `${demo.accounts}곳`,
+    담당자: `${demo.contacts}명`,
+    "올해 기회": `${demo.opportunities}건`,
+    "내년 갱신 기회": `${demo.renewals}건`,
+    문서: `${demo.documents}건`,
+    활동이력: `${demo.activityLogs}건`,
+    발송이력: `${demo.emailLogs}건`,
+    // 0 이어야 한다 — 이 데이터의 목적이 "빈 날 없는 캘린더" 다
+    "기회 없는 날": `${demo.emptyCalendarDays}일`,
+  });
   console.log("📊 파이프라인(확정 문서 기준):", {
     전체합계: (pipelineTotals._sum.expectedAmount ?? 0).toLocaleString("ko-KR"),
     진행중합계: (openTotals._sum.expectedAmount ?? 0).toLocaleString("ko-KR"),
