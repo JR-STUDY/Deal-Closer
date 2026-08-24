@@ -41,20 +41,37 @@ export type { SortDirection, SortState };
 
 /**
  * `EmailLog.status` 에 저장되는 값 (SQLite 는 enum 이 없어 String 이다).
- * 발송 라우트(`POST /api/documents/:id/send`)가 성공 시 `SENT` 를 쓴다.
+ *
+ * 발송 라우트(`POST /api/documents/:id/send`)가 **전송 어댑터의 결과를 그대로 옮긴다**
+ * (F-233): 성공 `SENT` · 실패 `FAILED` · 건너뜀 `SKIPPED`. **결과를 모른 채 `SENT` 로
+ * 적지 않는다** — 예전에는 어댑터를 부르지도 않고 늘 `SENT` 를 적었고, 그래서 화면과 이력이
+ * 나가지도 않은 메일을 "발송 성공" 이라고 말했다.
+ *
+ * `SKIPPED` 는 **의도된 리허설**이다(자격증명 없는 개발 환경 · `MAIL_DRY_RUN`). 실패가
+ * 아니므로 문서 상태·기회 단계는 진행하되, 이력과 화면이 건너뛴 사실과 이유를 밝힌다 —
+ * 보낸 척하는 것과 다르다.
  *
  * **`@/lib/constants` 가 아니라 여기 둔다** — 이 값을 읽는 곳이 발송 이력 화면과 이 모듈뿐이고,
  * 문서 상태(`DOCUMENT_STATUSES`)의 `SENT` 와 이름이 겹쳐 같은 파일에 나란히 두면 어느 쪽
  * `SENT` 인지 부르는 곳에서 알 수 없다.
  */
-export const EMAIL_LOG_STATUSES = ["SENT", "FAILED"] as const;
+export const EMAIL_LOG_STATUSES = ["SENT", "SKIPPED", "FAILED"] as const;
 export type EmailLogStatus = (typeof EMAIL_LOG_STATUSES)[number];
 
 /** 목록·상세에 그대로 쓰는 라벨 (정책 COPY-TONE) */
 export const EMAIL_LOG_STATUS_LABELS: Record<EmailLogStatus, string> = {
   SENT: "성공",
+  SKIPPED: "건너뜀",
   FAILED: "실패",
 };
+
+/**
+ * 실제로 메일이 나간 상태인지 — 열람을 논할 수 있는지의 판정 기준이다.
+ * `SENT` 밖의 값(정의 밖 문자열 포함)은 모두 "나가지 않았다" 로 본다: 모르면 덜 주장한다.
+ */
+export function emailWasDelivered(status: string): boolean {
+  return status === "SENT";
+}
 
 /** DB 의 `status` 는 String 이라 읽어온 값을 좁힐 때 쓴다 */
 export function isEmailLogStatus(value: string): value is EmailLogStatus {
@@ -66,18 +83,19 @@ export function isEmailLogStatus(value: string): value is EmailLogStatus {
 /**
  * 한 건을 화면에 어떻게 적을지 정하는 **표시 상태**.
  *
- * 발송이 실패한 건에는 열람 여부를 적지 않는다(`failed`) — 나가지 않은 메일의 "미열람" 은
- * 사실이지만 오해를 부른다("보냈는데 아직 안 봤다" 로 읽힌다). 세 상태를 순수 함수로 뽑아
- * 목록·상세가 같은 판정을 쓰게 한다.
+ * **나가지 않은 메일에는 열람 여부를 적지 않는다**(`not-sent`) — 실패·건너뜀 건의
+ * "미열람" 은 사실이지만 오해를 부른다("보냈는데 아직 안 봤다" 로 읽힌다). 판정 기준은
+ * `emailWasDelivered` 하나이므로 상태가 늘어나도(예: SKIPPED) 여기가 저절로 따라온다 —
+ * 예전에는 `status === "FAILED"` 만 걸러서, 건너뜀 건이 "열람 기록 없음" 으로 보였다.
  */
-export const EMAIL_OPEN_STATES = ["failed", "opened", "unopened"] as const;
+export const EMAIL_OPEN_STATES = ["not-sent", "opened", "unopened"] as const;
 export type EmailOpenState = (typeof EMAIL_OPEN_STATES)[number];
 
 export function emailOpenState(log: {
   status: string;
   openedAt: Date | null;
 }): EmailOpenState {
-  if (log.status === "FAILED") return "failed";
+  if (!emailWasDelivered(log.status)) return "not-sent";
   return log.openedAt ? "opened" : "unopened";
 }
 
@@ -103,9 +121,9 @@ export function emailOpenState(log: {
 /** 목록 머리글·상세 필드 이름 */
 export const EMAIL_OPEN_COLUMN_LABEL = "열람 확인";
 
-/** 셀에 적는 낱말 (실패 건은 열람을 논하지 않는다) */
+/** 셀에 적는 낱말 (나가지 않은 건은 열람을 논하지 않는다) */
 export const EMAIL_OPEN_STATE_LABELS: Record<EmailOpenState, string> = {
-  failed: "—",
+  "not-sent": "—",
   opened: "열람 확인",
   unopened: "기록 없음",
 };
@@ -113,15 +131,16 @@ export const EMAIL_OPEN_STATE_LABELS: Record<EmailOpenState, string> = {
 /**
  * ⓘ 안내 — 무엇을 근거로 적는지, 왜 부정확한지 (정책 COPY-TONE).
  *
- * **마지막 문장은 실제 전송(F-233)이 붙는 날 지운다** — 그때부터는 픽셀이 함께 나가므로
- * 사실이 아니게 된다. 앞의 두 문장(양방향 부정확)은 그때도 그대로 남는다.
+ * 마지막 문장은 F-233(실제 전송)이 붙으면서 바뀌었다. 이제 픽셀은 **함께 나간다** —
+ * 다만 `APP_BASE_URL` 이 없으면 픽셀 주소를 만들 수 없어 그 발송은 기록이 쌓이지 않고,
+ * 건너뛴(개발 모드) 발송은 애초에 나가지 않는다. 앞의 두 문장(양방향 부정확)은 그대로다.
  */
 export const EMAIL_OPEN_HINT =
   "열람은 수신자의 메일 앱이 본문의 추적 이미지를 불러올 때만 기록됩니다. " +
   "그래서 확인된 열람만 사실로 볼 수 있습니다 — 이미지를 차단하면 읽어도 기록이 남지 " +
   "않고(대부분의 메일 앱이 기본으로 차단합니다), 반대로 메일 앱·보안 프록시가 이미지를 " +
   "미리 불러오면 열어보지 않아도 열람으로 잡힙니다. " +
-  "또한 실제 메일 전송이 연동되기 전까지는 추적 이미지가 함께 나가지 않아 기록이 쌓이지 않습니다.";
+  "발송을 건너뛴 건과 실패한 건은 메일이 나가지 않았으므로 열람을 표시하지 않습니다.";
 
 /** 열람 기록이 없는 칸의 툴팁 — "읽지 않았다" 로 단정하지 않는다 */
 export const EMAIL_OPEN_UNOPENED_TOOLTIP =
@@ -132,9 +151,24 @@ export const EMAIL_OPEN_UNOPENED_TOOLTIP =
 export const EMAIL_OPEN_OPENED_CAVEAT =
   "메일 앱이 이미지를 미리 불러온 기록일 수도 있습니다.";
 
-/** 발송이 실패한 칸의 툴팁 */
-export const EMAIL_OPEN_FAILED_TOOLTIP =
-  "발송이 실패해 열람을 확인할 수 없습니다.";
+/**
+ * 메일이 나가지 않은 칸의 툴팁 — **왜** 확인할 수 없는지 상태별로 다르게 적는다.
+ * 정의 밖 상태(수동 편집·미래의 값)는 뭉뚱그린 문장으로 떨어뜨린다 — 지어내지 않는다.
+ */
+export const EMAIL_OPEN_NOT_SENT_TOOLTIPS: Record<string, string> = {
+  FAILED: "발송이 실패해 열람을 확인할 수 없습니다.",
+  SKIPPED:
+    "메일을 실제로 보내지 않아(개발 모드) 열람을 확인할 수 없습니다.",
+};
+
+/** 위 표에 없는 상태의 툴팁 */
+export const EMAIL_OPEN_NOT_SENT_TOOLTIP =
+  "메일이 나가지 않아 열람을 확인할 수 없습니다.";
+
+/** 상태 → 툴팁 문구 (목록·상세가 같은 말을 쓴다) */
+export function emailNotSentTooltip(status: string): string {
+  return EMAIL_OPEN_NOT_SENT_TOOLTIPS[status] ?? EMAIL_OPEN_NOT_SENT_TOOLTIP;
+}
 
 // ────────────────────────── 수신자 ──────────────────────────
 
@@ -224,7 +258,20 @@ export function emailLogsWhere(
   if (filters.status) where.status = filters.status;
   // 열람 시각의 유무가 곧 "확인된 열람" 이다 (`openCount` 는 몇 번 불렸는지일 뿐이다)
   if (filters.opened === "opened") where.openedAt = { not: null };
-  if (filters.opened === "unopened") where.openedAt = null;
+  /*
+   * `열람 기록 없음` 은 **나갔는데 기록이 없는 건**이다 — 실패·건너뜀 건은 애초에 나가지
+   * 않아 목록에서 `—` 로 그려지므로 이 필터에 걸리면 안 된다(고른 낱말과 다른 행이 나온다).
+   * 그래서 `openedAt = null` 만으로 좁히지 않고 발송 성공까지 함께 건다.
+   */
+  if (filters.opened === "unopened") {
+    where.openedAt = null;
+    /*
+     * `status` 를 **덮어쓰지 않고 AND 로 얹는다.** 덮어쓰면 `상태=실패 + 열람=기록 없음`
+     * 조합에서 상태 필터가 조용히 사라져, 고르지도 않은 성공 건이 목록에 뜬다.
+     * AND 면 그 조합은 서로 모순이라 0건이 되는데 — 그게 사용자가 고른 것의 정직한 답이다.
+     */
+    where.AND = [{ status: "SENT" }];
+  }
   if (filters.query) {
     where.OR = [
       { recipients: { contains: filters.query } },

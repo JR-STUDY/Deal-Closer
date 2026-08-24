@@ -16,7 +16,9 @@ import { isEmail } from "@/lib/validation";
  * 운영(`NODE_ENV=production`)에서는 조용히 넘어가지 않고 실패로 반환한다 — 발송된 줄 알았는데
  * 나가지 않는 상황이 가장 위험하기 때문이다. 운영에서도 의도적으로 끄려면 `MAIL_DRY_RUN=true`.
  *
- * 이 모듈은 어댑터만 제공한다. 발송 라우트 연결은 Phase 5(F-233)에서 한다.
+ * 이 모듈은 어댑터만 제공한다 — 부르는 곳은 `POST /api/documents/:id/send` 하나이고(F-233),
+ * 그 라우트가 결과(`status`)를 `EmailLog.status` 로 그대로 옮긴다.
+ * **예외를 던지지 않는다**: 호출부가 sent·skipped·failed 로 분기해 파이프라인 전진 여부를 정한다.
  */
 
 // ── 상수 ──

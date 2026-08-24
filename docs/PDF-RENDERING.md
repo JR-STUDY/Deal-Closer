@@ -31,6 +31,21 @@ contentJson ─ parseContentJson ─▶ EditorDoc
 | `checkKoreanFonts(timeoutMs?)` | 한글 글꼴 진단 (아래 참고) |
 | `resolveChromeExecutable()` | 브라우저 실행 파일 경로 확인 |
 
+### 부르는 곳은 둘, 재료는 하나
+
+| 경로 | 무엇을 하는가 |
+|---|---|
+| `GET /api/documents/:id/pdf` | 미리보기(`?inline=1`)·다운로드 (F-223) |
+| `POST /api/documents/:id/send` | 발송 첨부 (F-232) — 렌더가 실패하면 **전송·DB 기록 전에 502 로 멈춘다** |
+
+둘 다 `@/lib/document-render` 의 `loadDocumentRenderInput()` 에서 **같은 재료**(조직 범위 조회 ·
+`contentJson` 이 없을 때의 기본 문서 시드 · 회사 정보)를 받고, 파일명은 `@/lib/document-file` 의
+`documentPdfFileName()` 하나가 정한다. 인쇄용 HTML 미리보기(`GET /api/documents/:id/preview`)도
+같은 재료를 쓴다 — 세 경로가 각자 조회하면 어느 한쪽만 손봤을 때 **담당자가 화면에서 확인한 것과
+다른 PDF** 가 고객에게 첨부되고, 그건 화면으로 알 수 없다.
+
+한글 파일명은 `contentDisposition()` 이 `filename` 과 `filename*`(RFC 5987)을 **함께** 적는다.
+
 브랜딩(`Branding` 모델)은 **레이아웃을 바꾸지 않는 위치에만** 반영한다.
 사용자가 배치한 절대좌표 위에 배너·머리말을 끼우면 본문과 겹치기 때문이다.
 
