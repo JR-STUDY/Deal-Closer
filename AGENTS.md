@@ -94,13 +94,15 @@ src/
                      #  잔존: analytics · team/members · billing · settings/mail-domain
                      #  이전 완료(리다이렉트만 남음): settings/branding · account/profile → /settings/profile
     (auth)/            # 로그인 등 인증 화면 (사이드바 없음)
+    landing/           # 제품 소개 랜딩 — 예전의 `/` 다. `/` 는 대시보드로 보내고
+                     #  이 화면은 주소로만 들어간다 (데모 자리에서 그대로 쓴다)
     api/               # REST API Route Handlers (SQLite 조회 / LLM 호출 / 일부 목업)
                      #  mail/track/[trackingId] 는 **인증 없이 열린 유일한 라우트**다
                      #  (수신자의 메일 앱이 부른다 — 아래 오픈 트래킹 규칙 참고)
                      #  generate · templates · documents/[id]/{versions,revise} 는 실제 LLM 호출
                      #  (모델은 사용자가 화면에서 선택 — 서버가 카탈로그로 검증)
     layout.tsx         # 루트 레이아웃 (폰트·Toaster)
-    page.tsx           # 랜딩 (콘솔 진입)
+    page.tsx           # `/` → `/dashboard` 리다이렉트 (랜딩은 `landing/` 에 살아 있다)
   components/
     ui/                # shadcn/ui (직접 수정 지양, CLI 로 관리)
     account/           # 회사·프로필 공용 폼 (profile-tabs 셸 + profile-form·company-form·password-form)
