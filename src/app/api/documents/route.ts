@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentOrg, getCurrentUser } from "@/lib/session";
 import { ok, fail } from "@/lib/api";
 import { ACTIVE_DOCUMENT_STATUSES } from "@/lib/constants";
-import { rootIdOf } from "@/lib/document-version";
+import { rootIdOf, unlinkedVersionGroupWhere } from "@/lib/document-version";
 
 /**
  * GET /api/documents?status=&type=&q=&linkable=1 — 문서 목록 (SQLite)
@@ -14,6 +14,10 @@ import { rootIdOf } from "@/lib/document-version";
  *  - **형제 버전이 붙은 묶음도 통째로 뺀다** — 연결은 버전 묶음 단위라(`@/lib/document-link`),
  *    v1 이 기회 A 에 붙어 있으면 v2 도 후보가 아니다. 이걸 빼먹으면 목록에는 뜨는데 저장에서
  *    거부당해, 사용자는 왜 안 되는지 모른 채 같은 시도를 반복한다.
+ *
+ * 묶음 제외 조건은 **`unlinkedVersionGroupWhere` 순수 함수 하나**가 정한다. 이 라우트가
+ * 직접 `NOT` 을 적었을 때 Prisma 의 부정 필터가 `rootId = NULL`(=v1) 인 행을 통째로
+ * 떨어뜨려 후보가 **0건**이 됐다 — 그 함정을 함수 주석과 테스트로 못박아 두었다.
  */
 export async function GET(req: NextRequest) {
   const org = await getCurrentOrg();
@@ -44,11 +48,7 @@ export async function GET(req: NextRequest) {
         ? {
             opportunityId: null,
             status: { in: [...ACTIVE_DOCUMENT_STATUSES] },
-            // 뿌리 문서(v1, rootId=null)는 자기 id 로, 후속 버전은 rootId 로 걸린다.
-            NOT: [
-              { id: { in: linkedRootIds } },
-              { rootId: { in: linkedRootIds } },
-            ],
+            ...unlinkedVersionGroupWhere(linkedRootIds),
           }
         : {}),
     },

@@ -9,6 +9,10 @@
  * (서버·클라이언트 공용 순수 모듈)
  */
 
+// 타입 전용 import — 런타임 의존이 없어 이 모듈은 순수하게 남는다
+// (`@/lib/opportunity` 가 `Prisma.OpportunityWhereInput` 을 쓰는 것과 같은 방식).
+import type { Prisma } from "@/generated/prisma/client";
+
 /** 버전 묶음 키 — rootId 가 없으면 자기 자신이 뿌리(v1) */
 export function rootIdOf(doc: { id: string; rootId?: string | null }): string {
   return doc.rootId ?? doc.id;
@@ -44,4 +48,38 @@ export function multiVersionRootIds<T extends VersionedDoc>(docs: T[]): Set<stri
     count.set(key, (count.get(key) ?? 0) + 1);
   }
   return new Set([...count.entries()].filter(([, n]) => n > 1).map(([key]) => key));
+}
+
+/**
+ * **어느 기회에도 붙지 않은 버전 묶음**만 남기는 where 조건 (기회-5 · 기회-17).
+ *
+ * 연결 단위가 버전 묶음이라(`@/lib/document-link`), 형제 버전이 이미 다른 기회에 붙어
+ * 있으면 남은 버전도 후보가 아니다. 그 판정을 여기 한 곳에 둔다 — 목록(후보 조회)과
+ * 저장(연결 검증)이 다른 조건을 쓰면 목록에는 뜨는데 저장에서 거부당한다.
+ *
+ * ## `NOT`/`notIn` 만으로는 v1 이 전부 사라진다
+ *
+ * 묶음 키는 `rootId ?? id` 라서 **v1 은 `rootId` 가 NULL** 이다. 그런데 Prisma 의 부정
+ * 필터(`NOT`·`not`·`notIn`)는 **NULL 인 행을 돌려주지 않는다** — `NULL NOT IN (…)` 이
+ * SQL 에서 참이 아니라 NULL 이기 때문이다. 그래서 예전
+ * `NOT: [{ id: { in } }, { rootId: { in } }]` 는 붙지 않은 문서까지 통째로 걸러냈다
+ * (실측: 후보 38건이 **0건**으로 나와 "연결할 수 있는 문서가 없습니다" 만 떴다.
+ * 저장소 문서 56건 중 55건이 `rootId = NULL` 이었다).
+ *
+ * 그래서 NULL 분기를 **명시적으로** 적는다. 제외할 묶음이 없으면 조건 자체를 붙이지
+ * 않는다 — 빈 배열에 부정 필터를 걸면 같은 함정을 다시 밟을 자리가 생긴다.
+ */
+export function unlinkedVersionGroupWhere(
+  linkedRootIds: readonly string[],
+): Prisma.DocumentWhereInput {
+  if (linkedRootIds.length === 0) return {};
+  const ids = [...linkedRootIds];
+  return {
+    AND: [
+      // 뿌리 문서(v1)는 자기 id 가 묶음 키다
+      { id: { notIn: ids } },
+      // 후속 버전은 rootId 가 묶음 키다. NULL(=v1)은 위 줄이 이미 판정했다.
+      { OR: [{ rootId: null }, { rootId: { notIn: ids } }] },
+    ],
+  };
 }

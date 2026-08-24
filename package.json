@@ -24,6 +24,7 @@
     "test:email-log": "tsx --tsconfig tsconfig.scripts.json scripts/email-log.test.ts",
     "test:mail-body": "tsx --tsconfig tsconfig.scripts.json scripts/mail-body.test.ts",
     "test:document-file": "tsx --tsconfig tsconfig.scripts.json scripts/document-file.test.ts",
+    "test:document-version": "tsx --tsconfig tsconfig.scripts.json scripts/document-version.test.ts",
     "test:email-tracking": "tsx --tsconfig tsconfig.scripts.json scripts/email-tracking.test.ts",
     "test:contact": "tsx --tsconfig tsconfig.scripts.json scripts/contact.test.ts",
     "test:confirmed-document": "tsx --tsconfig tsconfig.scripts.json scripts/confirmed-document.test.ts",
