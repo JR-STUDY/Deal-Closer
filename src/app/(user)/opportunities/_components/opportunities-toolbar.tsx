@@ -5,31 +5,28 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Columns3, List, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ALL_FILTER_VALUE, nextListSearch } from "@/lib/pagination";
-import type { OpportunityOwnerOption } from "@/lib/opportunity";
+import { nextListSearch } from "@/lib/pagination";
 import { StageFlowHint } from "@/components/opportunity/stage-flow-hint";
 
 const DEBOUNCE_MS = 350;
 const LIST_HREF = "/opportunities";
-/** Radix Select 는 빈 문자열 value 를 허용하지 않아 "전체" 를 표현할 표식이 필요하다 */
-const ALL = ALL_FILTER_VALUE;
 /** 칸반 보기 표식 (`?view=board`). 목록이 기본이라 목록일 때는 파라미터를 지운다. */
 const BOARD_VIEW = "board";
 
 /**
- * 영업 기회 목록 툴바 (F-111 · F-112) — 검색 + 영업 담당자별 필터 + 목록/칸반 전환.
- * 조건은 URL 쿼리(`?q=&stage=&owner=&view=&page=`)에 담아 서버 컴포넌트가 조회 조건으로 쓰게 한다
+ * 영업 기회 목록 툴바 (F-111 · F-112) — 검색 + 목록/칸반 전환.
+ * 조건은 URL 쿼리(`?q=&stage=&view=&page=`)에 담아 서버 컴포넌트가 조회 조건으로 쓰게 한다
  * (새로고침·공유 시에도 같은 결과·같은 보기가 나온다).
  *
  * **단계 필터는 여기 없다** — 표의 단계 머리글로 옮겼다 (4차 피드백 6). 거르는 대상이 그 칸의
  * 값이므로 조건도 그 칸 위에 있는 편이 찾기 쉽다. 쿼리 키(`?stage=`)와 page 리셋 규칙은 같다.
+ *
+ * **영업 담당자 필터도 여기 없다.** 툴바에서 걷어냈다 — MVP 는 인증이 없어
+ * (`session.ts` 가 데모 사용자 1명 고정) 고를 담당자가 사실상 한 명이고, 그 자리를
+ * 늘 비어 있는 셀렉트가 차지했다. `?owner=` 파싱과 `opportunitiesWhere` 의 조건은
+ * **그대로 남겨 둔다**(`GET /api/opportunities` 가 쓰고, 주소로 들어오면 그대로 걸린다) —
+ * `adminNav` 를 지우지 않은 것과 같은 판단이다. 팀원이 늘어 필터가 필요해지면 이 자리에
+ * 셀렉트만 다시 놓으면 된다.
  *
  * `children` 으로 총 건수·예상 금액 합계를 받아 **검색란과 같은 줄 우측**에 둔다 (기회-15).
  * 좁은 화면에서는 `flex-wrap` 으로 아래 줄로 내려가 겹치지 않는다.
@@ -40,10 +37,8 @@ const BOARD_VIEW = "board";
  * 이제 남는 폭은 가운데 빈 공간이 흡수하므로 좌측 입력은 조건과 무관하게 제자리에 있다.
  */
 export function OpportunitiesToolbar({
-  owners,
   children,
 }: {
-  owners: OpportunityOwnerOption[];
   children?: ReactNode;
 }) {
   const router = useRouter();
@@ -51,10 +46,9 @@ export function OpportunitiesToolbar({
   const [q, setQ] = useState(() => searchParams.get("q") ?? "");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const owner = searchParams.get("owner") ?? ALL;
   const isBoard = searchParams.get("view") === BOARD_VIEW;
 
-  function push(next: { q?: string; owner?: string; view?: string }) {
+  function push(next: { q?: string; view?: string }) {
     // 검색·필터를 바꾸면 page 를 1로 되돌린다. 보기 전환은 결과 집합이 같아 page 를 유지한다.
     const qs = nextListSearch(searchParams.toString(), next);
     router.push(qs ? `${LIST_HREF}?${qs}` : LIST_HREF);
@@ -99,21 +93,6 @@ export function OpportunitiesToolbar({
       {/* 단계 흐름 안내 — 검색칸 바로 옆에 접어 둔다 (4차 피드백 7).
           단계 **필터**는 이 자리에 없다: 표의 단계 머리글로 옮겼다 (4차 피드백 6) */}
       <StageFlowHint />
-
-      {/* 거래처 담당자와 헷갈리지 않도록 "영업 담당자" 로 못박는다 (기회-14) */}
-      <Select value={owner} onValueChange={(value) => push({ owner: value })}>
-        <SelectTrigger className="w-44" aria-label="영업 담당자 필터">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>영업 담당자 전체</SelectItem>
-          {owners.map((item) => (
-            <SelectItem key={item.id} value={item.id}>
-              {item.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
 
       {/* 합계와 보기 전환을 오른쪽에 묶는다 — 좁아지면 이 묶음이 통째로 아래 줄로 내려간다 */}
       <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2">

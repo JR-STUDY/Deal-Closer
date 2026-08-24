@@ -252,7 +252,6 @@ export function AccountFormDialog({
               value={memo}
               maxLength={ACCOUNT_MEMO_MAX}
               rows={4}
-              placeholder="영업 이력·특이사항을 자유롭게 남겨주세요."
               onChange={(e) => setMemo(e.target.value)}
             />
           </div>

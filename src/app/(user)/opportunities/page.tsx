@@ -159,7 +159,7 @@ export default async function OpportunitiesPage({
             한 번 익히면 되는 설명에 세로 공간을 상시로 내주지 않는다 */}
         <Suspense fallback={<div className="h-9" />}>
           {/* 총 건수·합계는 검색란과 같은 줄 우측에 둔다 — 세로 공간을 아낀다 (기회-15) */}
-          <OpportunitiesToolbar owners={owners}>
+          <OpportunitiesToolbar>
             {pagination.totalCount > 0 ? (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span>
