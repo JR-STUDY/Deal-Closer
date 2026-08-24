@@ -1,5 +1,13 @@
 import Link from "next/link";
-import { CalendarDays, ChevronLeft, ChevronRight, Circle, CircleCheck, CircleX } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  CircleCheck,
+  CircleX,
+  Sigma,
+} from "lucide-react";
 import { formatKRW } from "@/lib/format";
 import {
   CALENDAR_OUTCOME_LABELS,
@@ -17,7 +25,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -106,19 +113,23 @@ export function OpportunityCalendar({
   return (
     <Card>
       <CardHeader className="gap-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1.5">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarDays className="size-4" />
-              영업 기회 마감 캘린더
-            </CardTitle>
-            <CardDescription>
-              영업 기회의 예상 마감일을 달력에 올렸습니다. 아래 금액은 <strong>기회 기준</strong>{" "}
-              집계라, 상단 KPI 의 계약 매출(문서 기준 누적)과는 다른 숫자입니다.
-            </CardDescription>
-          </div>
+        {/*
+          제목 · 월 이동 · (여백) 세 칸의 격자다. 월 이동을 `justify-between` 의
+          오른쪽 끝이 아니라 **가운데**에 두는데, `flex` + `mx-auto` 로는 제목 길이가
+          중심을 밀어 카드마다 위치가 달라진다. 양쪽 `1fr` 이 남는 폭을 똑같이 나눠
+          가지므로 가운데 칸은 제목·번역 길이와 무관하게 카드 중앙에 선다.
+          좁은 화면에서는 세 칸이 아래로 쌓이고 월 이동만 가운데 정렬을 유지한다.
+        */}
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <CalendarDays className="size-4" />
+            영업 기회 마감 캘린더
+          </CardTitle>
 
-          <nav aria-label="월 이동" className="flex items-center gap-1">
+          <nav
+            aria-label="월 이동"
+            className="flex items-center justify-center gap-1"
+          >
             <Button asChild variant="outline" size="icon">
               <Link href={prevHref} aria-label="이전 달 보기">
                 <ChevronLeft className="size-4" />
@@ -145,6 +156,9 @@ export function OpportunityCalendar({
               </Button>
             )}
           </nav>
+
+          {/* 오른쪽 칸은 비워 둔다 — 가운데 칸을 실제 중앙에 세우는 것이 이 칸의 일이다 */}
+          <div aria-hidden="true" className="hidden sm:block" />
         </div>
 
         <MonthRevenueSummary label={label} revenue={revenue} />
@@ -188,9 +202,14 @@ export function OpportunityCalendar({
 }
 
 /**
- * 그 달의 매출 요약 + 캘린더 범례.
+ * 그 달의 금액 요약 + 캘린더 범례.
  *
- * **예상과 확정을 한 숫자로 합치지 않는다** — "될 수도 있는 돈"과 "된 돈"은 다른 사실이다.
+ * 큰 글씨 두 숫자는 **확정 금액**(수주 합)과 **전체 기회 금액**(진행 중 + 수주 + **실주**)이다.
+ * 둘을 한 숫자로 합치지 않는다 — "된 돈"과 "그 달에 걸려 있던 판의 크기"는 다른 사실이다.
+ * 실주를 전체에 넣는 이유는 그것도 그 달에 실제로 다룬 건이기 때문이고, 그래서 라벨에
+ * `실주 포함` 을 적어 둔다(포함 여부를 숫자만 보고 알 수는 없다).
+ *
+ * 진행 중 합은 사라지지 않았다 — 전체 타일의 보조 줄에 금액으로 남는다.
  * 범례를 같은 자리에 두어 칸의 아이콘이 무엇을 뜻하는지 캘린더 위에서 바로 읽히게 한다.
  */
 function MonthRevenueSummary({
@@ -202,35 +221,38 @@ function MonthRevenueSummary({
 }) {
   const tiles = [
     {
-      outcome: "open" as CalendarOutcome,
-      caption: `${label} 예상 매출`,
-      hint: `진행 중 ${revenue.expectedCount}건`,
-      amount: revenue.expectedAmount,
-    },
-    {
-      outcome: "won" as CalendarOutcome,
-      caption: `${label} 확정 매출`,
+      key: "confirmed",
+      // 수주 결말과 같은 아이콘·색을 쓴다 — 범례·날짜 칸과 같은 표식이라야 이어 읽힌다
+      Icon: OUTCOME_ICONS.won,
+      iconClass: OUTCOME_ICON_CLASS.won,
+      caption: `${label} 확정 금액`,
       hint: `수주 ${revenue.confirmedCount}건`,
       amount: revenue.confirmedAmount,
+    },
+    {
+      key: "total",
+      // 합계는 결말이 아니라 셋을 아우르는 값이라 결말 아이콘을 빌리지 않는다
+      Icon: Sigma,
+      iconClass: "text-muted-foreground",
+      caption: `${label} 전체 기회 금액`,
+      hint: `실주 포함 ${revenue.totalCount}건 · 진행 중 ${formatKRW(revenue.expectedAmount)}`,
+      amount: revenue.totalAmount,
     },
   ];
 
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <dl className="flex flex-wrap gap-x-8 gap-y-3">
-        {tiles.map((tile) => {
-          const Icon = OUTCOME_ICONS[tile.outcome];
-          return (
-            <div key={tile.outcome}>
-              <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Icon className={cn("size-3.5", OUTCOME_ICON_CLASS[tile.outcome])} />
-                {tile.caption}
-              </dt>
-              <dd className="text-2xl font-semibold">{formatKRW(tile.amount)}</dd>
-              <dd className="text-xs text-muted-foreground">{tile.hint}</dd>
-            </div>
-          );
-        })}
+        {tiles.map((tile) => (
+          <div key={tile.key}>
+            <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <tile.Icon className={cn("size-3.5", tile.iconClass)} />
+              {tile.caption}
+            </dt>
+            <dd className="text-2xl font-semibold">{formatKRW(tile.amount)}</dd>
+            <dd className="text-xs text-muted-foreground">{tile.hint}</dd>
+          </div>
+        ))}
       </dl>
 
       <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">

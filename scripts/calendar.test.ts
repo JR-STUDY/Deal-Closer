@@ -323,7 +323,7 @@ check(
   "접어도 첫 칸에는 가장 큰 금액이 남는다",
 );
 
-// ────────────────────────── 월 합계 (예상 · 확정) ──────────────────────────
+// ───────────────────── 월 합계 (확정 · 전체 · 실주 포함) ─────────────────────
 const revenueSample: CalendarOpportunity[] = [
   opportunity({ id: "open-1", stage: "INITIAL", expectedAmount: 1_000_000, expectedCloseDate: local(2026, 8, 1) }),
   opportunity({ id: "open-2", stage: "NEGOTIATION", expectedAmount: 2_500_000, expectedCloseDate: local(2026, 8, 31, 23, 59) }),
@@ -337,16 +337,25 @@ const revenueSample: CalendarOpportunity[] = [
 ];
 
 const revenue = monthRevenue(revenueSample, { year: 2026, month: 8 });
-check(revenue.expectedAmount, 3_500_000, "예상 매출은 진행 중 기회의 합이다");
-check(revenue.expectedCount, 2, "예상 건수");
-check(revenue.confirmedAmount, 7_000_000, "확정 매출은 그 달 수주 기회의 합이다");
+check(revenue.expectedAmount, 3_500_000, "진행 중 합은 보조 표기로 남는다");
+check(revenue.expectedCount, 2, "진행 중 건수");
+check(revenue.confirmedAmount, 7_000_000, "확정 금액은 그 달 수주 기회의 합이다");
 check(revenue.confirmedCount, 1, "확정 건수");
-check(revenue.lostCount, 1, "실주는 건수만 알린다");
+check(revenue.lostAmount, 6_000_000, "실주 금액도 센다 — 건수만 알리던 예전 판과 다르다");
+check(revenue.lostCount, 1, "실주 건수");
+
+// 전체 = 진행 중 + 수주 + 실주. 실주를 빼먹으면 그 달에 다룬 규모가 조용히 작아진다.
+check(revenue.totalAmount, 16_500_000, "전체 기회 금액은 실주까지 포함한 합이다");
+check(revenue.totalCount, 4, "전체 건수는 결말과 무관하게 그 달 마감 예정 전부다");
 check(
-  revenue.expectedAmount + revenue.confirmedAmount !== 0 &&
-    revenue.expectedAmount !== revenue.confirmedAmount,
+  revenue.totalAmount,
+  revenue.expectedAmount + revenue.confirmedAmount + revenue.lostAmount,
+  "전체는 세 결말의 합과 어긋나지 않는다",
+);
+check(
+  revenue.totalAmount !== revenue.confirmedAmount,
   true,
-  "예상과 확정은 서로 다른 숫자다 (하나로 합치지 않는다)",
+  "확정과 전체는 서로 다른 숫자다 (하나로 합치지 않는다)",
 );
 check(revenue.target, { year: 2026, month: 8 }, "어느 달의 합계인지 함께 돌려준다");
 
@@ -379,14 +388,20 @@ check(
     expectedCount: emptyRevenue.expectedCount,
     confirmedAmount: emptyRevenue.confirmedAmount,
     confirmedCount: emptyRevenue.confirmedCount,
+    lostAmount: emptyRevenue.lostAmount,
     lostCount: emptyRevenue.lostCount,
+    totalAmount: emptyRevenue.totalAmount,
+    totalCount: emptyRevenue.totalCount,
   },
   {
     expectedAmount: 0,
     expectedCount: 0,
     confirmedAmount: 0,
     confirmedCount: 0,
+    lostAmount: 0,
     lostCount: 0,
+    totalAmount: 0,
+    totalCount: 0,
   },
   "빈 달의 합계는 모두 0",
 );

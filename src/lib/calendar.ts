@@ -373,9 +373,17 @@ export function foldDayEvents(
 /**
  * 그 달의 매출 요약.
  *
- * **예상과 확정을 하나로 합치지 않는다** — 진행 중 기회의 합은 "될 수도 있는 돈"이고
- * 수주한 기회의 합은 "된 돈"이다. 더해 버리면 어느 쪽인지 알 수 없는 한 숫자가 된다.
- * 실주 금액은 합계에 넣지 않고 건수만 알린다(그 달에 무슨 일이 있었는지의 일부다).
+ * 화면이 큰 글씨로 내는 두 숫자는 **확정 금액**(그 달 수주 합)과 **전체 기회 금액**
+ * (그 달에 마감 예정인 기회 전부의 합 — **실주까지 포함**)이다.
+ * "된 돈"과 "그 달에 걸려 있던 판의 크기"는 서로 다른 사실이라 **한 숫자로 합치지 않는다**.
+ *
+ * 예전에는 `예상 매출`(진행 중 합)과 `확정 매출`(수주 합) 둘이었다. 진행 중만 세면 그 달에
+ * 실제로 다룬 규모가 실주한 만큼 조용히 빠져 나가, 달을 넘길 때마다 총량이 줄어드는 것처럼
+ * 보였다 — 실주는 없어진 일이 아니라 **끝난 일**이다. 진행 중 합은 사라지지 않았고
+ * (`expectedAmount`) 전체 타일의 보조 줄에 남는다.
+ *
+ * 세 결말의 금액과 건수를 **각각** 들고 있는다 — 화면이 뺄셈으로 되짚지 않게 한다
+ * (`total - confirmed` 로는 진행 중과 실주를 가릴 수 없다).
  *
  * 기준은 **그 달(1일 00:00 이상 다음 달 1일 00:00 미만)** 이라, 그리드에 함께 그려지는
  * 앞뒤 달 칸의 일정은 합계에 들어가지 않는다.
@@ -388,8 +396,13 @@ export type MonthRevenue = {
   /** 수주한 기회의 금액 합계 (KRW 정수) */
   confirmedAmount: number;
   confirmedCount: number;
-  /** 실주 건수 (금액은 합산하지 않는다) */
+  /** 실주한 기회의 금액 합계 (KRW 정수) — 전체 금액에 포함된다 */
+  lostAmount: number;
   lostCount: number;
+  /** 진행 중 + 수주 + 실주 금액 합계 (KRW 정수) */
+  totalAmount: number;
+  /** 그 달에 마감 예정인 기회 건수 (결말과 무관하게 전부) */
+  totalCount: number;
 };
 
 export function monthRevenue(
@@ -403,7 +416,10 @@ export function monthRevenue(
     expectedCount: 0,
     confirmedAmount: 0,
     confirmedCount: 0,
+    lostAmount: 0,
     lostCount: 0,
+    totalAmount: 0,
+    totalCount: 0,
   };
 
   for (const opportunity of opportunities) {
@@ -413,6 +429,11 @@ export function monthRevenue(
     const outcome = outcomeOfStage(opportunity.stage);
     if (!outcome) continue;
 
+    // 전체는 결말과 무관하게 먼저 더한다 — 결말별 분기에서 한 줄을 빠뜨리면
+    // 전체 금액이 조용히 작아진다(실주를 빼먹은 것이 예전 판의 문제였다).
+    summary.totalAmount += opportunity.expectedAmount;
+    summary.totalCount += 1;
+
     if (outcome === "open") {
       summary.expectedAmount += opportunity.expectedAmount;
       summary.expectedCount += 1;
@@ -420,6 +441,7 @@ export function monthRevenue(
       summary.confirmedAmount += opportunity.expectedAmount;
       summary.confirmedCount += 1;
     } else {
+      summary.lostAmount += opportunity.expectedAmount;
       summary.lostCount += 1;
     }
   }
