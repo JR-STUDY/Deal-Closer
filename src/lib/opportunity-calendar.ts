@@ -45,14 +45,23 @@ export async function loadOpportunityCalendar(input: {
       stage: true,
       expectedAmount: true,
       expectedCloseDate: true,
+      // 툴팁이 "어느 회사의 건인지" 를 말한다 — 기회명은 거래처가 달라도 같은 문구가 반복된다
+      account: { select: { companyName: true } },
     },
     // 칸 안의 순서는 `calendarGrid` 가 다시 정한다(금액 큰 순). 여기서 정렬하는 것은
     // 같은 값이 여럿일 때 페이지마다 순서가 흔들리지 않게 하는 마지막 기준이다.
     orderBy: [{ expectedCloseDate: "asc" }, { id: "asc" }],
   });
 
+  // 순수 함수(`calendarGrid`)는 평탄한 값을 받는다 — 관계를 그대로 넘기면 그쪽이 Prisma
+  // 응답 모양을 알아야 하고, 조회를 바꿀 때마다 순수 모듈이 따라 흔들린다.
+  const flattened = opportunities.map(({ account, ...rest }) => ({
+    ...rest,
+    accountName: account?.companyName ?? null,
+  }));
+
   return {
-    grid: calendarGrid({ target: month, opportunities, today }),
-    revenue: monthRevenue(opportunities, month),
+    grid: calendarGrid({ target: month, opportunities: flattened, today }),
+    revenue: monthRevenue(flattened, month),
   };
 }

@@ -223,6 +223,14 @@ function gridWeekCount(target: CalendarMonth): number {
 export type CalendarOpportunity = {
   id: string;
   name: string;
+  /**
+   * 거래처 회사명. **옵셔널**이다 — 없어도 캘린더는 그려진다(예전 호출·테스트를 깨지 않는다).
+   *
+   * 있으면 툴팁이 "어느 회사의 건인지" 를 함께 말한다. 칸에 이름만 남기고 나머지를 툴팁으로
+   * 옮긴 뒤로는 이 값이 특히 중요해졌다 — 기회명은 `그룹웨어 구축` 처럼 거래처가 달라도
+   * 같은 문구가 반복되므로, 회사명이 없으면 두 칸의 표식이 같은 건인지 구분할 수 없다.
+   */
+  accountName?: string | null;
   stage: string;
   /** 예상 금액 (KRW 정수) — 확정 문서에서 파생된 값이다 (기회-6) */
   expectedAmount: number;
@@ -258,6 +266,8 @@ export function outcomeOfStage(stage: string): CalendarOutcome | null {
 export type CalendarEvent = {
   id: string;
   name: string;
+  /** 거래처 회사명 (없을 수 있다 — 툴팁에서만 쓴다) */
+  accountName?: string | null;
   /** 예상 금액 (KRW 정수) */
   amount: number;
   stage: OpportunityStage;
@@ -329,6 +339,7 @@ export function calendarGrid({
     events.push({
       id: opportunity.id,
       name: opportunity.name,
+      accountName: opportunity.accountName ?? null,
       amount: opportunity.expectedAmount,
       stage: opportunity.stage,
       outcome,

@@ -286,12 +286,15 @@ check(
   {
     id: "a",
     name: "가 프로젝트",
+    // 넘기지 않은 거래처명은 `undefined` 가 아니라 **null** 로 자리를 남긴다 —
+    // 화면이 `?? null` 을 다시 하지 않아도 되고, 없는 값과 안 넘긴 값이 갈리지 않는다
+    accountName: null,
     amount: 9_000_000,
     stage: "PROPOSAL",
     outcome: "open",
     href: "/opportunities/a",
   },
-  "일정에는 기회명·금액·결말·상세 주소가 실린다",
+  "일정에는 기회명·거래처·금액·결말·상세 주소가 실린다",
 );
 check(opportunityHref("abc"), "/opportunities/abc", "기회 상세 주소");
 
@@ -321,6 +324,38 @@ check(
   foldDayEvents(dayEvents, 1).visible.map((event) => event.id),
   ["a"],
   "접어도 첫 칸에는 가장 큰 금액이 남는다",
+);
+
+// ─────────────────────────── 거래처명 (툴팁용) ───────────────────────────
+
+/*
+ * 칸에 기회명만 남기고 금액·거래처를 툴팁으로 옮긴 뒤로 이 값이 중요해졌다 — 기회명은
+ * `그룹웨어 구축` 처럼 거래처가 달라도 같은 문구가 반복되므로, 회사명이 없으면 두 칸의
+ * 표식이 같은 건인지 구분할 수 없다. **옵셔널**이라 넘기지 않아도 캘린더는 그려진다.
+ */
+const namedGrid = calendarGrid({
+  target: { year: 2026, month: 8 },
+  opportunities: [
+    opportunity({
+      id: "with-account",
+      accountName: "금호에너지",
+      expectedCloseDate: local(2026, 8, 12),
+    }),
+    opportunity({ id: "without-account", expectedCloseDate: local(2026, 8, 13) }),
+  ],
+  today: TODAY,
+});
+const namedCells = new Map(namedGrid.weeks.flat().map((cell) => [cell.key, cell]));
+
+check(
+  namedCells.get("2026-08-12")?.events[0]?.accountName,
+  "금호에너지",
+  "거래처명은 일정에 그대로 실린다",
+);
+check(
+  namedCells.get("2026-08-13")?.events[0]?.accountName,
+  null,
+  "거래처명이 없으면 null 이다 — 화면은 그 줄을 그리지 않는다",
 );
 
 // ───────────────────── 월 합계 (확정 · 전체 · 실주 포함) ─────────────────────

@@ -25,6 +25,8 @@ import {
   type MonthRevenue,
 } from "@/lib/calendar";
 import { Button } from "@/components/ui/button";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { CalendarEventTooltip } from "@/components/opportunity/calendar-event-tooltip";
 import {
   Card,
   CardContent,
@@ -56,6 +58,17 @@ import { cn } from "@/lib/utils";
  * 머리글·주말 색·월 이동·금액 타일은 완전히 같다 — 나누면 한쪽만 손봤을 때 두 캘린더가
  * 조용히 어긋난다(라벨/값 2열 표를 렌더러 하나로 둔 것과 같은 판단).
  */
+
+/**
+ * 일정 하나의 금액 문구.
+ *
+ * 금액이 0 이면 액수가 아니라 **그 이유**를 적는다 — 예상 금액은 확정 문서에서 파생되므로
+ * (기회-6) `₩0` 만 보이면 "0원짜리 건" 으로 읽힌다. 두 표식(점·줄)이 같은 말을 쓰도록
+ * 문구를 여기 하나로 둔다.
+ */
+function eventAmountLabel(event: CalendarEvent): string {
+  return event.amount > 0 ? formatKRW(event.amount) : "확정 문서 없음 · ₩0";
+}
 
 /** 결말별 표시 — **모양(아이콘)과 라벨**로 먼저 구분하고 색은 거든다 (ACC_*) */
 const OUTCOME_ICONS: Record<CalendarOutcome, typeof Circle> = {
@@ -212,6 +225,13 @@ export function OpportunityCalendar({
       </CardHeader>
 
       <CardContent>
+        {/*
+          툴팁 Provider 는 **표 하나**를 감싼다. 표식이 100개를 넘으므로 표식마다 두면 같은
+          수의 컨텍스트가 생기고, 하나를 본 뒤 옆 칸으로 옮길 때 지연 없이 이어 열리는
+          그룹 동작을 잃는다. Provider 자체는 DOM 을 만들지 않아 표 구조를 건드리지 않는다.
+          `delayDuration` 은 훑는 동작을 방해하지 않을 만큼 짧게 둔다.
+        */}
+        <TooltipProvider delayDuration={200}>
         <table className="w-full table-fixed border-collapse overflow-hidden rounded-lg border border-border">
           <caption className="sr-only">
             {label} 에 마감 예정인 영업 기회입니다.{" "}
@@ -245,6 +265,7 @@ export function OpportunityCalendar({
             ))}
           </tbody>
         </table>
+        </TooltipProvider>
       </CardContent>
 
     </Card>
@@ -440,40 +461,62 @@ function DayCell({
 function EventDot({ event }: { event: CalendarEvent }) {
   const Icon = OUTCOME_ICONS[event.outcome];
   const outcomeLabel = CALENDAR_OUTCOME_LABELS[event.outcome];
-  const amountLabel =
-    event.amount > 0 ? formatKRW(event.amount) : "확정 문서 없음 · ₩0";
-  const description = `${event.name} · ${amountLabel} · ${outcomeLabel}`;
+  const amountLabel = eventAmountLabel(event);
 
   return (
-    <Link
-      href={event.href}
-      title={description}
-      aria-label={description}
-      className="inline-flex size-5 shrink-0 items-center justify-center rounded hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    <CalendarEventTooltip
+      name={event.name}
+      accountName={event.accountName}
+      amountLabel={amountLabel}
+      outcomeLabel={outcomeLabel}
     >
-      <Icon
-        className={cn("size-3", OUTCOME_ICON_CLASS[event.outcome])}
-        aria-hidden="true"
-      />
-    </Link>
+      <Link
+        href={event.href}
+        // 툴팁이 열리지 않는 환경에서도 이 링크가 어디로 가는지는 알 수 있어야 한다
+        aria-label={`${event.name} · ${amountLabel} · ${outcomeLabel}`}
+        className="inline-flex size-5 shrink-0 items-center justify-center rounded hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        <Icon
+          className={cn("size-3", OUTCOME_ICON_CLASS[event.outcome])}
+          aria-hidden="true"
+        />
+      </Link>
+    </CalendarEventTooltip>
   );
 }
 
-/** 일정 한 건 — 기회 상세로 이동한다 */
+/**
+ * `full` 칸의 일정 한 건 — **한 줄**이다.
+ *
+ * 한때 두 줄이었다(이름 / 금액 + 결말). 실측하니 링크 하나가 43px 이라 두 건이 든 칸이
+ * 152px 가 되고, 6주 캘린더가 1,100px 로 자라 **1440×900 화면에 달이 통째로 들어가지
+ * 않았다**(문서 높이 1,148px). 달력의 쓸모는 "달 전체를 한 눈에" 인데 그걸 잃은 것이다.
+ *
+ * 그래서 칸에는 **아이콘과 이름만** 남기고 금액·거래처·결말은 툴팁으로 옮겼다. 훑을 때
+ * 필요한 것은 "그날 무슨 건이 있는가" 이고, 자세히 볼 때는 어차피 하나를 지목한다.
+ * 월 단위 금액은 사라지지 않았다 — 카드 헤더의 합계 타일이 그 몫을 한다.
+ */
 function EventLink({ event }: { event: CalendarEvent }) {
   const Icon = OUTCOME_ICONS[event.outcome];
   const outcomeLabel = CALENDAR_OUTCOME_LABELS[event.outcome];
-  const amountLabel =
-    event.amount > 0 ? formatKRW(event.amount) : "확정 문서 없음 · ₩0";
+  const amountLabel = eventAmountLabel(event);
 
   return (
-    <Link
-      href={event.href}
-      title={`${event.name} · ${amountLabel} · ${outcomeLabel}`}
-      className="block rounded border border-border bg-background px-1.5 py-1 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    <CalendarEventTooltip
+      name={event.name}
+      accountName={event.accountName}
+      amountLabel={amountLabel}
+      outcomeLabel={outcomeLabel}
     >
-      <span className="flex items-center gap-1">
-        <Icon className={cn("size-3 shrink-0", OUTCOME_ICON_CLASS[event.outcome])} />
+      <Link
+        href={event.href}
+        aria-label={`${event.name} · ${amountLabel} · ${outcomeLabel}`}
+        className="flex items-center gap-1 rounded border border-border bg-background px-1 py-0.5 hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        <Icon
+          className={cn("size-3 shrink-0", OUTCOME_ICON_CLASS[event.outcome])}
+          aria-hidden="true"
+        />
         <span
           className={cn(
             "truncate text-[11px] font-medium",
@@ -482,17 +525,7 @@ function EventLink({ event }: { event: CalendarEvent }) {
         >
           {event.name}
         </span>
-      </span>
-      <span className="mt-0.5 flex items-baseline justify-between gap-1">
-        <span className="truncate text-[11px] text-muted-foreground tabular-nums">
-          {amountLabel}
-        </span>
-        {event.outcome === "open" ? (
-          <span className="sr-only">{outcomeLabel}</span>
-        ) : (
-          <span className="shrink-0 text-[10px] text-muted-foreground">{outcomeLabel}</span>
-        )}
-      </span>
-    </Link>
+      </Link>
+    </CalendarEventTooltip>
   );
 }
