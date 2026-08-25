@@ -303,7 +303,7 @@ export function GeneratorForm({
         {/*
          * 어느 기회에 붙을 문서인지 **먼저** 알린다 (기회-2) — 만들고 나서야 알게 되면 늦다.
          * 칩이 아니라 띠인 이유는, 기회에서 들어온 사용자가 되돌아갈 길도 함께 필요하기
-         * 때문이다. 기회를 바꾸거나 떼는 것은 툴바의 `거래처` 팝오버 한 곳에서 한다.
+         * 때문이다. 기회를 바꾸거나 떼는 것은 툴바의 `영업 기회` 팝오버 한 곳에서 한다.
          */}
         {selectedOpportunity ? (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
@@ -372,8 +372,14 @@ export function GeneratorForm({
 
             {/* 부수 입력 한 줄 — 자리를 미리 잡지 않고 누를 때 펼친다 */}
             <div className="flex flex-wrap items-center gap-2">
+              {/*
+                라벨은 **영업 기회**다 — 이 버튼이 고르게 하는 값이 기회이기 때문이다.
+                한때 `거래처` 였는데, 팝오버를 열면 안에는 기회 선택기 하나뿐이라
+                버튼과 내용이 서로 다른 것을 가리켰다. 거래처는 고른 기회에서 따라오는
+                값이지 여기서 고르는 값이 아니다(손으로 적는 칸을 두지 않는 이유와 같다).
+              */}
               <ToolbarButton
-                label="거래처"
+                label="영업 기회"
                 icon={Target}
                 count={selectedOpportunity ? 1 : 0}
                 disabled={isSubmitting}
