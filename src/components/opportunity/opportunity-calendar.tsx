@@ -457,6 +457,10 @@ function DayCell({
  *
  * 크기는 `size-5`(20px) 를 지킨다 — 아이콘은 12px 이지만 누를 자리가 그만큼이면
  * 손가락·마우스로 맞히기 어렵다.
+ *
+ * **툴팁은 거래처·기회명 두 줄로 끝낸다** — 결말은 아이콘 모양이 이미 말하고 월 단위
+ * 금액은 헤더의 합계 타일이 맡으므로, 넷을 다 적으면 훑는 자리에 읽을 것만 늘어난다.
+ * 접근성 이름에는 그대로 다 담는다(툴팁이 열리지 않는 환경의 유일한 설명이다).
  */
 function EventDot({ event }: { event: CalendarEvent }) {
   const Icon = OUTCOME_ICONS[event.outcome];
@@ -464,15 +468,9 @@ function EventDot({ event }: { event: CalendarEvent }) {
   const amountLabel = eventAmountLabel(event);
 
   return (
-    <CalendarEventTooltip
-      name={event.name}
-      accountName={event.accountName}
-      amountLabel={amountLabel}
-      outcomeLabel={outcomeLabel}
-    >
+    <CalendarEventTooltip name={event.name} accountName={event.accountName}>
       <Link
         href={event.href}
-        // 툴팁이 열리지 않는 환경에서도 이 링크가 어디로 가는지는 알 수 있어야 한다
         aria-label={`${event.name} · ${amountLabel} · ${outcomeLabel}`}
         className="inline-flex size-5 shrink-0 items-center justify-center rounded hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >

@@ -20,6 +20,13 @@ import {
  * Radix 툴팁은 hover 와 **focus 모두**에서 열리고(Tab 으로 닿으면 그대로 뜬다), 화면
  * 가장자리에서 자리를 스스로 바꾸며, `aria-describedby` 로 낭독기에 이어 준다.
  *
+ * ## 색은 반전 배경을 기준으로 고른다
+ *
+ * 툴팁은 `bg-foreground` + `text-background` 로 **본문과 반전된 판**이다. 그 위에
+ * `text-muted-foreground` 를 쓰면 밝은 배경을 전제로 만든 회색이라 거의 읽히지 않는다
+ * (실제로 거래처명이 그랬다). 흐린 글자가 필요하면 **배경색을 투명도로 낮춘다**
+ * (`text-background/75`) — 라이트·다크 어느 쪽이든 판 색에서 파생되므로 대비가 유지된다.
+ *
  * ## 링크의 이름은 그대로 둔다
  *
  * 툴팁은 **보조 설명**이지 접근성 이름이 아니다. 트리거인 링크는 여전히 `aria-label` 로
@@ -43,9 +50,14 @@ export function CalendarEventTooltip({
   name: string;
   /** 거래처 회사명 — 없으면 줄 자체를 그리지 않는다 (빈 자리를 남기지 않는다) */
   accountName?: string | null;
-  /** 이미 포맷된 금액 문구 (`@/lib/format` 의 결과 · 금액이 없으면 그 사실을 적은 문구) */
-  amountLabel: string;
-  outcomeLabel: string;
+  /**
+   * 이미 포맷된 금액 문구와 결말 라벨. **둘 다 옵셔널**이다 — 칸에 이미 보이는 것을
+   * 툴팁이 되풀이할 이유가 없다. 컴팩트 칸은 결말을 아이콘 모양으로 이미 말하고 월 단위
+   * 금액은 헤더 합계 타일이 맡으므로, 대시보드에서는 넘기지 않아 **거래처·기회명 두 줄**로
+   * 끝낸다(둘 중 하나만 주면 남은 하나가 홀로 남지 않도록 함께 있을 때만 그린다).
+   */
+  amountLabel?: string;
+  outcomeLabel?: string;
   children: ReactNode;
 }) {
   return (
@@ -55,15 +67,25 @@ export function CalendarEventTooltip({
         링크 자체가 트리거가 된다.
       */}
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side="top" className="max-w-64">
-        {/* 기회명이 가장 먼저다 — "어디로 가는가" 가 이 툴팁의 첫 용건이다 */}
-        <p className="font-medium">{name}</p>
+      {/*
+        `items-center` 가 기본이라 여러 줄이면 가운데 정렬된다 — 왼쪽으로 맞춰 읽는 줄을 세운다.
+      */}
+      <TooltipContent side="top" className="max-w-64 flex-col items-start gap-0">
+        {/*
+          **소속이 위, 값이 아래**다 — 상세 화면의 브레드크럼(`거래처 > 회사명 > 기회명`)과
+          같은 배치라 사용자가 순서를 새로 배우지 않는다.
+          흐린 글자는 판 색(`background`)에서 파생시킨다 — `muted-foreground` 는 밝은 배경을
+          전제로 한 회색이라 이 반전 판에서는 읽히지 않는다.
+        */}
         {accountName ? (
-          <p className="text-muted-foreground">{accountName}</p>
+          <span className="text-background/75">{accountName}</span>
         ) : null}
-        <p className="tabular-nums">
-          {amountLabel} · {outcomeLabel}
-        </p>
+        <span className="font-medium">{name}</span>
+        {amountLabel && outcomeLabel ? (
+          <span className="tabular-nums text-background/75">
+            {amountLabel} · {outcomeLabel}
+          </span>
+        ) : null}
       </TooltipContent>
     </Tooltip>
   );
